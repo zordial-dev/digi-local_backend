@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const { query, getDbType } = require('../db');
-const pkg = require('../package.json');
+const { query, getDbType } = require('../models/db');
+const pkg = require('../../package.json');
 
 const startTime = Date.now();
 

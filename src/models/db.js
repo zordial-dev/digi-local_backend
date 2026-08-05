@@ -260,6 +260,11 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5,2) DEFAULT 5.00`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS service_charge_percentage DECIMAL(5,2) DEFAULT 0.00`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS shop_no VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS category VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS city VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS pincode VARCHAR(20)`,
     `ALTER TABLE orders ALTER COLUMN order_id TYPE VARCHAR(100) USING order_id::text`,
     `ALTER TABLE order_details ALTER COLUMN order_id TYPE VARCHAR(100) USING order_id::text`,
     `ALTER TABLE order_details ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`,
@@ -272,20 +277,17 @@ async function setupTablesPg() {
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`
   ];
 
-  for (const colSql of columns) {
-    try { await pgPool.query(colSql); } catch (_) {}
-  }
+  await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => {})));
 
   // Backfill public_id if missing
   const socRows = await query(`SELECT society_id FROM societies WHERE public_id IS NULL`);
-  for (const r of (socRows.rows || [])) {
-    let pid = genPublicId(5);
-    await query(`UPDATE societies SET public_id = ? WHERE society_id = ?`, [pid, r.society_id]);
+  if (socRows.rows && socRows.rows.length > 0) {
+    await Promise.all(socRows.rows.map(r => query(`UPDATE societies SET public_id = ? WHERE society_id = ?`, [genPublicId(5), r.society_id])));
   }
+
   const venRows = await query(`SELECT vendor_id FROM vendors WHERE public_id IS NULL`);
-  for (const r of (venRows.rows || [])) {
-    let pid = genPublicId(6);
-    await query(`UPDATE vendors SET public_id = ? WHERE vendor_id = ?`, [pid, r.vendor_id]);
+  if (venRows.rows && venRows.rows.length > 0) {
+    await Promise.all(venRows.rows.map(r => query(`UPDATE vendors SET public_id = ? WHERE vendor_id = ?`, [genPublicId(6), r.vendor_id])));
   }
 }
 
@@ -304,7 +306,7 @@ async function seedInitialData() {
     }
   } catch (_) {}
 
-  const { hashPassword } = require('./utils/auth');
+  const { hashPassword } = require('../utils/auth');
   const pwdHash = await hashPassword('password123');
   const vendorPwdHash = await hashPassword('vendor123');
 

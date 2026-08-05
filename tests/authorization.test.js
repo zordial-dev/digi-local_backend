@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { requireRole, requireVendorOwner } = require('../middleware/auth');
+const { requireRole, requireVendorOwner } = require('../src/middleware/auth');
 
 module.exports = async function (it) {
   await it('should permit user with matching RBAC role', async () => {

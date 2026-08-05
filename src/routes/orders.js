@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { query } = require('../db');
+const { query } = require('../models/db');
 
 /**
  * D1. Fetch Resident User Orders (Strictly Filtered by User ID)

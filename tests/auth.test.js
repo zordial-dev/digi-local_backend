@@ -1,6 +1,6 @@
 const assert = require('assert');
-const { hashPassword, comparePassword, generateTokens, verifyJwt, generateOTP, verifyOTP } = require('../utils/auth');
-const authConfig = require('../config/auth');
+const { hashPassword, comparePassword, generateTokens, verifyJwt, generateOTP, verifyOTP } = require('../src/utils/auth');
+const authConfig = require('../src/config/auth');
 
 module.exports = async function (it) {
   await it('should hash password with scrypt format', async () => {

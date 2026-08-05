@@ -1,4 +1,4 @@
-const { withTransaction, query } = require('../db');
+const { withTransaction, query } = require('../models/db');
 
 /**
  * Enterprise Order Management Service.

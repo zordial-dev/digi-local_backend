@@ -1,6 +1,6 @@
 const assert = require('assert');
-const { generateTokens, verifyJwt } = require('../utils/auth');
-const authConfig = require('../config/auth');
+const { generateTokens, verifyJwt } = require('../src/utils/auth');
+const authConfig = require('../src/config/auth');
 
 module.exports = async function adminTests(it) {
   await it('should generate admin token with admin role', async () => {

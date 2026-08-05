@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const vendorService = require('../services/vendorService');
-const { query } = require('../db');
+const { query } = require('../models/db');
 const { authenticateToken, requireVendorOwner } = require('../middleware/auth');
 const { validateRequest } = require('../middleware/validate');
 const { addItemSchema, updateSettingsSchema } = require('../schemas/vendorSchema');

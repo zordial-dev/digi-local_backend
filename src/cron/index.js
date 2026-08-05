@@ -1,6 +1,6 @@
 const cron = require('node-cron');
-const { query } = require('../db');
-const { sendSubscriptionExpiryEmail } = require('./email');
+const { query } = require('../models/db');
+const { sendSubscriptionExpiryEmail } = require('../config/email');
 
 /**
  * Starts the daily subscription expiry cron job.

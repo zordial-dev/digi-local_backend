@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { verifyRazorpaySignature } = require('../utils/payment');
+const { verifyRazorpaySignature } = require('../src/utils/payment');
 
 module.exports = async function (it) {
   await it('should verify valid HMAC-SHA256 Razorpay signature', async () => {

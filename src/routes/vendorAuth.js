@@ -1,4 +1,4 @@
-const { query } = require('../db');
+const { query } = require('../models/db');
 const express = require('express');
 const router = express.Router();
 const {
@@ -117,20 +117,105 @@ router.post('/:id/items', async (req, res) => {
 // POST /api/vendors/register (C4)
 router.post('/register', validateRequest(registerSchema), async (req, res) => {
     try {
-        const { society_id, vendor_name, gst_number, phone_number, email, password, store_name, payment_method, transaction_id } = req.body;
+        const body = req.body || {};
+
+        // Extract values using all possible field name aliases from mobile app
+        const vendor_name = String(
+            body.vendor_name || body.owner_name || body.ownerName || 
+            body.vendorName || body.name || body.owner || 'Vendor Owner'
+        ).trim();
+
+        const store_name = String(
+            body.store_name || body.shop_name || body.business_name || 
+            body.storeName || body.shopName || body.businessName || 'My Store'
+        ).trim();
+
+        const email = String(
+            body.email || body.email_address || body.emailAddress || ''
+        ).trim();
+
+        const password = String(
+            body.password || body.pass || body.create_password || ''
+        );
+
+        const phone_number = String(
+            body.phone_number || body.mobile_number || body.mobile || 
+            body.phone || body.phoneNumber || body.mobileNumber || ''
+        ).trim();
+
+        const gst_number = String(
+            body.gst_number || body.gstNumber || body.gst || ''
+        ).trim();
+
+        const shop_no = String(
+            body.shop_no || body.shop_number || body.shopNo || body.shopNumber || ''
+        ).trim();
+
+        const category = String(
+            body.category || body.business_category || body.businessCategory || 'General'
+        ).trim();
+
+        const address = String(
+            body.address || body.shop_address || body.shopAddress || ''
+        ).trim();
+
+        const city = String(
+            body.city || ''
+        ).trim();
+
+        const pincode = String(
+            body.pincode || body.pin_code || body.pinCode || '201310'
+        ).trim();
+
+        const logo = String(
+            body.logo || body.shop_images?.[0] || body.images?.[0] || 
+            'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80'
+        );
+
+        if (!email) {
+            return res.status(400).json({ error: 'Email address is required.' });
+        }
+        if (!password) {
+            return res.status(400).json({ error: 'Password is required.' });
+        }
 
         const existing = await query(`SELECT vendor_id FROM vendors WHERE LOWER(email) = LOWER(?)`, [email]);
         if (existing.rows.length > 0)
             return res.status(400).json({ error: 'An account with this email address already exists.' });
 
         const hashedPassword = await hashPassword(password);
-        const defaultLogo = 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80';
-        const defaultDesc = `Welcome to ${store_name}! Sourced with quality for DigiLocal residents.`;
+        const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
+
+        // Handle society resolution (numeric ID, string ID, or society name)
+        let society_id = 1;
+        const rawSociety = body.society_id || body.societyId || body.society || body.society_name || body.societyName;
+
+        if (typeof rawSociety === 'number' && rawSociety > 0) {
+            society_id = rawSociety;
+        } else if (rawSociety) {
+            const rawStr = String(rawSociety).trim();
+            if (/^\d+$/.test(rawStr)) {
+                society_id = parseInt(rawStr, 10);
+            } else {
+                // Search society by name or create a new society record
+                const foundSoc = await query(`SELECT society_id FROM societies WHERE LOWER(society_name) = LOWER(?)`, [rawStr]);
+                if (foundSoc.rows && foundSoc.rows.length > 0) {
+                    society_id = Number(foundSoc.rows[0].society_id);
+                } else {
+                    const newSocLocation = address ? `${address}, ${city || 'City'}` : (city || 'Local Area');
+                    const newSocRes = await query(
+                        `INSERT INTO societies (society_name, location, pincode) VALUES (?, ?, ?) RETURNING *`,
+                        [rawStr, newSocLocation, pincode]
+                    );
+                    society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || 1);
+                }
+            }
+        }
 
         const vendorRes = await query(
-            `INSERT INTO vendors (society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, logo, description, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE') RETURNING *`,
-            [society_id || 1, vendor_name, gst_number || '', phone_number || '', email, hashedPassword, hashedPassword, store_name, defaultLogo, defaultDesc]
+            `INSERT INTO vendors (society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, shop_no, category, address, city, pincode, logo, description, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE') RETURNING *`,
+            [society_id, vendor_name, gst_number, phone_number, email, hashedPassword, hashedPassword, store_name, shop_no, category, address, city, pincode, logo, defaultDesc]
         );
         const newVendorRow = vendorRes.rows[0] || {};
         const vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -146,8 +231,8 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
         const subRow = subRes.rows[0] || {};
         const subscription_id = subRow.subscription_id || subRow.id || subRes.insertId;
 
-        const txnId = transaction_id || `RAZORPAY_${Date.now()}_${vendor_id}`;
-        const payMethod = payment_method || 'Razorpay (UPI)';
+        const txnId = body.transaction_id || body.transactionId || `RAZORPAY_${Date.now()}_${vendor_id}`;
+        const payMethod = body.payment_method || body.paymentMethod || 'Razorpay (UPI)';
         await query(
             `INSERT INTO payments (subscription_id, vendor_id, amount, payment_method, transaction_id, status) VALUES (?, ?, 2999.00, ?, ?, 'SUCCESS')`,
             [subscription_id, vendor_id, payMethod, txnId]
@@ -155,9 +240,16 @@ router.post('/register', validateRequest(registerSchema), async (req, res) => {
 
         const newVendor = {
             vendor_id,
+            society_id,
             store_name,
             vendor_name,
             email,
+            phone_number,
+            shop_no,
+            category,
+            address,
+            city,
+            pincode,
             status: 'ACTIVE'
         };
 

@@ -3,25 +3,25 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { initDb, closeDb, query } = require('./db');
-const { validateEnv } = require('./config/env');
-const { startSubscriptionCron } = require('./config/cron');
-const { loggerMiddleware } = require('./middleware/loggerMiddleware');
-const { compressionMiddleware } = require('./middleware/compression');
-const { owaspSecurityHeaders } = require('./middleware/security');
-const logger = require('./utils/logger');
+const { initDb, closeDb, query } = require('./src/models/db');
+const { validateEnv } = require('./src/config/env');
+const { startSubscriptionCron } = require('./src/cron');
+const { loggerMiddleware } = require('./src/middleware/loggerMiddleware');
+const { compressionMiddleware } = require('./src/middleware/compression');
+const { owaspSecurityHeaders } = require('./src/middleware/security');
+const logger = require('./src/utils/logger');
 
 // ── Startup Environment Check ────────────────────────────────
 validateEnv();
 
-const healthRouter = require('./routes/health');
-const usersRouter = require('./routes/users');
-const societiesRouter = require('./routes/societies');
-const storefrontRouter = require('./routes/storefront');
-const ordersRouter = require('./routes/orders');
-const vendorAuthRouter = require('./routes/vendorAuth');
-const vendorPanelRouter = require('./routes/vendorPanel');
-const adminRouter = require('./routes/admin');
+const healthRouter = require('./src/routes/health');
+const usersRouter = require('./src/routes/users');
+const societiesRouter = require('./src/routes/societies');
+const storefrontRouter = require('./src/routes/storefront');
+const ordersRouter = require('./src/routes/orders');
+const vendorAuthRouter = require('./src/routes/vendorAuth');
+const vendorPanelRouter = require('./src/routes/vendorPanel');
+const adminRouter = require('./src/routes/admin');
 
 // ── App Setup ────────────────────────────────────────────────
 const app = express();

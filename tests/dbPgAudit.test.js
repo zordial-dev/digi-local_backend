@@ -1,4 +1,4 @@
-const { initDb, query, withTransaction, getDbType, closeDb } = require('../db');
+const { initDb, query, withTransaction, getDbType, closeDb } = require('../src/models/db');
 const assert = require('assert');
 
 async function runPgAuditTest() {

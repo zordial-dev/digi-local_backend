@@ -233,10 +233,16 @@ class ObjectSchema {
   constructor(shape) {
     this._shape = shape;
     this._optional = false;
+    this._passthrough = false;
   }
 
   optional() {
     this._optional = true;
+    return this;
+  }
+
+  passthrough() {
+    this._passthrough = true;
     return this;
   }
 
@@ -251,7 +257,7 @@ class ObjectSchema {
     }
 
     const issues = [];
-    const result = {};
+    const result = this._passthrough ? { ...val } : {};
 
     for (const [key, schema] of Object.entries(this._shape)) {
       const fieldPath = path ? `${path}.${key}` : key;
@@ -271,12 +277,40 @@ class ObjectSchema {
   }
 }
 
+class UnionSchema {
+  constructor(schemas) {
+    this._schemas = schemas;
+    this._optional = false;
+  }
+
+  optional() {
+    this._optional = true;
+    return this;
+  }
+
+  parse(val, path = '') {
+    if (val === undefined || val === null || val === '') {
+      if (this._optional) return undefined;
+      throw [{ field: path, message: 'Field is required' }];
+    }
+
+    for (const schema of this._schemas) {
+      try {
+        return schema.parse(val, path);
+      } catch (_) {}
+    }
+
+    throw [{ field: path, message: 'Value did not match any allowed type in union' }];
+  }
+}
+
 const z = {
   string: () => new StringSchema(),
   number: () => new NumberSchema(false),
   boolean: () => new BooleanSchema(false),
   array: (schema) => new ArraySchema(schema),
   object: (shape) => new ObjectSchema(shape),
+  union: (schemas) => new UnionSchema(schemas),
   enum: (values, msg) => new StringSchema().enum(values, msg),
   coerce: {
     number: () => new NumberSchema(true),
