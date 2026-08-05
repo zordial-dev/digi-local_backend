@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const vendorAuthController = require('../controllers/vendorAuthController');
+const adminPanelController = require('../controllers/adminPanelController');
+const { authenticateAdminToken, requirePower } = require('../middleware/adminAuth');
 const { loginBruteForceGuard } = require('../middleware/security');
 const { validateRequest } = require('../middleware/validate');
 const {
@@ -10,6 +12,30 @@ const {
   verifyOtpSchema,
   resetPasswordSchema
 } = require('../schemas/authSchema');
+
+/**
+ * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
+ */
+
+// 4.1 List Vendors (Admin Panel Spec v2.0.0)
+router.get('/', (req, res, next) => {
+  if (req.query.status || req.query.tier || req.query.search || req.headers.authorization) {
+    return adminPanelController.listVendors(req, res, next);
+  }
+  return res.status(400).json({ error: 'Vendor ID required or specify search/status query params.' });
+});
+
+// 4.2 List Pending Merchant Requests
+router.get('/pending', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.listPendingVendors);
+
+// 4.3 Approve Vendor Application
+router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.approveVendor);
+
+// 4.4 Reject Vendor Application
+router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);
+
+// 4.5 Update Vendor Status (Block / Unblock with Custom Reason)
+router.post('/:vendorId/status', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.updateVendorStatus);
 
 // GET /api/vendors/:id - Fetch Vendor Storefront Profile & Catalog Items
 router.get('/:id', vendorAuthController.getVendorPublicProfile);

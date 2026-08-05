@@ -38,9 +38,9 @@ async function getVendorStorefront(req, res) {
         const vendorResult = await query(
             `SELECT v.*, s.society_name, s.location 
              FROM vendors v 
-             JOIN societies s ON v.society_id = s.society_id 
-             WHERE v.vendor_id = ?`,
-            [vendorId]
+             LEFT JOIN societies s ON v.society_id = s.society_id 
+             WHERE CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)`,
+            [vendorId, vendorId, vendorId]
         );
 
         if (vendorResult.rows.length === 0)
@@ -50,8 +50,10 @@ async function getVendorStorefront(req, res) {
         delete vendor.password;
 
         const itemsResult = await query(
-            `SELECT * FROM items WHERE vendor_id = ? ORDER BY category ASC, item_name ASC`,
-            [vendorId]
+            `SELECT * FROM items 
+             WHERE vendor_id = ? OR vendor_id IN (SELECT vendor_id FROM vendors WHERE LOWER(email) = LOWER(?))
+             ORDER BY category ASC, item_name ASC`,
+            [vendor.vendor_id, vendor.email]
         );
 
         res.status(200).json({ vendor, items: itemsResult.rows });

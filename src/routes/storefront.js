@@ -6,6 +6,9 @@ const storefrontController = require('../controllers/storefrontController');
 router.get('/societies/:societyId/vendors', storefrontController.getSocietyVendorsStorefront);
 
 // GET /api/vendors/:vendorId - Vendor storefront details & items
-router.get('/vendors/:vendorId', storefrontController.getVendorStorefront);
+router.get('/vendors/:vendorId', (req, res, next) => {
+    if (req.params.vendorId === 'pending') return next();
+    return storefrontController.getVendorStorefront(req, res, next);
+});
 
 module.exports = router;

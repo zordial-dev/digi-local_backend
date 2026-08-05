@@ -1,17 +1,40 @@
 const express = require('express');
 const router = express.Router();
 const societiesController = require('../controllers/societiesController');
+const adminPanelController = require('../controllers/adminPanelController');
+const { authenticateAdminToken, requirePower } = require('../middleware/adminAuth');
 
-// A1. List Housing Societies (with Search & Filter)
-router.get('/', societiesController.getAllSocieties);
+// 3.1 List Societies (Supports Admin Search + Status filtering)
+router.get('/', (req, res, next) => {
+    if (req.query.status || req.headers.authorization) {
+        return adminPanelController.listSocieties(req, res, next);
+    }
+    return societiesController.getAllSocieties(req, res, next);
+});
+
+// 3.2 Register New Society
+router.post('/', (req, res, next) => {
+    if (req.body.secretary_name || req.body.secretary_mobile) {
+        return societiesController.createSociety(req, res, next);
+    }
+    return adminPanelController.registerSociety(req, res, next);
+});
+
+// 3.3 Update Society Details
+router.put('/:societyId', authenticateAdminToken, requirePower('SOCIETIES'), adminPanelController.updateSociety);
+
+// 3.4 Update Society Status (Approve / Block / Unblock)
+router.post('/:societyId/status', authenticateAdminToken, requirePower('SOCIETIES'), adminPanelController.updateSocietyStatus);
+
+// 3.5 Get Society Onboarded Merchants
+router.get('/:id/vendors', (req, res, next) => {
+    if (req.headers.authorization) {
+        return adminPanelController.getSocietyVendors(req, res, next);
+    }
+    return societiesController.getSocietyVendors(req, res, next);
+});
 
 // A2. Get Society Details by ID
 router.get('/:id', societiesController.getSocietyById);
-
-// A3. Request / Onboard Unlisted Society
-router.post('/', societiesController.createSociety);
-
-// C1. Fetch Approved Vendors for a Housing Society
-router.get('/:id/vendors', societiesController.getSocietyVendors);
 
 module.exports = router;

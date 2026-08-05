@@ -268,6 +268,13 @@ async function setupTablesPg() {
     `ALTER TABLE items ADD COLUMN IF NOT EXISTS in_stock BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'pro'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS renewal_date TIMESTAMP DEFAULT '2026-12-31 00:00:00'`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_name VARCHAR(255) DEFAULT 'DigiLocal'`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6'`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS admin_password_hash VARCHAR(255)`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS society_id INT`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`,
@@ -276,6 +283,31 @@ async function setupTablesPg() {
   ];
 
   await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => {})));
+
+  // Ensure sub_admins table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS sub_admins (
+      id VARCHAR(100) PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(50) DEFAULT 'SUB_ADMIN',
+      powers TEXT[] DEFAULT '{}',
+      status VARCHAR(20) DEFAULT 'active',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => {});
+
+  // Ensure platform_config table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS platform_config (
+      id INT PRIMARY KEY DEFAULT 1,
+      platform_name VARCHAR(255) DEFAULT 'DigiLocal',
+      platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6',
+      admin_password_hash VARCHAR(255),
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => {});
 
   // Backfill public_id if missing
   const socRows = await query(`SELECT society_id FROM societies WHERE public_id IS NULL`);

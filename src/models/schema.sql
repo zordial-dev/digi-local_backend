@@ -7,7 +7,27 @@ CREATE TABLE IF NOT EXISTS societies (
     secretary_name VARCHAR(255) NOT NULL,
     secretary_mobile VARCHAR(20) NOT NULL,
     public_id VARCHAR(10),
+    status VARCHAR(20) DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS sub_admins (
+    id VARCHAR(100) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    role VARCHAR(50) DEFAULT 'SUB_ADMIN',
+    powers TEXT[] DEFAULT '{}',
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS platform_config (
+    id INT PRIMARY KEY DEFAULT 1,
+    platform_name VARCHAR(255) DEFAULT 'DigiLocal',
+    platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6',
+    admin_password_hash VARCHAR(255),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS users (

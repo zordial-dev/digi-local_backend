@@ -19,7 +19,11 @@ const { normalizeImageUrl } = require('../utils/imageUtils');
 async function getVendorPublicProfile(req, res) {
     try {
         const { id } = req.params;
-        const vendorRes = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [id]);
+        const vendorRes = await query(
+            `SELECT * FROM vendors 
+             WHERE CAST(vendor_id AS TEXT) = ? OR public_id = ? OR LOWER(email) = LOWER(?)`,
+            [id, id, id]
+        );
         if (vendorRes.rows.length === 0) {
             return res.status(404).json({ error: 'Vendor not found' });
         }
@@ -29,9 +33,9 @@ async function getVendorPublicProfile(req, res) {
         const itemsRes = await query(
             `SELECT item_id, item_name, price, category, description, image_url, in_stock 
              FROM items 
-             WHERE vendor_id = ? 
+             WHERE vendor_id = ? OR vendor_id IN (SELECT vendor_id FROM vendors WHERE LOWER(email) = LOWER(?))
              ORDER BY item_id ASC`,
-            [id]
+            [vendor.vendor_id, vendor.email]
         );
 
         const items = itemsRes.rows.map(item => ({

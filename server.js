@@ -22,6 +22,10 @@ const ordersRouter = require('./src/routes/orders');
 const vendorAuthRouter = require('./src/routes/vendorAuth');
 const vendorPanelRouter = require('./src/routes/vendorPanel');
 const adminRouter = require('./src/routes/admin');
+const authRouter = require('./src/routes/auth');
+const subAdminsRouter = require('./src/routes/subAdmins');
+const subscriptionsRouter = require('./src/routes/subscriptions');
+const configRouter = require('./src/routes/config');
 
 // ── App Setup ────────────────────────────────────────────────
 const app = express();
@@ -108,12 +112,16 @@ app.get('/version', (req, res) => res.redirect('/health/version'));
 
 // ── Mount Business Routes ────────────────────────────────────
 app.use('/api/societies', societiesRouter);   // Society management
+app.use('/api/vendors', vendorAuthRouter);    // Vendor auth & Admin Vendor Spec v2.0.0
 app.use('/api', storefrontRouter);            // Storefront APIs
 app.use('/api/users', usersRouter);           // Resident user auth
-app.use('/api/vendors', vendorAuthRouter);    // Vendor auth
 app.use('/api/orders', ordersRouter);         // Customer orders
 app.use('/api/vendorPanel', vendorPanelRouter); // Vendor dashboard
 app.use('/api/admin', adminRouter);           // Admin portal
+app.use('/api/auth', authRouter);             // Admin Auth & Profile v2.0.0
+app.use('/api/sub-admins', subAdminsRouter);  // Sub-Admins & RBAC v2.0.0
+app.use('/api/subscriptions', subscriptionsRouter); // Financial Analytics v2.0.0
+app.use('/api/config', configRouter);         // Platform Config v2.0.0
 
 // ── Legacy Backward-Compatibility Routes ─────────────────────
 app.post('/registerVender', (req, res) => {
