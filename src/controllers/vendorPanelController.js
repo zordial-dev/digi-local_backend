@@ -1,5 +1,6 @@
 const vendorService = require('../services/vendorService');
 const { query } = require('../models/db');
+const { normalizeImageUrl } = require('../utils/imageUtils');
 
 /**
  * POST /api/vendorPanel/upload-image - Upload item image
@@ -46,15 +47,15 @@ async function addItem(req, res) {
         const { item_name, description, price, stock, category, unit, is_available, image_url } = req.body;
 
         const avail = (is_available === false || is_available === 0) ? 0 : 1;
-        const defaultImg = image_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=300&auto=format&fit=crop&q=80';
+        const normalizedImg = normalizeImageUrl(image_url);
 
         const result = await query(
             `INSERT INTO items (vendor_id, item_name, description, price, stock, category, unit, is_available, image_url) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [vendorId, item_name, description || '', price, stock || 50, category || 'General', unit || 'piece', avail, defaultImg]
+            [vendorId, item_name, description || '', price, stock || 50, category || 'General', unit || 'piece', avail, normalizedImg]
         );
 
-        res.status(201).json({ message: 'Item added successfully', item_id: result.insertId });
+        res.status(201).json({ message: 'Item added successfully', item_id: result.insertId, image_url: normalizedImg });
     } catch (err) {
         console.error('Error adding item:', err);
         res.status(500).json({ error: 'Failed to add item' });
@@ -76,14 +77,22 @@ async function updateItem(req, res) {
         }
 
         const availVal = (is_available === true || is_available === 1) ? 1 : 0;
-        await query(
-            `UPDATE items 
-             SET item_name = ?, description = ?, price = ?, stock = ?, category = ?, unit = ?, is_available = ?, image_url = ?
-             WHERE item_id = ? AND vendor_id = ?`,
-            [item_name, description, price, stock, category, unit, availVal, image_url, itemId, vendorId]
-        );
+        const normalizedImg = image_url ? normalizeImageUrl(image_url) : undefined;
 
-        res.status(200).json({ message: 'Item updated successfully' });
+        let sql = `UPDATE items SET item_name = ?, description = ?, price = ?, stock = ?, category = ?, unit = ?, is_available = ?`;
+        const params = [item_name, description, price, stock, category, unit, availVal];
+
+        if (normalizedImg) {
+            sql += `, image_url = ?`;
+            params.push(normalizedImg);
+        }
+
+        sql += ` WHERE item_id = ? AND vendor_id = ?`;
+        params.push(itemId, vendorId);
+
+        await query(sql, params);
+
+        res.status(200).json({ message: 'Item updated successfully', image_url: normalizedImg });
     } catch (err) {
         console.error('Error updating item:', err);
         res.status(500).json({ error: 'Failed to update item' });

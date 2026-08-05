@@ -71,16 +71,17 @@ function loginBruteForceGuard(req, res, next) {
  */
 function owaspSecurityHeaders(req, res, next) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "img-src 'self' data: https:",
+    "img-src 'self' data: blob: http: https: *",
     "style-src 'self' 'unsafe-inline' https:",
-    "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.google.com https://apis.google.com",
-    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseinstallations.googleapis.com",
-    "frame-src 'self' https://visitor-log-d3dd2.firebaseapp.com https://www.google.com",
+    "script-src 'self' 'unsafe-inline' https:",
+    "connect-src 'self' https: http:",
+    "frame-src 'self' https:",
     "worker-src 'self' blob:"
   ].join('; '));
   next();
