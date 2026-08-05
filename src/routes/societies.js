@@ -23,8 +23,25 @@ router.post('/', (req, res, next) => {
 // 3.3 Update Society Details
 router.put('/:societyId', authenticateAdminToken, requirePower('SOCIETIES'), adminPanelController.updateSociety);
 
+// Society Approval & Status Update Endpoints (Supports both Admin Panel & Vendor Panel)
+router.post('/:societyId/approve', societiesController.approveSociety);
+router.put('/:societyId/approve', societiesController.approveSociety);
+router.post('/:id/approve', societiesController.approveSociety);
+router.put('/:id/approve', societiesController.approveSociety);
+
 // 3.4 Update Society Status (Approve / Block / Unblock)
-router.post('/:societyId/status', authenticateAdminToken, requirePower('SOCIETIES'), adminPanelController.updateSocietyStatus);
+router.post('/:societyId/status', (req, res, next) => {
+    if (req.headers.authorization && req.headers.authorization.includes('Bearer ')) {
+        return adminPanelController.updateSocietyStatus(req, res, next);
+    }
+    return societiesController.approveSociety(req, res, next);
+});
+router.put('/:societyId/status', (req, res, next) => {
+    if (req.headers.authorization && req.headers.authorization.includes('Bearer ')) {
+        return adminPanelController.updateSocietyStatus(req, res, next);
+    }
+    return societiesController.approveSociety(req, res, next);
+});
 
 // 3.5 Get Society Onboarded Merchants
 router.get('/:id/vendors', (req, res, next) => {

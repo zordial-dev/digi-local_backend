@@ -184,9 +184,37 @@ async function getSocietyVendors(req, res) {
   }
 }
 
+/**
+ * Approve or update status for a society
+ * POST/PUT /api/societies/:societyId/approve or /status
+ */
+async function approveSociety(req, res) {
+  try {
+    const societyId = req.params.societyId || req.params.id;
+    const status = req.body.status || 'active';
+
+    const existing = await query(`SELECT * FROM societies WHERE society_id = ?`, [societyId]);
+    if (!existing.rows || existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Society not found' });
+    }
+
+    await query(`UPDATE societies SET status = ? WHERE society_id = ?`, [status.toLowerCase(), societyId]);
+
+    res.status(200).json({
+      message: 'Society approved successfully',
+      society_id: Number(societyId),
+      status: status.toLowerCase()
+    });
+  } catch (err) {
+    console.error('Error approving society:', err);
+    res.status(500).json({ error: 'Failed to approve society' });
+  }
+}
+
 module.exports = {
   getAllSocieties,
   getSocietyById,
   createSociety,
-  getSocietyVendors
+  getSocietyVendors,
+  approveSociety
 };

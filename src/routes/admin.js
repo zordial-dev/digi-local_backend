@@ -27,4 +27,11 @@ router.post('/config', authenticateToken, requireAdmin, adminController.updateCo
 router.put('/logo', authenticateToken, requireAdmin, adminController.updateConfig);
 router.post('/logo', authenticateToken, requireAdmin, adminController.updateConfig);
 
+// Society approval routes in admin.js
+const societiesController = require('../controllers/societiesController');
+router.post('/societies/:id/approve', societiesController.approveSociety);
+router.put('/societies/:id/approve', societiesController.approveSociety);
+router.post('/societies/:id/status', societiesController.approveSociety);
+router.put('/societies/:id/status', societiesController.approveSociety);
+
 module.exports = router;
