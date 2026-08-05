@@ -9,6 +9,8 @@ web_modules/
 .env.development.local
 .env.test.local
 .env.production.local
+*.pem
+*.key
 
 # SQLite Database & Storage
 *.sqlite
@@ -32,6 +34,16 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Test files & temporary test scripts
+tests/
+scratch/
+*.test.js
+debug_*.js
+
+# Uploaded images & media
+public/uploads/*
+!public/uploads/.gitkeep
 
 # Coverage & Scratch directories
 coverage/

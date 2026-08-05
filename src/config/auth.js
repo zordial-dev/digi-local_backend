@@ -4,7 +4,7 @@
 module.exports = {
   // JWT Configuration
   jwt: {
-    secret: process.env.JWT_SECRET,
+    secret: process.env.JWT_SECRET || 'digilocal_jwt_super_secret_key_change_in_prod_2026',
     expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET || 'digilocal_refresh_super_secret_key_2026',
     refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN || '60d'
