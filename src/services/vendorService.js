@@ -1,5 +1,6 @@
 const { query, withTransaction } = require('../models/db');
 const paymentService = require('./paymentService');
+const { normalizeImageUrl } = require('../utils/imageUtils');
 
 /**
  * Service handling Vendor Profile, Store Settings, Subscription Renewals, and Dashboard Data.
@@ -95,9 +96,14 @@ class VendorService {
       [actualVendorId]
     ).catch(() => ({ rows: [] }));
 
+    const normalizedItems = (itemsRes.rows || []).map(item => ({
+      ...item,
+      image_url: normalizeImageUrl(item.image_url)
+    }));
+
     return {
       vendor,
-      items: itemsRes.rows || [],
+      items: normalizedItems,
       orders,
       subscription: subRes.rows[0] || null,
       payments: payRes.rows || []

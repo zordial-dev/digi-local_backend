@@ -44,10 +44,11 @@ async function getDashboard(req, res) {
 async function addItem(req, res) {
     try {
         const { vendorId } = req.params;
-        const { item_name, description, price, stock, category, unit, is_available, image_url } = req.body;
+        const { item_name, description, price, stock, category, unit, is_available } = req.body;
+        const rawImg = req.body.image_url || req.body.imageUrl || req.body.image || req.body.item_image || req.body.itemImage || req.body.photo || req.body.photo_url;
 
         const avail = (is_available === false || is_available === 0) ? 0 : 1;
-        const normalizedImg = normalizeImageUrl(image_url);
+        const normalizedImg = normalizeImageUrl(rawImg);
 
         const result = await query(
             `INSERT INTO items (vendor_id, item_name, description, price, stock, category, unit, is_available, image_url) 
@@ -68,16 +69,17 @@ async function addItem(req, res) {
 async function updateItem(req, res) {
     try {
         const { vendorId, itemId } = req.params;
-        const { item_name, description, price, stock, category, unit, is_available, image_url } = req.body;
+        const { item_name, description, price, stock, category, unit, is_available } = req.body;
+        const rawImg = req.body.image_url || req.body.imageUrl || req.body.image || req.body.item_image || req.body.itemImage || req.body.photo || req.body.photo_url;
 
-        if (is_available !== undefined && item_name === undefined) {
+        if (is_available !== undefined && item_name === undefined && !rawImg) {
             const availVal = (is_available === true || is_available === 1) ? 1 : 0;
             await query(`UPDATE items SET is_available = ? WHERE item_id = ? AND vendor_id = ?`, [availVal, itemId, vendorId]);
             return res.status(200).json({ message: 'Availability status updated successfully' });
         }
 
         const availVal = (is_available === true || is_available === 1) ? 1 : 0;
-        const normalizedImg = image_url ? normalizeImageUrl(image_url) : undefined;
+        const normalizedImg = rawImg ? normalizeImageUrl(rawImg) : undefined;
 
         let sql = `UPDATE items SET item_name = ?, description = ?, price = ?, stock = ?, category = ?, unit = ?, is_available = ?`;
         const params = [item_name, description, price, stock, category, unit, availVal];

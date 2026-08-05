@@ -1,8 +1,9 @@
 'use strict';
 
 /**
- * Normalizes and sanitizes user-submitted image URLs, particularly handling
- * Google Images Search redirect links, Google Drive view links, and missing protocols.
+ * Normalizes and sanitizes user/vendor submitted image URLs.
+ * Handles Google Search redirect links, Google Drive share links, Google Photos links,
+ * missing http/https protocols, and URL encoding quirks.
  * 
  * @param {string} rawUrl - The image URL submitted by user or vendor
  * @param {string} defaultFallback - Fallback URL if rawUrl is empty or invalid
@@ -13,21 +14,35 @@ function normalizeImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.co
 
     let url = rawUrl.trim();
 
-    if (!url) return defaultFallback;
+    // Clean wrapped quotes or space encoding
+    url = url.replace(/^["']|["']$/g, '').trim();
+
+    if (!url || url.length < 5) return defaultFallback;
 
     try {
-        // 1. Handle Google Search Redirect & Image Search URLs
+        // 1. Handle Google Search Redirect & Google Image Search Result URLs
+        // e.g. https://www.google.com/url?sa=i&url=https%3A%2F%2Fsite.com%2Fimage.jpg...
         // e.g. https://www.google.com/imgres?imgurl=https%3A%2F%2Fsite.com%2Fimage.jpg...
-        if (url.includes('google.com/url') || url.includes('google.com/imgres') || url.includes('google.co.in/url')) {
-            const parsed = new URL(url);
-            const targetImg = parsed.searchParams.get('imgurl') || parsed.searchParams.get('url');
-            if (targetImg) {
-                url = decodeURIComponent(targetImg);
+        if (url.includes('google.') && (url.includes('/url?') || url.includes('/imgres?'))) {
+            try {
+                const parsed = new URL(url);
+                const targetImg = parsed.searchParams.get('imgurl') || parsed.searchParams.get('url');
+                if (targetImg) {
+                    url = decodeURIComponent(targetImg);
+                }
+            } catch (e) {
+                // regex fallback for malformed search URLs
+                const matchImg = url.match(/(?:imgurl|url)=([^&]+)/i);
+                if (matchImg && matchImg[1]) {
+                    url = decodeURIComponent(matchImg[1]);
+                }
             }
         }
 
-        // 2. Handle Google Drive Share / Preview links
+        // 2. Handle Google Drive Share & View Links
+        // e.g. https://drive.google.com/file/d/1ABC123xyz/view?usp=sharing
         // e.g. https://drive.google.com/open?id=1ABC123xyz
+        // e.g. https://drive.google.com/uc?id=1ABC123xyz
         if (url.includes('drive.google.com')) {
             let fileId = null;
 
@@ -35,12 +50,17 @@ function normalizeImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.co
             if (matchPath && matchPath[1]) {
                 fileId = matchPath[1];
             } else {
-                const parsed = new URL(url);
-                fileId = parsed.searchParams.get('id');
+                try {
+                    const parsed = new URL(url);
+                    fileId = parsed.searchParams.get('id');
+                } catch (e) {
+                    const matchId = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+                    if (matchId) fileId = matchId[1];
+                }
             }
 
             if (fileId) {
-                // Return high-reliability direct view URL for Google Drive hosted images
+                // High-reliability direct Google content link for image tags
                 return `https://lh3.googleusercontent.com/d/${fileId}`;
             }
         }
@@ -55,7 +75,6 @@ function normalizeImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.co
 
         return url;
     } catch (err) {
-        // If URL parsing fails, return fallback
         return url || defaultFallback;
     }
 }

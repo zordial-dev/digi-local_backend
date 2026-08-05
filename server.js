@@ -52,6 +52,10 @@ const PORT = process.env.PORT || 5000;
 // ── OpenAPI 3.1 & Interactive Swagger UI Documentation ──────
 const openApiSpecPath = path.join(__dirname, 'docs', 'openapi.json');
 
+app.get(['/firebase-test', '/firebase-test.html'], (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'firebase-test.html'));
+});
+
 app.get('/openapi.json', (req, res) => {
     if (fs.existsSync(openApiSpecPath)) {
         res.setHeader('Content-Type', 'application/json');

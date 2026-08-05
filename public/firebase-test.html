@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DigiLocal — Firebase SMS & OTP Test Bench</title>
+  <!-- Firebase App & Auth SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 20px;
+    }
+
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 640px;
+      margin: 0 auto;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    }
+
+    h2 {
+      margin-top: 0;
+      color: #38bdf8;
+    }
+
+    label {
+      display: block;
+      margin-top: 14px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #fff;
+      margin-top: 4px;
+      box-sizing: border-box;
+      font-family: monospace;
+      font-size: 13px;
+    }
+
+    button {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 16px;
+      width: 100%;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #0369a1;
+    }
+
+    .log-box {
+      background: #090d16;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #4ade80;
+      height: 180px;
+      overflow-y: auto;
+      margin-top: 16px;
+      border: 1px solid #1e293b;
+    }
+
+    #recaptcha-container {
+      margin-top: 16px;
+      display: flex;
+      justify-content: center;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="card">
+    <h2>🔥 Firebase SMS & OTP Test Bench</h2>
+
+    <label for="firebaseConfig">1. Firebase Web App Configuration (JSON):</label>
+    <textarea id="firebaseConfig" rows="9">{
+  "apiKey": "YOUR_FIREBASE_WEB_API_KEY",
+  "authDomain": "visitor-log-d3dd2.firebaseapp.com",
+  "projectId": "visitor-log-d3dd2",
+  "storageBucket": "visitor-log-d3dd2.firebasestorage.app",
+  "messagingSenderId": "866177756650",
+  "appId": "1:866177756650:web:8b8995179795218e0e5693",
+  "measurementId": "G-KDMMY3BQV7"
+}</textarea>
+
+    <button onclick="initFirebase()">Init Firebase SDK</button>
+
+    <hr style="border: 0; border-top: 1px solid #334155; margin: 20px 0;" />
+
+    <label for="phoneNumber">2. Mobile Number (with Country Code):</label>
+    <input type="text" id="phoneNumber" placeholder="+919876543210" value="+919876543210" />
+
+    <button id="btnSendOtp" onclick="handleSendOtp()">Send OTP via Firebase SMS</button>
+
+    <div id="recaptcha-container"></div>
+
+    <div id="otpVerificationSection"
+      style="display:none; margin-top: 20px; border-top: 1px solid #334155; padding-top: 16px;">
+      <label for="verificationCode">3. Enter 6-Digit OTP Received on Mobile:</label>
+      <input type="text" id="verificationCode" placeholder="123456" />
+      <button onclick="handleVerifyOtp()">Verify OTP & Obtain Token</button>
+    </div>
+
+    <label>Console Log:</label>
+    <div id="log" class="log-box">Log messages will appear here...</div>
+  </div>
+
+  <script>
+    let windowConfirmationResult = null;
+    let recaptchaWidgetId = null;
+
+    function log(msg, type = 'info') {
+      const logBox = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      const prefix = type === 'error' ? '❌ ' : (type === 'success' ? '✅ ' : 'ℹ️ ');
+      logBox.innerHTML += `<div>[${time}] ${prefix}${msg}</div>`;
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function initFirebase() {
+      try {
+        let configStr = document.getElementById('firebaseConfig').value.trim();
+        if (!configStr) {
+          log('Please paste your Firebase Web App configuration above.', 'error');
+          return;
+        }
+
+        // Strip trailing semicolons or 'const firebaseConfig = ' if copied from JS code
+        configStr = configStr.replace(/^(const|var|let)\s+\w+\s*=\s*/i, '').replace(/;$/, '').trim();
+
+        let config;
+        try {
+          config = JSON.parse(configStr);
+        } catch (e) {
+          // Fallback: evaluate JS object literal if user pasted unquoted JS keys
+          config = Function('"use strict"; return (' + configStr + ')')();
+        }
+
+        if (!config || typeof config !== 'object' || !config.apiKey) {
+          throw new Error('Config missing apiKey property');
+        }
+
+        if (firebase.apps.length === 0) {
+          firebase.initializeApp(config);
+          log('Firebase App initialized successfully!', 'success');
+        } else {
+          log('Firebase App is already initialized.', 'info');
+        }
+      } catch (e) {
+        log('Invalid Firebase Config: ' + e.message, 'error');
+      }
+    }
+
+    function getOrCreateRecaptcha() {
+      if (window.recaptchaVerifier) {
+        return window.recaptchaVerifier;
+      }
+
+      try {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+          'size': 'normal',
+          'callback': (response) => {
+            log('reCAPTCHA solved successfully! Proceeding with OTP request...', 'success');
+          },
+          'expired-callback': () => {
+            log('reCAPTCHA token expired. Please solve the reCAPTCHA again.', 'error');
+          }
+        });
+
+        return window.recaptchaVerifier;
+      } catch (err) {
+        log('Error creating reCAPTCHA: ' + err.message, 'error');
+        return null;
+      }
+    }
+
+    async function handleSendOtp() {
+      if (!firebase.apps.length) {
+        initFirebase();
+        if (!firebase.apps.length) {
+          log('Firebase is not initialized. Please paste your Firebase config and click Init Firebase SDK.', 'error');
+          return;
+        }
+      }
+
+      const phone = document.getElementById('phoneNumber').value.trim();
+      if (!phone || !phone.startsWith('+')) {
+        log('Please enter phone number with country code starting with + (e.g. +919876543210)', 'error');
+        return;
+      }
+
+      log(`Initiating Firebase SMS OTP request for ${phone}...`);
+
+      const appVerifier = getOrCreateRecaptcha();
+      if (!appVerifier) return;
+
+      try {
+        windowConfirmationResult = await firebase.auth().signInWithPhoneNumber(phone, appVerifier);
+        log('OTP sent successfully to ' + phone + '! Check your mobile phone for SMS.', 'success');
+        document.getElementById('otpVerificationSection').style.display = 'block';
+      } catch (error) {
+        log('Firebase SMS Error: ' + error.message, 'error');
+        if (error.code === 'auth/invalid-app-credential') {
+          log('👉 Make sure "localhost" is added to Authorized Domains in Firebase Console → Authentication → Settings → Authorized domains.', 'error');
+        }
+        // Reset verifier so fresh reCAPTCHA can be rendered on next retry
+        try { window.recaptchaVerifier.clear(); } catch(e) {}
+        window.recaptchaVerifier = null;
+      }
+    }
+
+    async function handleVerifyOtp() {
+      const code = document.getElementById('verificationCode').value.trim();
+      if (!code) {
+        log('Please enter the 6-digit OTP code received.', 'error');
+        return;
+      }
+
+      if (!windowConfirmationResult) {
+        log('No pending OTP request found. Click Send OTP first.', 'error');
+        return;
+      }
+
+      try {
+        const result = await windowConfirmationResult.confirm(code);
+        const user = result.user;
+        const idToken = await user.getIdToken();
+        log('User authenticated via Firebase! UID: ' + user.uid, 'success');
+        log('Firebase ID Token generated! Length: ' + idToken.length, 'success');
+      } catch (error) {
+        log('OTP Verification Error: ' + error.message, 'error');
+      }
+    }
+  </script>
+
+</body>
+
+</html>

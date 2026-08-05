@@ -11,6 +11,8 @@ const { recordFailedAttempt, resetFailedAttempts } = require('../middleware/secu
 const { sendEmail } = require('../services/emailService');
 const { vendorWelcomeEmail } = require('../templates/vendorWelcomeEmail');
 
+const { normalizeImageUrl } = require('../utils/imageUtils');
+
 /**
  * GET /api/vendors/:id - Fetch Vendor Storefront Profile & Catalog Items
  */
@@ -38,7 +40,7 @@ async function getVendorPublicProfile(req, res) {
             price: Number(item.price),
             category: item.category || 'General',
             description: item.description || '',
-            image_url: item.image_url || 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400',
+            image_url: normalizeImageUrl(item.image_url),
             in_stock: Boolean(item.in_stock === 1 || item.in_stock === true)
         }));
 
