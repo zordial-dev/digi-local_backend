@@ -108,4 +108,65 @@ router.post('/register', async (req, res) => {
   }
 });
 
+/**
+ * B3. Fetch Resident User Orders by User ID or Phone Number
+ * GET /api/users/:userId/orders
+ */
+router.get('/:userId/orders', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const isPhone = /^\d{10}$/.test(userId);
+
+    let userObjId = userId;
+    if (isPhone) {
+      const uRes = await query(`SELECT user_id FROM users WHERE phone = ? LIMIT 1`, [userId]);
+      if (uRes.rows && uRes.rows.length > 0) {
+        userObjId = uRes.rows[0].user_id;
+      }
+    }
+
+    const ordersRes = await query(
+      `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
+              COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address
+       FROM orders o
+       LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
+       LEFT JOIN societies s ON o.society_id = s.society_id
+       LEFT JOIN users u ON o.user_id = u.user_id
+       WHERE o.user_id = ? OR u.phone = ? OR o.user_id = ?
+       ORDER BY o.order_id DESC`,
+      [userId, userId, userObjId]
+    );
+
+    const orders = [];
+    for (const ord of (ordersRes.rows || [])) {
+      const detailsRes = await query(
+        `SELECT item_name, quantity, COALESCE(price, unit_price, 0) as price FROM order_details WHERE order_id = ?`,
+        [ord.order_id]
+      ).catch(() => ({ rows: [] }));
+
+      orders.push({
+        order_id: String(ord.order_id),
+        user_id: String(ord.user_id),
+        vendor_id: Number(ord.vendor_id),
+        store_name: ord.store_name || 'FreshMart Grocery & Organic',
+        total_amount: Number(ord.total_amount || 0),
+        status: ord.status || 'PENDING',
+        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        society_name: ord.society_name || 'Omaxe Greenwood Residency',
+        delivery_address: ord.delivery_address || 'Tower A-402',
+        items: (detailsRes.rows || []).map(i => ({
+          item_name: i.item_name || 'Item',
+          quantity: Number(i.quantity || 1),
+          price: Number(i.price || 0)
+        }))
+      });
+    }
+
+    res.status(200).json(orders);
+  } catch (err) {
+    console.error('Error fetching user orders:', err);
+    res.status(500).json({ error: 'Failed to fetch user orders' });
+  }
+});
+
 module.exports = router;
