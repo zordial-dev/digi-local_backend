@@ -74,7 +74,15 @@ function owaspSecurityHeaders(req, res, next) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:;");
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'self'",
+    "img-src 'self' data: https:",
+    "style-src 'self' 'unsafe-inline' https:",
+    "script-src 'self' 'unsafe-inline' https://www.gstatic.com https://www.google.com https://apis.google.com",
+    "connect-src 'self' https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://www.googleapis.com https://firebaseinstallations.googleapis.com",
+    "frame-src 'self' https://visitor-log-d3dd2.firebaseapp.com https://www.google.com",
+    "worker-src 'self' blob:"
+  ].join('; '));
   next();
 }
 

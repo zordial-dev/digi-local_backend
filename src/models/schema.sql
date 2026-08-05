@@ -4,11 +4,8 @@ CREATE TABLE IF NOT EXISTS societies (
     society_id BIGSERIAL PRIMARY KEY,
     society_name VARCHAR(255) NOT NULL,
     location VARCHAR(255) NOT NULL,
-    pincode VARCHAR(10) DEFAULT '201310',
-    total_flats INT DEFAULT 0,
-    rwa_phone VARCHAR(20),
-    image_url TEXT,
-    banner_image TEXT,
+    secretary_name VARCHAR(255) NOT NULL,
+    secretary_mobile VARCHAR(20) NOT NULL,
     public_id VARCHAR(10),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -16,7 +13,7 @@ CREATE TABLE IF NOT EXISTS societies (
 CREATE TABLE IF NOT EXISTS users (
     user_id VARCHAR(100) PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
+    email VARCHAR(255),
     phone VARCHAR(20) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     society_id BIGINT REFERENCES societies(society_id) ON DELETE SET NULL,

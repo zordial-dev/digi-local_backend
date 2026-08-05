@@ -214,7 +214,19 @@ Content-Type: application/json
 
 ## 3. Resident User Authentication APIs
 
-### 3.1 Resident Registration
+### 3.1 Send OTP (Email or Phone)
+- **Method & Path:** `POST /api/users/send-otp`
+- **Auth:** Public
+- **Request Body:** `{ "identifier": "9876543210" }` or `{ "phone": "9876543210" }` or `{ "email": "rahul.sharma@gmail.com" }`
+- **Response `200 OK`:** `{ "message": "OTP sent successfully", "target": "9876543210", "simulationOtp": "102272" }`
+
+### 3.2 Verify OTP (Email, Phone, or Firebase ID Token)
+- **Method & Path:** `POST /api/users/verify-otp`
+- **Auth:** Public
+- **Request Body:** `{ "identifier": "9876543210", "otp": "102272" }` OR `{ "firebaseToken": "eyJhbGciOiJSUzI1Ni..." }`
+- **Response `200 OK`:** `{ "message": "OTP verified successfully", "valid": true }`
+
+### 3.3 Resident Registration
 - **Method & Path:** `POST /api/users/register`
 - **Auth:** Public
 - **Request Body:**

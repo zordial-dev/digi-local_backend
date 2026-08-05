@@ -33,10 +33,6 @@ const registerSchema = {
     phone: z.string().optional(),
     phoneNumber: z.string().optional(),
     mobileNumber: z.string().optional(),
-    shop_no: z.string().optional(),
-    shop_number: z.string().optional(),
-    shopNo: z.string().optional(),
-    shopNumber: z.string().optional(),
     category: z.string().optional(),
     business_category: z.string().optional(),
     businessCategory: z.string().optional(),
@@ -54,8 +50,12 @@ const registerSchema = {
 
 const loginSchema = {
   body: z.object({
-    email: z.string().trim().email('Valid email address is required'),
-    password: z.string().min(1, 'Password is required')
+    email: z.string().optional(),
+    phone: z.string().optional(),
+    mobile: z.string().optional(),
+    identifier: z.string().optional(),
+    password: z.string().optional(),
+    otp: z.string().optional()
   }).passthrough()
 };
 

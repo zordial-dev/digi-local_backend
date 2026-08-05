@@ -245,11 +245,8 @@ async function setupTablesPg() {
   }
 
   const columns = [
-    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS pincode VARCHAR(10) DEFAULT '201310'`,
-    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS total_flats INT DEFAULT 850`,
-    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS rwa_phone VARCHAR(20) DEFAULT '9876543210'`,
-    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800'`,
-    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS banner_image TEXT DEFAULT 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=1200'`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS secretary_name VARCHAR(255) DEFAULT 'Society Secretary'`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS secretary_mobile VARCHAR(20) DEFAULT '9876543210'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS opening_time VARCHAR(20) DEFAULT '08:00 AM'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS closing_time VARCHAR(20) DEFAULT '10:00 PM'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS opening_timing VARCHAR(20) DEFAULT '08:00 AM'`,
@@ -260,7 +257,6 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5,2) DEFAULT 5.00`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS service_charge_percentage DECIMAL(5,2) DEFAULT 0.00`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)`,
-    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS shop_no VARCHAR(100)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS category VARCHAR(100)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS city VARCHAR(100)`,
@@ -274,7 +270,9 @@ async function setupTablesPg() {
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS society_id INT`,
-    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_address TEXT`,
+    `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
+    `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`
   ];
 
   await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => {})));

@@ -45,11 +45,16 @@ app.use(express.json({ limit: '10mb' }));
 // ── Attach Performance Compression & Logging Middlewares ──────
 app.use(compressionMiddleware);
 app.use(loggerMiddleware);
+app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 5000;
 
 // ── OpenAPI 3.1 & Interactive Swagger UI Documentation ──────
 const openApiSpecPath = path.join(__dirname, 'docs', 'openapi.json');
+
+app.get('/firebase-test', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'firebase-test.html'));
+});
 
 app.get('/openapi.json', (req, res) => {
     if (fs.existsSync(openApiSpecPath)) {

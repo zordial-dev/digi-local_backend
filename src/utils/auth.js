@@ -167,14 +167,26 @@ function revokeToken(token) {
 }
 
 /**
- * Generates a 6-digit numeric OTP.
+ * Normalizes phone numbers by extracting 10-digit national number.
+ * e.g. "+919876543210" -> "9876543210"
  */
-function generateOTP(email) {
+function normalizePhone(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+/**
+ * Generates a 6-digit numeric OTP for email or phone number identifier.
+ */
+function generateOTP(identifier) {
+  const isEmail = String(identifier || '').includes('@');
+  const cleanId = isEmail ? String(identifier).toLowerCase().trim() : normalizePhone(identifier);
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
   const expiresAt = Date.now() + authConfig.otp.ttlMs;
 
-  otpStore.set(email.toLowerCase(), {
+  otpStore.set(cleanId, {
     otpHash,
     expiresAt,
     attempts: 0
@@ -184,27 +196,29 @@ function generateOTP(email) {
 }
 
 /**
- * Verifies an OTP for a given email.
+ * Verifies an OTP for a given email or phone number identifier.
  */
-function verifyOTP(email, inputOtp) {
-  const entry = otpStore.get(email.toLowerCase());
+function verifyOTP(identifier, inputOtp) {
+  const isEmail = String(identifier || '').includes('@');
+  const cleanId = isEmail ? String(identifier).toLowerCase().trim() : normalizePhone(identifier);
+  const entry = otpStore.get(cleanId);
   if (!entry) return { valid: false, reason: 'No OTP requested or expired' };
 
   if (Date.now() > entry.expiresAt) {
-    otpStore.delete(email.toLowerCase());
+    otpStore.delete(cleanId);
     return { valid: false, reason: 'OTP has expired' };
   }
 
   if (entry.attempts >= authConfig.otp.maxAttempts) {
-    otpStore.delete(email.toLowerCase());
+    otpStore.delete(cleanId);
     return { valid: false, reason: 'Maximum OTP verification attempts exceeded' };
   }
 
   entry.attempts += 1;
-  const inputHash = crypto.createHash('sha256').update(inputOtp).digest('hex');
+  const inputHash = crypto.createHash('sha256').update(String(inputOtp).trim()).digest('hex');
 
   if (inputHash === entry.otpHash) {
-    otpStore.delete(email.toLowerCase());
+    otpStore.delete(cleanId);
     return { valid: true };
   }
 
@@ -218,5 +232,6 @@ module.exports = {
   verifyJwt,
   revokeToken,
   generateOTP,
-  verifyOTP
+  verifyOTP,
+  normalizePhone
 };
