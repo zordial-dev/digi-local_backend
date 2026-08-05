@@ -36,6 +36,12 @@ router.post('/:vendorId/items', authenticateToken, requireVendorOwner, validateR
 // PUT /api/vendorPanel/:vendorId/items/:itemId - Edit item or toggle availability
 router.put('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
 
+// Toggle Item Availability Endpoints
+router.patch('/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
+router.put('/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
+router.patch('/:vendorId/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
+router.put('/:vendorId/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
+
 // DELETE /api/vendorPanel/:vendorId/items/:itemId - Delete item
 router.delete('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner, vendorPanelController.deleteItem);
 

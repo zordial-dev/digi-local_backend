@@ -115,6 +115,29 @@ async function deleteItem(req, res) {
 }
 
 /**
+ * PATCH/PUT /api/vendorPanel/items/:itemId/availability
+ */
+async function toggleAvailability(req, res) {
+    try {
+        const itemId = req.params.itemId;
+        const vendorId = req.params.vendorId || req.user?.id;
+        const in_stock = req.body.in_stock !== undefined ? req.body.in_stock : req.body.is_available;
+        const availVal = (in_stock === true || in_stock === 1 || in_stock === 'true') ? true : false;
+
+        if (vendorId) {
+            await query(`UPDATE items SET in_stock = ?, is_available = ? WHERE item_id = ? AND vendor_id = ?`, [availVal, availVal ? 1 : 0, itemId, vendorId]);
+        } else {
+            await query(`UPDATE items SET in_stock = ?, is_available = ? WHERE item_id = ?`, [availVal, availVal ? 1 : 0, itemId]);
+        }
+
+        res.status(200).json({ message: 'Availability status updated successfully' });
+    } catch (err) {
+        console.error('Error toggling item availability:', err);
+        res.status(500).json({ error: 'Failed to update item availability' });
+    }
+}
+
+/**
  * PUT /api/vendorPanel/:vendorId/settings - Update store settings
  */
 async function updateSettings(req, res) {
@@ -156,5 +179,6 @@ module.exports = {
     updateItem,
     deleteItem,
     updateSettings,
-    renewSubscription
+    renewSubscription,
+    toggleAvailability
 };

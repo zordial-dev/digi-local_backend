@@ -246,10 +246,49 @@ async function getUserOrders(req, res) {
   }
 }
 
+/**
+ * GET /api/users/profile - Fetch Resident User Profile
+ */
+async function getUserProfile(req, res) {
+  try {
+    const userId = req.user?.id || req.params.userId || req.query.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized user' });
+
+    const userRes = await query(
+      `SELECT u.*, s.society_name 
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ?`,
+      [userId, String(userId)]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = userRes.rows[0];
+    res.status(200).json({
+      user_id: String(user.user_id),
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      society_id: user.society_id ? String(user.society_id) : '1',
+      society_name: user.society_name || 'Omaxe Greenwood Residency',
+      flat: user.flat || 'Tower A-402',
+      joined_date: user.joined_date || 'August 2026',
+      avatar: user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
+    });
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
+    res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+}
+
 module.exports = {
   sendOtp,
   verifyOtp,
   loginUser,
   registerUser,
-  getUserOrders
+  getUserOrders,
+  getUserProfile
 };
