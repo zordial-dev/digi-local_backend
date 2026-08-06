@@ -1,6 +1,6 @@
 const vendorService = require('../services/vendorService');
 const { query } = require('../models/db');
-const { normalizeImageUrl } = require('../utils/imageUtils');
+const { normalizeImageUrl, resolveImageUrl } = require('../utils/imageUtils');
 
 /**
  * POST /api/vendorPanel/upload-image - Upload item image
@@ -66,7 +66,9 @@ async function addItem(req, res) {
         const rawImg = req.body.image_url || req.body.imageUrl || req.body.image || req.body.item_image || req.body.itemImage || req.body.photo || req.body.photo_url;
 
         const avail = (is_available === false || is_available === 0) ? 0 : 1;
-        const normalizedImg = normalizeImageUrl(rawImg);
+
+        // Use async resolveImageUrl so share.google, photos.app.goo.gl, etc. work correctly
+        const normalizedImg = await resolveImageUrl(rawImg);
 
         const result = await query(
             `INSERT INTO items (vendor_id, item_name, description, price, stock, category, unit, is_available, image_url) 
@@ -97,7 +99,9 @@ async function updateItem(req, res) {
         }
 
         const availVal = (is_available === true || is_available === 1) ? 1 : 0;
-        const normalizedImg = rawImg ? normalizeImageUrl(rawImg) : undefined;
+
+        // Use async resolveImageUrl so share.google, photos.app.goo.gl, etc. work correctly
+        const normalizedImg = rawImg ? await resolveImageUrl(rawImg) : undefined;
 
         let sql = `UPDATE items SET item_name = ?, description = ?, price = ?, stock = ?, category = ?, unit = ?, is_available = ?`;
         const params = [item_name, description, price, stock, category, unit, availVal];
