@@ -21,7 +21,7 @@ async function getVendorPublicProfile(req, res) {
         const { id } = req.params;
         const vendorRes = await query(
             `SELECT * FROM vendors 
-             WHERE CAST(vendor_id AS TEXT) = ? OR public_id = ? OR LOWER(email) = LOWER(?)`,
+             WHERE (CAST(vendor_id AS TEXT) = ? OR public_id = ? OR LOWER(email) = LOWER(?)) AND status = 'ACTIVE'`,
             [id, id, id]
         );
         if (vendorRes.rows.length === 0) {

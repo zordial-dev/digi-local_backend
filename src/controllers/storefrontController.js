@@ -39,7 +39,7 @@ async function getVendorStorefront(req, res) {
             `SELECT v.*, s.society_name, s.location 
              FROM vendors v 
              LEFT JOIN societies s ON v.society_id = s.society_id 
-             WHERE CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)`,
+             WHERE (CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)) AND v.status = 'ACTIVE'`,
             [vendorId, vendorId, vendorId]
         );
 
