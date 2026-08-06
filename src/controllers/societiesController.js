@@ -24,12 +24,13 @@ async function getAllSocieties(req, res) {
              COUNT(DISTINCT CASE WHEN v.status = 'ACTIVE' THEN v.vendor_id END) as vendor_count
       FROM societies s
       LEFT JOIN vendors v ON s.society_id = v.society_id AND v.status = 'ACTIVE'
+      WHERE s.status = 'active'
     `;
     const params = [];
     if (search) {
       const q = `%${search.toLowerCase()}%`;
       sql += `
-        WHERE (
+        AND (
           LOWER(s.society_name) LIKE ?
           OR LOWER(s.location) LIKE ?
           OR LOWER(s.secretary_name) LIKE ?
@@ -74,6 +75,12 @@ async function getSocietyById(req, res) {
     if (result.rows.length === 0) return res.status(404).json({ error: 'Society ID not found' });
 
     const soc = result.rows[0];
+
+    // Blocked societies are not visible to users
+    if (soc.status && soc.status !== 'active') {
+      return res.status(404).json({ error: 'Society not found' });
+    }
+
     res.status(200).json({
       society_id: Number(soc.society_id),
       society_name: soc.society_name,
@@ -199,6 +206,9 @@ async function approveSociety(req, res) {
     }
 
     await query(`UPDATE societies SET status = ? WHERE society_id = ?`, [status.toLowerCase(), societyId]);
+
+    // Clear cache so block/unblock is reflected immediately to users
+    memoryCache.clear();
 
     res.status(200).json({
       message: 'Society approved successfully',
