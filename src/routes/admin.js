@@ -9,6 +9,9 @@ router.post('/login', adminController.loginAdmin);
 // GET /api/admin/vendors
 router.get('/vendors', authenticateToken, requireAdmin, adminController.getAllVendors);
 
+// POST /api/admin/vendors/:vendorId/status - Block/Unblock vendor
+router.post('/vendors/:vendorId/status', authenticateToken, requireAdmin, adminController.updateVendorStatus);
+
 // GET /api/admin/requests
 router.get('/requests', authenticateToken, requireAdmin, adminController.getVendorRequests);
 

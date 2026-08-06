@@ -149,10 +149,53 @@ async function createOrder(req, res) {
       ).catch((err) => console.error('Error inserting order detail:', err.message));
     }
 
+    // Generate WhatsApp Message & Fetch societyName
+    const vendorRes = await query(`SELECT store_name, phone_number FROM vendors WHERE vendor_id = ?`, [vendor_id]);
+    const societyRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [society_id || 1]);
+    
+    const storeName = vendorRes.rows[0]?.store_name || 'Vendor Store';
+    let vendorPhone = vendorRes.rows[0]?.phone_number || '';
+    if (vendorPhone.length === 10) vendorPhone = '91' + vendorPhone; // default to India code
+    else if (!vendorPhone.startsWith('91') && !vendorPhone.startsWith('+')) vendorPhone = '91' + vendorPhone;
+    vendorPhone = vendorPhone.replace(/\D/g, ''); // strip non-digits
+
+    const societyName = societyRes.rows[0]?.society_name || 'Society Name';
+    
+    const subtotal = items.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+    const serviceCharge = Math.max(0, numTotal - subtotal);
+    const timeString = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+
+    let msg = `📦 *New Order from ${delivery_address}* - ${storeName}
+--------------------------------------
+🏠 *Flat/Room:* ${delivery_address}
+🕒 *Ordered At:* ${timeString}
+--------------------------------------
+
+🛒 *Items Ordered:*\n`;
+
+    items.forEach(item => {
+        msg += `* ${item.quantity || 1}x ${item.item_name || 'Item'} (₹${Number(item.price || 0).toFixed(2)} each)\n`;
+    });
+
+    msg += `
+--------------------------------------
+🧾 *Summary:*
+* Subtotal: ₹${subtotal.toFixed(2)}
+* Service Charge: ₹${serviceCharge.toFixed(2)}
+* *Total Amount:* ₹${numTotal.toFixed(2)}
+--------------------------------------
+
+Please confirm preparation and delivery. Thank you!`;
+
+    const whatsapp_url = vendorPhone ? `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}` : '';
+
     res.status(201).json({
       order_id: orderId,
       status: 'PENDING',
       created_at: createdAt,
+      societyName: societyName,
+      whatsapp_url: whatsapp_url,
+      whatsapp_message: msg,
       message: 'Order placed successfully'
     });
   } catch (err) {

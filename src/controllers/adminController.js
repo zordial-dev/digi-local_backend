@@ -1,6 +1,7 @@
 const { query } = require('../models/db');
 const memoryCache = require('../utils/cache');
 const { generateTokens } = require('../utils/auth');
+const { sendEmail } = require('../services/emailService');
 
 /**
  * POST /api/admin/login - Admin Login with ADMIN_SECRET
@@ -208,6 +209,52 @@ async function updateConfig(req, res) {
     }
 }
 
+/**
+ * POST /api/admin/vendors/:vendorId/status - Block/Suspend or Unblock Vendor
+ */
+async function updateVendorStatus(req, res) {
+    try {
+        const { vendorId } = req.params;
+        const { status, custom_message } = req.body;
+
+        if (!status || (status.toLowerCase() !== 'suspended' && status.toLowerCase() !== 'active')) {
+            return res.status(400).json({ success: false, error_code: 'INVALID_STATUS', message: 'Status must be suspended or active.' });
+        }
+
+        const uppercaseStatus = status.toUpperCase();
+
+        const vendorRes = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [vendorId]);
+        if (vendorRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error_code: 'VENDOR_NOT_FOUND', message: 'No vendor account exists with the provided vendor_id.' });
+        }
+
+        const vendor = vendorRes.rows[0];
+
+        await query(`UPDATE vendors SET status = ? WHERE vendor_id = ?`, [uppercaseStatus, vendorId]);
+        memoryCache.clear();
+
+        if (custom_message && vendor.email) {
+            const subject = uppercaseStatus === 'SUSPENDED' ? 'Vendor Account Suspended' : 'Vendor Account Reactivated';
+            const html = `
+                <h3>Hello ${vendor.vendor_name || 'Vendor'},</h3>
+                <p>Your store <strong>${vendor.store_name || 'DigiLocal Store'}</strong> has been <strong>${uppercaseStatus}</strong>.</p>
+                <p><strong>Admin Message:</strong><br/>${custom_message}</p>
+                <p>Please contact DigiLocal Admin support for more information.</p>
+            `;
+            sendEmail({ to: vendor.email, subject, html }).catch(err => console.error('Failed to send suspension email:', err));
+        }
+
+        res.status(200).json({
+            message: `Vendor status updated to ${uppercaseStatus}`,
+            vendor_id: Number(vendorId),
+            status: status.toLowerCase()
+        });
+    } catch (err) {
+        console.error('Error updating vendor status:', err);
+        res.status(500).json({ success: false, message: 'Failed to update vendor status' });
+    }
+}
+
 module.exports = {
     loginAdmin,
     getAllVendors,
@@ -215,5 +262,6 @@ module.exports = {
     approveVendorRequest,
     rejectVendorRequest,
     getConfig,
-    updateConfig
+    updateConfig,
+    updateVendorStatus
 };

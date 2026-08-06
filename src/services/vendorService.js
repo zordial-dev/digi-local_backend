@@ -124,17 +124,34 @@ class VendorService {
       delivery_charge, gst_percentage, service_charge_percentage
     } = settings;
 
+    // Check if new phone number is already taken by another vendor
+    if (phone_number) {
+        const existing = await query(`SELECT vendor_id FROM vendors WHERE phone_number = ? AND vendor_id != ?`, [phone_number, numId]);
+        if (existing.rows && existing.rows.length > 0) {
+            throw new Error('This phone number is already registered to another vendor.');
+        }
+    }
+
     const defaultLogo = 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80';
     const logoUrl = logo && logo.trim() !== '' ? logo : defaultLogo;
 
     await query(
       `UPDATE vendors 
-       SET store_name = ?, logo = ?, description = ?, phone_number = ?, gst_number = ?,
-           opening_timing = ?, closing_timing = ?, min_order_value = ?, max_quantity_limit = ?,
-           delivery_charge = ?, gst_percentage = ?, service_charge_percentage = ?
+       SET store_name = COALESCE(NULLIF(?, ''), store_name), 
+           logo = ?, 
+           description = ?, 
+           phone_number = COALESCE(NULLIF(?, ''), phone_number), 
+           gst_number = ?,
+           opening_timing = ?, 
+           closing_timing = ?, 
+           min_order_value = ?, 
+           max_quantity_limit = ?,
+           delivery_charge = ?, 
+           gst_percentage = ?, 
+           service_charge_percentage = ?
        WHERE vendor_id = ? OR public_id = ?`,
       [
-        store_name, logoUrl, description || '', phone_number || '', gst_number || '',
+        store_name || '', logoUrl, description || '', phone_number || '', gst_number || '',
         opening_timing || '08:00 AM', closing_timing || '10:00 PM', min_order_value || 0,
         max_quantity_limit || 10, delivery_charge || 0, gst_percentage || 5, service_charge_percentage || 0,
         numId, rawIdStr
