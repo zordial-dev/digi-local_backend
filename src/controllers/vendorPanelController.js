@@ -4,18 +4,36 @@ const { normalizeImageUrl } = require('../utils/imageUtils');
 
 /**
  * POST /api/vendorPanel/upload-image - Upload item image
+ * Supports: camera photos (JPEG, HEIC, no-extension), gallery picks, file picker
  */
 function uploadImage(req, res) {
     if (!req.file) {
-        return res.status(400).json({ error: 'No image file provided. Send field name: image' });
+        // Check if no file was sent at all vs. multer silently skipped it
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('multipart/form-data')) {
+            return res.status(400).json({
+                error: 'Request must be multipart/form-data with field name "image"',
+                hint: 'Set Content-Type: multipart/form-data and use field name "image" for the file',
+                code: 'WRONG_CONTENT_TYPE'
+            });
+        }
+        return res.status(400).json({
+            error: 'No image file received. Send the photo with field name: image',
+            hint: 'Make sure the field name is exactly "image" (not "photo", "file", "img", etc.)',
+            code: 'NO_FILE_RECEIVED'
+        });
     }
+
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const imageUrl = `${baseUrl}/uploads/${req.file.filename}`;
+
     res.json({
         success: true,
         image_url: imageUrl,
         filename: req.file.filename,
-        size: req.file.size
+        size: req.file.size,
+        mimetype: req.file.mimetype,
+        original_name: req.file.originalname || 'camera_photo'
     });
 }
 
