@@ -225,6 +225,8 @@ function verifyOTP(identifier, inputOtp) {
   return { valid: false, reason: 'Invalid OTP' };
 }
 
+const { verifyFirebaseToken } = require('../config/firebase');
+
 module.exports = {
   hashPassword,
   comparePassword,
@@ -233,5 +235,7 @@ module.exports = {
   revokeToken,
   generateOTP,
   verifyOTP,
-  normalizePhone
+  normalizePhone,
+  verifyFirebaseToken
 };
+

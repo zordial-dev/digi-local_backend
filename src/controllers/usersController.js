@@ -1,8 +1,13 @@
 const { query } = require('../models/db');
-const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP } = require('../utils/auth');
+const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP, verifyFirebaseToken, normalizePhone } = require('../utils/auth');
+const logger = require('../utils/logger');
 
 /**
  * B0. Send OTP to Resident User Phone or Email
+ * POST /api/users/send-otp
+ */
+/**
+ * B0. Send OTP Information Route
  * POST /api/users/send-otp
  */
 async function sendOtp(req, res) {
@@ -11,73 +16,90 @@ async function sendOtp(req, res) {
     const target = identifier || phone || email;
 
     if (!target) {
-      return res.status(400).json({ error: 'Phone number or email is required to send OTP' });
+      return res.status(400).json({ error: 'Phone number or email is required' });
     }
 
-    const otp = generateOTP(target);
-    const isProduction = process.env.NODE_ENV === 'production';
+    console.log(`🔥 [FIREBASE PHONE AUTH] Send OTP Request Received`);
+    console.log(`   ├─ Target: ${target}`);
+    console.log(`   ├─ Provider: Google Firebase Phone Authentication`);
+    console.log(`   └─ Action Required: Client SDK triggers SMS via signInWithPhoneNumber()`);
+
+    logger.auth(`Firebase SMS requested for target: ${target}`, { target, method: 'sendOtp' });
 
     res.status(200).json({
-      message: 'OTP sent successfully',
+      message: 'OTP dispatch initiated via Firebase Phone Authentication. Please complete SMS verification on client and submit firebase_token.',
       target: String(target),
-      simulationOtp: isProduction ? undefined : otp
+      provider: 'firebase'
     });
   } catch (err) {
-    console.error('Error sending OTP:', err);
-    res.status(500).json({ error: 'Failed to send OTP' });
+    console.error('❌ [OTP ERROR] Error handling send OTP:', err.message);
+    logger.error('Error in send OTP route:', { error: err.message });
+    res.status(500).json({ error: 'Failed to process OTP request' });
   }
 }
 
 /**
- * B0.1 Verify Resident User OTP
+ * B0.1 Verify Firebase Phone Auth ID Token
  * POST /api/users/verify-otp
  */
 async function verifyOtp(req, res) {
   try {
-    const { identifier, phone, email, otp } = req.body;
-    const target = identifier || phone || email;
+    const { firebase_token, idToken } = req.body;
+    const token = firebase_token || idToken;
 
-    if (!target || !otp) {
-      return res.status(400).json({ error: 'Identifier (phone/email) and OTP are required' });
+    if (!token) {
+      return res.status(400).json({ error: 'firebase_token or idToken is required for OTP verification' });
     }
 
-    const result = verifyOTP(target, otp);
-    if (!result.valid) {
-      return res.status(400).json({ error: result.reason || 'Invalid OTP' });
-    }
+    console.log('🔍 [FIREBASE VERIFY] Verifying Firebase ID Token...');
+    const fbResult = await verifyFirebaseToken(token);
+    console.log('✅ [FIREBASE VERIFY SUCCESS] Verified Phone:', fbResult.phone_number, '| UID:', fbResult.uid);
 
-    res.status(200).json({ message: 'OTP verified successfully', valid: true });
+    res.status(200).json({
+      message: 'Firebase Phone Token verified successfully',
+      valid: true,
+      firebase_uid: fbResult.uid,
+      phone_number: fbResult.phone_number
+    });
   } catch (err) {
-    console.error('Error verifying OTP:', err);
-    res.status(500).json({ error: 'OTP verification failed' });
+    console.error('❌ [FIREBASE VERIFY ERROR]:', err.message);
+    res.status(400).json({ error: err.message || 'Firebase token verification failed' });
   }
 }
 
 /**
- * B1. Resident User Login (Mobile Number Only)
+ * B1. Resident User Login (Password or Firebase Phone Token)
  * POST /api/users/login
  */
 async function loginUser(req, res) {
   try {
-    const { phone, mobile, phone_number, mobile_number, identifier, password, otp } = req.body;
-    const userPhone = String(phone || mobile || phone_number || mobile_number || identifier || '').trim();
+    const { phone, mobile, phone_number, mobile_number, identifier, password, firebase_token, idToken } = req.body;
+    const fbToken = firebase_token || idToken;
 
-    if (!userPhone) {
-      return res.status(400).json({ error: 'Mobile number is required for user login' });
-    }
+    let userPhone = String(phone || mobile || phone_number || mobile_number || identifier || '').trim();
 
-    // 1. Direct OTP Login Flow
-    if (otp) {
-      const otpRes = verifyOTP(userPhone, otp);
-      if (!otpRes.valid) {
-        return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code' });
+    // 1. Firebase Token Auth Flow
+    if (fbToken) {
+      console.log('🔐 [LOGIN ATTEMPT] Authenticating via Firebase ID Token...');
+      const fbResult = await verifyFirebaseToken(fbToken);
+      const rawPhone = fbResult.phone_number || '';
+      userPhone = normalizePhone(rawPhone) || userPhone;
+
+      if (!userPhone) {
+        return res.status(400).json({ error: 'Firebase token does not contain a verified phone number' });
       }
-    } else if (process.env.OTP_VERIFICATION_MODE === 'strict' && !password) {
-      return res.status(400).json({ error: 'OTP verification is required for login' });
+    } else if (password) {
+      // 2. Password Auth Flow
+      if (!userPhone) {
+        return res.status(400).json({ error: 'Mobile number is required for password login' });
+      }
+      console.log(`🔐 [LOGIN ATTEMPT] Authenticating ${userPhone} via Password`);
+    } else {
+      return res.status(400).json({ error: 'Either password or firebase_token is required for login' });
     }
 
-    // 2. Mobile Number Password Authentication
-    const userRes = await query(
+    // 3. Database Lookup / Auto-Registration for Verified Phone Numbers
+    let userRes = await query(
       `SELECT u.*, s.society_name 
        FROM users u 
        LEFT JOIN societies s ON u.society_id = s.society_id 
@@ -85,21 +107,42 @@ async function loginUser(req, res) {
       [userPhone, userPhone.slice(-10)]
     );
 
+    let user;
+
     if (userRes.rows.length === 0) {
-      return res.status(401).json({ error: 'Invalid mobile number or account does not exist' });
+      if (fbToken) {
+        // Auto-register user verified via Firebase Phone Auth
+        const userName = `Resident ${userPhone.slice(-4)}`;
+        const userId = `usr_${Date.now().toString().slice(-6)}`;
+        await query(
+          `INSERT INTO users (user_id, name, phone, society_id, flat, joined_date, avatar)
+           VALUES (?, ?, ?, 1, 'Tower A-402', 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')`,
+          [userId, userName, userPhone]
+        );
+        userRes = await query(`SELECT * FROM users WHERE user_id = ?`, [userId]);
+        user = userRes.rows[0];
+      } else {
+        return res.status(401).json({ error: 'Invalid mobile number or account does not exist' });
+      }
+    } else {
+      user = userRes.rows[0];
     }
 
-    const user = userRes.rows[0];
-
-    if (password) {
+    if (password && !fbToken) {
       const matchRes = await comparePassword(password, user.password_hash);
-      if (!matchRes.matches && !otp) {
+      if (!matchRes.matches) {
         return res.status(401).json({ error: 'Invalid mobile number or password' });
       }
     }
 
     const tokenPayload = { id: user.user_id, role: 'user', phone: user.phone };
     const tokens = generateTokens(tokenPayload, 'user');
+
+    logger.auth(`User login successful for phone ${user.phone} (ID: ${user.user_id}) via ${fbToken ? 'Firebase Token' : otp ? 'OTP' : 'Password'}`, {
+      userId: user.user_id,
+      phone: user.phone,
+      method: fbToken ? 'firebase' : otp ? 'otp' : 'password'
+    });
 
     res.status(200).json({
       token: tokens.accessToken,
@@ -118,8 +161,8 @@ async function loginUser(req, res) {
       }
     });
   } catch (err) {
-    console.error('Error during resident user login:', err);
-    res.status(500).json({ error: 'User login failed due to a server error' });
+    logger.error('Error during resident user login:', { error: err.message });
+    res.status(500).json({ error: err.message || 'User login failed due to a server error' });
   }
 }
 
@@ -129,21 +172,26 @@ async function loginUser(req, res) {
  */
 async function registerUser(req, res) {
   try {
-    const { name, email, phone, mobile, phone_number, mobile_number, identifier, password, society_id, flat, otp } = req.body;
-    const userPhone = String(phone || mobile || phone_number || mobile_number || identifier || '').trim();
-    const userName = String(name || 'Resident User').trim();
+    const { name, email, phone, mobile, phone_number, mobile_number, identifier, password, society_id, flat, otp, firebase_token, idToken } = req.body;
+    const fbToken = firebase_token || idToken;
 
-    if (!userPhone) {
-      return res.status(400).json({ error: 'Mobile number is required for user registration' });
+    let userPhone = String(phone || mobile || phone_number || mobile_number || identifier || '').trim();
+    const userName = String(name || 'Resident User').trim();
+    const regMethod = fbToken ? 'Firebase Token' : otp ? `OTP (${otp})` : 'Password';
+
+    console.log(`📝 [REGISTRATION ATTEMPT] Name: ${userName} | Mobile: ${userPhone || 'Token-only'} | Auth Method: ${regMethod}`);
+
+    if (fbToken) {
+      console.log('📝 [REGISTRATION ATTEMPT] Verifying Firebase Phone Token...');
+      const fbResult = await verifyFirebaseToken(fbToken);
+      const rawPhone = fbResult.phone_number || '';
+      userPhone = normalizePhone(rawPhone) || userPhone;
+    } else {
+      console.log(`📝 [REGISTRATION ATTEMPT] Registering ${userName} (${userPhone}) with password`);
     }
 
-    if (otp) {
-      const otpRes = verifyOTP(userPhone, otp);
-      if (!otpRes.valid) {
-        return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code' });
-      }
-    } else if (process.env.OTP_VERIFICATION_MODE === 'strict') {
-      return res.status(400).json({ error: 'OTP verification is required for registration' });
+    if (!userPhone) {
+      return res.status(400).json({ error: 'Mobile number or firebase_token is required for user registration' });
     }
 
     const existing = await query(`SELECT user_id FROM users WHERE phone = ?`, [userPhone]);
@@ -166,6 +214,12 @@ async function registerUser(req, res) {
 
     const tokens = generateTokens({ id: userId, role: 'user', phone: userPhone }, 'user');
 
+    logger.auth(`User registered successfully: ${userName} (${userPhone})`, {
+      userId,
+      phone: userPhone,
+      method: fbToken ? 'firebase' : otp ? 'otp' : 'password'
+    });
+
     res.status(201).json({
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
@@ -180,7 +234,7 @@ async function registerUser(req, res) {
       }
     });
   } catch (err) {
-    console.error('Error during resident user registration:', err);
+    logger.error('Error during resident user registration:', { error: err.message });
     res.status(500).json({ error: 'User registration failed due to a server error' });
   }
 }

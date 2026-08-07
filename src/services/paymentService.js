@@ -63,10 +63,10 @@ class PaymentService {
           subId = subRes.rows[0].subscription_id;
         } else {
           const newSub = await txQuery(
-            `INSERT INTO subscriptions (vendor_id, status) VALUES (?, 'PENDING')`,
+            `INSERT INTO subscriptions (vendor_id, status) VALUES (?, 'PENDING') RETURNING subscription_id`,
             [vendor_id]
           );
-          subId = newSub.insertId;
+          subId = newSub.rows[0]?.subscription_id || newSub.insertId;
         }
       }
 
@@ -89,12 +89,13 @@ class PaymentService {
 
       // Record Successful Payment Audit Log
       const payRes = await txQuery(
-        `INSERT INTO payments (subscription_id, vendor_id, amount, payment_method, transaction_id, status) VALUES (?, ?, ?, ?, ?, 'SUCCESS')`,
+        `INSERT INTO payments (subscription_id, vendor_id, amount, payment_method, transaction_id, status) VALUES (?, ?, ?, ?, ?, 'SUCCESS') RETURNING payment_id`,
         [subId, vendor_id, amount, payment_method, txnId]
       );
+      const paymentId = payRes.rows[0]?.payment_id || payRes.insertId;
 
       return {
-        payment_id: payRes.insertId,
+        payment_id: paymentId,
         subscription_id: subId,
         status: 'SUCCESS',
         transaction_id: txnId,

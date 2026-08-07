@@ -82,13 +82,14 @@ async function sendVendorOtp(req, res) {
 
         const otp = generateOTP(target);
 
+        console.log(`📲 [VENDOR OTP DISPATCH] Generated OTP [${otp}] for target: ${target}`);
+
         res.status(200).json({
-            message: 'OTP sent successfully',
-            target: String(target),
-            simulationOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
+            message: 'OTP verification request initiated successfully. Please enter the verification code or Firebase token.',
+            target: String(target)
         });
     } catch (err) {
-        console.error('Error sending vendor OTP:', err);
+        console.error('❌ [VENDOR OTP ERROR] Error sending vendor OTP:', err);
         res.status(500).json({ error: 'Failed to send OTP' });
     }
 }
@@ -274,27 +275,31 @@ async function registerVendor(req, res) {
  */
 async function loginVendor(req, res) {
     try {
-        const { email, password, otp, phone, mobile } = req.body;
-        const targetIdentifier = email || phone || mobile;
+        const { email, password, phone, mobile, firebase_token, idToken } = req.body;
+        const fbToken = firebase_token || idToken;
+        let targetIdentifier = email || phone || mobile;
 
-        if (otp) {
-            const otpRes = verifyOTP(targetIdentifier, otp);
-            if (!otpRes.valid) {
-                return res.status(400).json({ error: otpRes.reason || 'Invalid OTP' });
+        if (fbToken) {
+            console.log('🏪 [VENDOR LOGIN] Authenticating via Firebase Phone Token...');
+            const fbResult = await verifyFirebaseToken(fbToken);
+            const rawPhone = fbResult.phone_number || '';
+            targetIdentifier = normalizePhone(rawPhone) || targetIdentifier;
+            if (!targetIdentifier) {
+                return res.status(400).json({ error: 'Firebase token does not contain a verified phone number' });
             }
         }
 
         const vendorRes = await query(`SELECT * FROM vendors WHERE (LOWER(email) = LOWER(?) AND email != '') OR (phone_number = ? AND phone_number != '')`, [targetIdentifier || '', targetIdentifier || '']);
         if (vendorRes.rows.length === 0) {
             recordFailedAttempt(targetIdentifier);
-            return res.status(401).json({ error: 'Invalid email/phone or password' });
+            return res.status(401).json({ error: 'Vendor store account not found for this mobile or email' });
         }
 
         const vendor = vendorRes.rows[0];
 
-        if (password) {
+        if (password && !fbToken) {
             const passwordMatch = await comparePassword(password, vendor.password_hash || vendor.password);
-            if (!passwordMatch.matches && !otp) {
+            if (!passwordMatch.matches) {
                 recordFailedAttempt(targetIdentifier);
                 return res.status(401).json({ error: 'Invalid email/phone or password' });
             }

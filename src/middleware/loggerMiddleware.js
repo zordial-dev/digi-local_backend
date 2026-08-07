@@ -20,15 +20,20 @@ function loggerMiddleware(req, res, next) {
 
   // Intercept response finish event to log Response status & duration for errors/warnings
   res.on('finish', () => {
+    const url = req.originalUrl || req.url || '';
+    if (url.includes('/socket.io') || url.includes('/favicon.ico')) {
+      return; // Skip noisy browser/socket polling 404s
+    }
+
     if (res.statusCode >= 400) {
       const duration = Date.now() - startTime;
       const logLevel = res.statusCode >= 500 ? 'error' : 'warn';
 
-      logger[logLevel](`HTTP ${req.method} ${req.originalUrl || req.url} ${res.statusCode} - ${duration}ms`, {
+      logger[logLevel](`HTTP ${req.method} ${url} ${res.statusCode} - ${duration}ms`, {
         requestId,
         correlationId,
         method: req.method,
-        url: req.originalUrl || req.url,
+        url,
         statusCode: res.statusCode,
         responseTimeMs: duration
       });

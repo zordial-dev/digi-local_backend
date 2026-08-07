@@ -11,6 +11,7 @@ web_modules/
 .env.production.local
 *.pem
 *.key
+*-firebase-adminsdk-*.json
 
 # SQLite Database & Storage
 *.sqlite

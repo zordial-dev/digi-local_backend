@@ -108,10 +108,8 @@
 
     <button onclick="initFirebase()">Init Firebase SDK</button>
 
-    <hr style="border: 0; border-top: 1px solid #334155; margin: 20px 0;" />
-
     <label for="phoneNumber">2. Mobile Number (with Country Code):</label>
-    <input type="text" id="phoneNumber" placeholder="+919876543210" value="+919876543210" />
+    <input type="text" id="phoneNumber" placeholder="+919876543210" value="+919784319840" />
 
     <button id="btnSendOtp" onclick="handleSendOtp()">Send OTP via Firebase SMS</button>
 
@@ -130,7 +128,6 @@
 
   <script>
     let windowConfirmationResult = null;
-    let recaptchaWidgetId = null;
 
     function log(msg, type = 'info') {
       const logBox = document.getElementById('log');
@@ -148,14 +145,12 @@
           return;
         }
 
-        // Strip trailing semicolons or 'const firebaseConfig = ' if copied from JS code
         configStr = configStr.replace(/^(const|var|let)\s+\w+\s*=\s*/i, '').replace(/;$/, '').trim();
 
         let config;
         try {
           config = JSON.parse(configStr);
         } catch (e) {
-          // Fallback: evaluate JS object literal if user pasted unquoted JS keys
           config = Function('"use strict"; return (' + configStr + ')')();
         }
 
@@ -180,13 +175,10 @@
       }
 
       try {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-          'size': 'normal',
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('btnSendOtp', {
+          'size': 'invisible',
           'callback': (response) => {
-            log('reCAPTCHA solved successfully! Proceeding with OTP request...', 'success');
-          },
-          'expired-callback': () => {
-            log('reCAPTCHA token expired. Please solve the reCAPTCHA again.', 'error');
+            log('reCAPTCHA / Security verification completed!', 'success');
           }
         });
 
@@ -201,7 +193,7 @@
       if (!firebase.apps.length) {
         initFirebase();
         if (!firebase.apps.length) {
-          log('Firebase is not initialized. Please paste your Firebase config and click Init Firebase SDK.', 'error');
+          log('Firebase is not initialized.', 'error');
           return;
         }
       }
@@ -212,22 +204,22 @@
         return;
       }
 
-      log(`Initiating Firebase SMS OTP request for ${phone}...`);
-
-      const appVerifier = getOrCreateRecaptcha();
-      if (!appVerifier) return;
+      log(`Initiating Production Firebase SMS request for ${phone}...`);
 
       try {
+        const appVerifier = getOrCreateRecaptcha();
+        if (!appVerifier) return;
+        await appVerifier.render();
+
         windowConfirmationResult = await firebase.auth().signInWithPhoneNumber(phone, appVerifier);
-        log('OTP sent successfully to ' + phone + '! Check your mobile phone for SMS.', 'success');
+        log('SMS sent successfully to ' + phone + '! Check your mobile phone for the OTP.', 'success');
         document.getElementById('otpVerificationSection').style.display = 'block';
       } catch (error) {
         log('Firebase SMS Error: ' + error.message, 'error');
         if (error.code === 'auth/invalid-app-credential') {
-          log('👉 Make sure "localhost" is added to Authorized Domains in Firebase Console → Authentication → Settings → Authorized domains.', 'error');
+          log('👉 Note: If testing with fictional test numbers, enable appVerificationDisabledForTesting.', 'error');
         }
-        // Reset verifier so fresh reCAPTCHA can be rendered on next retry
-        try { window.recaptchaVerifier.clear(); } catch(e) {}
+        try { if (window.recaptchaVerifier) window.recaptchaVerifier.clear(); } catch(e) {}
         window.recaptchaVerifier = null;
       }
     }
