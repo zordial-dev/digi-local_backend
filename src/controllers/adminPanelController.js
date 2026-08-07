@@ -380,7 +380,7 @@ async function getSocietyVendors(req, res) {
 
 async function listVendors(req, res) {
     try {
-        const { search, status, tier } = req.query;
+        const { search, status, tier, society_id, societyId, society, society_name } = req.query;
 
         let sql = `
             SELECT v.*, s.society_name
@@ -390,10 +390,23 @@ async function listVendors(req, res) {
         const conditions = [];
         const params = [];
 
+        const targetSociety = society_id || societyId || society || society_name;
+        if (targetSociety) {
+            const rawSocStr = String(targetSociety).trim();
+            if (/^\d+$/.test(rawSocStr)) {
+                conditions.push(`v.society_id = ?`);
+                params.push(parseInt(rawSocStr, 10));
+            } else {
+                conditions.push(`(LOWER(s.society_name) LIKE ? OR LOWER(s.location) LIKE ?)`);
+                const q = `%${rawSocStr.toLowerCase()}%`;
+                params.push(q, q);
+            }
+        }
+
         if (search) {
-            conditions.push(`(LOWER(v.store_name) LIKE ? OR LOWER(v.vendor_name) LIKE ? OR LOWER(v.email) LIKE ?)`);
+            conditions.push(`(LOWER(v.store_name) LIKE ? OR LOWER(v.vendor_name) LIKE ? OR LOWER(v.email) LIKE ? OR LOWER(s.society_name) LIKE ?)`);
             const q = `%${search.toLowerCase()}%`;
-            params.push(q, q, q);
+            params.push(q, q, q, q);
         }
 
         if (status && status !== 'all') {

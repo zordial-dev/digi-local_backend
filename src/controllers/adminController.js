@@ -32,7 +32,7 @@ function loginAdmin(req, res) {
  */
 async function getAllVendors(req, res) {
     try {
-        const { search, page = 1, limit = 50 } = req.query;
+        const { search, page = 1, limit = 50, society_id, societyId } = req.query;
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
         const offset = (pageNum - 1) * limitNum;
@@ -44,14 +44,32 @@ async function getAllVendors(req, res) {
                    sub.subscription_id, sub.start_date, sub.end_date, sub.status as subscription_status
             FROM vendors v
             JOIN societies s ON v.society_id = s.society_id
-            LEFT JOIN subscriptions sub ON v.vendor_id = sub.vendor_id
+            LEFT JOIN subscriptions sub ON sub.subscription_id = (
+                SELECT subscription_id FROM subscriptions 
+                WHERE vendor_id = v.vendor_id 
+                ORDER BY subscription_id DESC 
+                LIMIT 1
+            )
         `;
+        const conditions = [];
         const params = [];
+
+        const targetSociety = society_id || societyId;
+        if (targetSociety) {
+            conditions.push(`v.society_id = ?`);
+            params.push(targetSociety);
+        }
+
         if (search) {
-            sql += ` WHERE LOWER(v.vendor_name) LIKE ? OR LOWER(s.society_name) LIKE ? OR LOWER(v.store_name) LIKE ?`;
+            conditions.push(`(LOWER(v.vendor_name) LIKE ? OR LOWER(s.society_name) LIKE ? OR LOWER(v.store_name) LIKE ?)`);
             const q = `%${search.toLowerCase()}%`;
             params.push(q, q, q);
         }
+
+        if (conditions.length > 0) {
+            sql += ` WHERE ` + conditions.join(' AND ');
+        }
+
         sql += ` ORDER BY v.vendor_id DESC LIMIT ${limitNum} OFFSET ${offset}`;
 
         const result = await query(sql, params);

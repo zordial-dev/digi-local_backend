@@ -64,23 +64,23 @@ async function initDb() {
 
     const poolConfig = databaseUrl
       ? {
-          connectionString: databaseUrl,
-          ssl: sslOption,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 10000
-        }
+        connectionString: databaseUrl,
+        ssl: sslOption,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000
+      }
       : {
-          host: process.env.PGHOST || 'localhost',
-          port: parseInt(process.env.PGPORT || '5432', 10),
-          user: process.env.PGUSER || 'postgres',
-          password: process.env.PGPASSWORD || 'postgres',
-          database: process.env.PGDATABASE || 'digilocal',
-          ssl: sslOption,
-          max: 20,
-          idleTimeoutMillis: 30000,
-          connectionTimeoutMillis: 10000
-        };
+        host: process.env.PGHOST || 'localhost',
+        port: parseInt(process.env.PGPORT || '5432', 10),
+        user: process.env.PGUSER || 'postgres',
+        password: process.env.PGPASSWORD || 'postgres',
+        database: process.env.PGDATABASE || 'digilocal',
+        ssl: sslOption,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000
+      };
 
     pgPool = new Pool(poolConfig);
 
@@ -93,6 +93,7 @@ async function initDb() {
       client.release();
       console.log('[Database] Connected to PostgreSQL successfully (Pool max: 20).');
       await setupTablesPg();
+      await removeDuplicateVendors();
       await createIndexes();
       await seedInitialData();
     } catch (err) {
@@ -213,10 +214,12 @@ async function withTransaction(callback) {
  * Safely creates missing database indexes for optimized query lookup.
  */
 async function createIndexes() {
+  await query(`DROP INDEX IF EXISTS idx_vendors_society_vname`).catch(() => {});
   const indexQueries = [
     `CREATE INDEX IF NOT EXISTS idx_vendors_email ON vendors(email)`,
     `CREATE INDEX IF NOT EXISTS idx_vendors_society ON vendors(society_id)`,
     `CREATE INDEX IF NOT EXISTS idx_vendors_status ON vendors(status)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_society_sname ON vendors (society_id, LOWER(TRIM(store_name)))`,
     `CREATE INDEX IF NOT EXISTS idx_items_vendor ON items(vendor_id)`,
     `CREATE INDEX IF NOT EXISTS idx_items_category ON items(category)`,
     `CREATE INDEX IF NOT EXISTS idx_orders_vendor ON orders(vendor_id)`,
@@ -230,7 +233,7 @@ async function createIndexes() {
   for (const q of indexQueries) {
     try {
       await query(q);
-    } catch (_) {}
+    } catch (_) { }
   }
 }
 
@@ -282,7 +285,7 @@ async function setupTablesPg() {
     `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`
   ];
 
-  await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => {})));
+  await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => { })));
 
   // Ensure sub_admins table
   await pgPool.query(`
@@ -296,7 +299,7 @@ async function setupTablesPg() {
       status VARCHAR(20) DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-  `).catch(() => {});
+  `).catch(() => { });
 
   // Ensure platform_config table
   await pgPool.query(`
@@ -307,7 +310,7 @@ async function setupTablesPg() {
       admin_password_hash VARCHAR(255),
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
-  `).catch(() => {});
+  `).catch(() => { });
 
   // Backfill public_id if missing
   const socRows = await query(`SELECT society_id FROM societies WHERE public_id IS NULL`);
@@ -334,7 +337,7 @@ async function seedInitialData() {
     if (!nameCheck.rows || nameCheck.rows.length === 0) {
       await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_name', 'DigiLocal')`);
     }
-  } catch (_) {}
+  } catch (_) { }
 
   const { hashPassword } = require('../utils/auth');
   const pwdHash = await hashPassword('password123');
@@ -344,14 +347,14 @@ async function seedInitialData() {
   if (!usrCheck.rows || usrCheck.rows.length === 0) {
     await query(`INSERT INTO users (user_id, name, email, phone, password_hash, society_id, flat, joined_date, avatar) VALUES
       ('usr_101', 'Rahul Sharma', 'rahul.sharma@gmail.com', '9876543210', '${pwdHash}', 1, 'Tower A-402', 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')
-    `).catch(() => {});
+    `).catch(() => { });
   }
 
   const vCheck = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = 1`);
   if (!vCheck.rows || vCheck.rows.length === 0) {
     await query(`INSERT INTO vendors (vendor_id, society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, opening_time, closing_time, logo, description, status, public_id) VALUES 
       (1, 1, 'Rajesh Sharma', '07AAACR12341Z5', '9876543210', 'vendor@digilocal.com', 'vendor123', '${vendorPwdHash}', 'FreshMart Grocery & Organic', '08:00 AM', '10:00 PM', 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200', 'Quality goods & daily essentials delivered within society via WhatsApp.', 'ACTIVE', '${genPublicId(6)}')
-    `).catch(() => {});
+    `).catch(() => { });
   }
 
   const itemCheck = await query(`SELECT item_id FROM items WHERE item_id = 101`);
@@ -387,6 +390,54 @@ async function seedInitialData() {
 }
 
 /**
+ * Removes duplicate same-name shops (store_name) per society in DB tables, keeping only one vendor per shop name.
+ * Reassigns items, catalog_items, orders, subscriptions, payments to the retained vendor before deleting duplicate vendors.
+ */
+async function removeDuplicateVendors() {
+  try {
+    const res = await query(`SELECT vendor_id, society_id, store_name FROM vendors ORDER BY vendor_id ASC`);
+    if (!res.rows || res.rows.length === 0) return { removedCount: 0 };
+
+    const seenStoreNames = new Map();
+    const duplicatesToRemove = [];
+
+    for (const v of res.rows) {
+      const societyId = String(v.society_id || 1);
+      const sNameNorm = v.store_name ? String(v.store_name).trim().toLowerCase().replace(/\s+/g, ' ') : '';
+      const currentVendorId = Number(v.vendor_id);
+
+      if (!sNameNorm) continue;
+
+      const sKey = `${societyId}:${sNameNorm}`;
+
+      if (seenStoreNames.has(sKey)) {
+        const keptVendorId = seenStoreNames.get(sKey);
+        duplicatesToRemove.push({ duplicateVendorId: currentVendorId, keptVendorId });
+      } else {
+        seenStoreNames.set(sKey, currentVendorId);
+      }
+    }
+
+    for (const dup of duplicatesToRemove) {
+      const { duplicateVendorId, keptVendorId } = dup;
+      await query(`UPDATE items SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
+      await query(`UPDATE catalog_items SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
+      await query(`UPDATE orders SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
+      await query(`UPDATE subscriptions SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
+      await query(`UPDATE payments SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
+
+      await query(`DELETE FROM vendors WHERE vendor_id = ?`, [duplicateVendorId]);
+      console.log(`[Deduplication] Removed duplicate shop ID ${duplicateVendorId} in society. Reassigned records to vendor ID ${keptVendorId}.`);
+    }
+
+    return { removedCount: duplicatesToRemove.length };
+  } catch (err) {
+    console.error('[Deduplication Error] Failed to remove duplicate shops:', err.message);
+    return { removedCount: 0, error: err.message };
+  }
+}
+
+/**
  * Closes PostgreSQL database connection pool cleanly during process termination.
  */
 async function closeDb() {
@@ -402,5 +453,6 @@ module.exports = {
   closeDb,
   genPublicId,
   getDbType,
+  removeDuplicateVendors,
   DatabaseError
 };

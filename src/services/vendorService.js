@@ -126,10 +126,26 @@ class VendorService {
 
     // Check if new phone number is already taken by another vendor
     if (phone_number) {
-        const existing = await query(`SELECT vendor_id FROM vendors WHERE phone_number = ? AND vendor_id != ?`, [phone_number, numId]);
-        if (existing.rows && existing.rows.length > 0) {
-            throw new Error('This phone number is already registered to another vendor.');
+      const existing = await query(`SELECT vendor_id FROM vendors WHERE phone_number = ? AND vendor_id != ?`, [phone_number, numId]);
+      if (existing.rows && existing.rows.length > 0) {
+        throw new Error('This phone number is already registered to another vendor.');
+      }
+    }
+
+    // Check if store_name (shop name) conflicts with another vendor in the same society
+    if (store_name && store_name.trim() !== '') {
+      const currentVendorRes = await query(`SELECT vendor_id, society_id FROM vendors WHERE vendor_id = ? OR public_id = ?`, [numId, rawIdStr]);
+      if (currentVendorRes.rows && currentVendorRes.rows.length > 0) {
+        const targetSocId = currentVendorRes.rows[0].society_id;
+        const currentVid = currentVendorRes.rows[0].vendor_id;
+        const nameDup = await query(
+          `SELECT vendor_id FROM vendors WHERE society_id = ? AND vendor_id != ? AND LOWER(TRIM(store_name)) = LOWER(TRIM(?))`,
+          [targetSocId, currentVid, store_name]
+        );
+        if (nameDup.rows && nameDup.rows.length > 0) {
+          throw new Error('A shop with this name already exists in this society.');
         }
+      }
     }
 
     const defaultLogo = 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80';

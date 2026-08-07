@@ -1,11 +1,11 @@
 const { query } = require('../models/db');
 const {
-  hashPassword,
-  comparePassword,
-  generateTokens,
-  revokeToken,
-  generateOTP,
-  verifyOTP
+    hashPassword,
+    comparePassword,
+    generateTokens,
+    revokeToken,
+    generateOTP,
+    verifyOTP
 } = require('../utils/auth');
 const { recordFailedAttempt, resetFailedAttempts } = require('../middleware/security');
 const { sendEmail } = require('../services/emailService');
@@ -101,12 +101,12 @@ async function registerVendor(req, res) {
         const body = req.body || {};
 
         const vendor_name = String(
-            body.vendor_name || body.owner_name || body.ownerName || 
+            body.vendor_name || body.owner_name || body.ownerName ||
             body.vendorName || body.name || body.owner || 'Vendor Owner'
         ).trim();
 
         const store_name = String(
-            body.store_name || body.shop_name || body.business_name || 
+            body.store_name || body.shop_name || body.business_name ||
             body.storeName || body.shopName || body.businessName || 'My Store'
         ).trim();
 
@@ -119,7 +119,7 @@ async function registerVendor(req, res) {
         );
 
         const phone_number = String(
-            body.phone_number || body.mobile_number || body.mobile || 
+            body.phone_number || body.mobile_number || body.mobile ||
             body.phone || body.phoneNumber || body.mobileNumber || ''
         ).trim();
 
@@ -144,7 +144,7 @@ async function registerVendor(req, res) {
         ).trim();
 
         const logo = String(
-            body.logo || body.shop_images?.[0] || body.images?.[0] || 
+            body.logo || body.shop_images?.[0] || body.images?.[0] ||
             'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80'
         );
 
@@ -191,6 +191,17 @@ async function registerVendor(req, res) {
                     );
                     society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || 1);
                 }
+            }
+        }
+
+        // Check for existing shop with same store_name (shop name) in the same society
+        if (store_name) {
+            const nameDuplicate = await query(
+                `SELECT vendor_id FROM vendors WHERE society_id = ? AND LOWER(TRIM(store_name)) = LOWER(TRIM(?))`,
+                [society_id, store_name]
+            );
+            if (nameDuplicate.rows && nameDuplicate.rows.length > 0) {
+                return res.status(400).json({ error: 'A shop with this name already exists in this society.' });
             }
         }
 
