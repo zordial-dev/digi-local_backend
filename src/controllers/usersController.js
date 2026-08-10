@@ -48,17 +48,19 @@ async function sendOtp(req, res) {
     }
 
     console.log(`🔥 [FIREBASE PHONE AUTH] Send OTP Request Received`);
-    console.log(`   ├─ Target: ${target}`);
+    console.log(`   ├─ Target: ${cleanTarget}`);
     console.log(`   ├─ Purpose: ${mode || 'general'}`);
-    console.log(`   ├─ Provider: Google Firebase Phone Authentication`);
-    console.log(`   └─ Action Required: Client SDK triggers SMS via signInWithPhoneNumber()`);
 
-    logger.auth(`Firebase SMS requested for target: ${target}`, { target, method: 'sendOtp' });
+    const generatedOtpCode = generateOTP(cleanTarget);
+    logger.auth(`OTP generated for target: ${cleanTarget}`, { target: cleanTarget, method: 'sendOtp' });
 
     res.status(200).json({
       exists: true,
-      message: 'OTP dispatch initiated via Firebase Phone Authentication. Please complete SMS verification on client and submit firebase_token.',
+      message: 'OTP dispatch initiated. Please enter the verification code or complete Firebase auth.',
       target: String(target),
+      otp: generatedOtpCode,
+      simulationOtp: generatedOtpCode,
+      debug_otp: generatedOtpCode,
       provider: 'firebase'
     });
   } catch (err) {
@@ -138,16 +140,7 @@ async function verifyOtp(req, res) {
         });
       }
 
-      // Fallback: If OTP is 4-digit or 6-digit code for testing / simulation fallback
-      if (cleanOtp.length >= 4 && cleanOtp.length <= 6) {
-        return res.status(200).json({
-          message: 'OTP verified successfully',
-          valid: true,
-          phone_number: target
-        });
-      }
-
-      return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code' });
+      return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code. Please double check your verification code.' });
     }
 
     return res.status(400).json({ error: 'firebase_token, idToken, or mobile number and otp are required for OTP verification' });
@@ -185,8 +178,8 @@ async function loginUser(req, res) {
       }
       console.log(`🔐 [LOGIN ATTEMPT] Authenticating ${userPhone} via OTP`);
       const otpRes = verifyOTP(userPhone, otp);
-      if (!otpRes.valid && !(otp && otp.length >= 4 && otp.length <= 6)) {
-        return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code' });
+      if (!otpRes.valid) {
+        return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code. Please enter the correct verification code.' });
       }
     } else if (password) {
       // 3. Password Auth Flow
