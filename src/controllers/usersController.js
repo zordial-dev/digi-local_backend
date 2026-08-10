@@ -50,17 +50,14 @@ async function sendOtp(req, res) {
     console.log(`🔥 [FIREBASE PHONE AUTH] Send OTP Request Received`);
     console.log(`   ├─ Target: ${cleanTarget}`);
     console.log(`   ├─ Purpose: ${mode || 'general'}`);
+    console.log(`   └─ Action Required: Client SDK triggers SMS via signInWithPhoneNumber()`);
 
-    const generatedOtpCode = generateOTP(cleanTarget);
-    logger.auth(`OTP generated for target: ${cleanTarget}`, { target: cleanTarget, method: 'sendOtp' });
+    logger.auth(`Firebase SMS requested for target: ${cleanTarget}`, { target: cleanTarget, method: 'sendOtp' });
 
     res.status(200).json({
       exists: true,
-      message: 'OTP dispatch initiated. Please enter the verification code or complete Firebase auth.',
+      message: 'OTP dispatch initiated via Firebase Phone Authentication. Please complete SMS verification on client and submit firebase_token.',
       target: String(target),
-      otp: generatedOtpCode,
-      simulationOtp: generatedOtpCode,
-      debug_otp: generatedOtpCode,
       provider: 'firebase'
     });
   } catch (err) {
