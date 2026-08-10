@@ -13,6 +13,7 @@ router.post('/', ordersController.createOrder);
 
 // D4. Update Order Status Pipeline
 router.put('/:id/status', ordersController.updateOrderStatus);
+router.post('/:id/status', ordersController.updateOrderStatus);
 
 // GET /api/orders/:orderId - Single order detail lookup
 router.get('/:orderId', ordersController.getOrderById);

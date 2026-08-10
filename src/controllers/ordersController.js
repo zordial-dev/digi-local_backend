@@ -26,21 +26,47 @@ async function getUserOrders(req, res) {
         [ord.order_id]
       ).catch(() => ({ rows: [] }));
 
+      const mappedItems = (detailsRes.rows || []).map(i => ({
+        quantity: Number(i.quantity || 1),
+        menuItem: {
+          name: i.item_name || 'Item',
+          price: Number(i.price || 0)
+        }
+      }));
+
+      const subtotal = mappedItems.reduce((acc, item) => acc + (item.menuItem.price * item.quantity), 0);
+      const total = Number(ord.total_amount || 0);
+      const serviceCharge = Math.max(0, total - subtotal);
+
+      let flatNumber = ord.delivery_address || 'Unknown';
+      let buildingNumber = '-';
+      if (flatNumber.includes(',')) {
+          const parts = flatNumber.split(',');
+          flatNumber = parts[0].trim();
+          buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
+      }
+
       orders.push({
-        order_id: String(ord.order_id),
+        id: String(ord.order_id), // Expo expects 'id'
+        order_id: String(ord.order_id), // Backward compat
         user_id: String(ord.user_id),
         vendor_id: Number(ord.vendor_id),
         store_name: ord.store_name || 'FreshMart Grocery & Organic',
-        total_amount: Number(ord.total_amount || 0),
-        status: ord.status || 'PENDING',
+        delivery_address: ord.delivery_address || '',
+        flatNumber: flatNumber,
+        buildingNumber: buildingNumber,
+        subtotal: subtotal,
+        tax: 0,
+        deliveryCharge: 0,
+        serviceCharge: serviceCharge,
+        total: total,
+        total_amount: total, // Backward compat
+        status: (ord.status || 'PENDING').toLowerCase(),
+        timestamp: ord.created_at ? new Date(ord.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
+        createdAt: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
         created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
         society_name: ord.society_name || 'Omaxe Greenwood Residency',
-        delivery_address: ord.delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
-        items: (detailsRes.rows || []).map(i => ({
-          item_name: i.item_name || 'Item',
-          quantity: Number(i.quantity || 1),
-          price: Number(i.price || 0)
-        }))
+        items: mappedItems
       });
     }
 
@@ -76,20 +102,46 @@ async function getVendorOrders(req, res) {
         [ord.order_id]
       ).catch(() => ({ rows: [] }));
 
-      orders.push({
-        order_id: String(ord.order_id),
-        user_id: ord.user_id ? String(ord.user_id) : 'usr_101',
-        customer_name: ord.customer_name || 'Rahul Sharma',
-        phone: ord.phone || '9876543210',
-        delivery_address: ord.delivery_address || 'Tower A-402',
-        total_amount: Number(ord.total_amount || 0),
-        status: ord.status || 'PENDING',
-        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
-        items: (detailsRes.rows || []).map(i => ({
-          item_name: i.item_name || 'Item',
-          quantity: Number(i.quantity || 1),
+      const mappedItems = (detailsRes.rows || []).map(i => ({
+        quantity: Number(i.quantity || 1),
+        menuItem: {
+          name: i.item_name || 'Item',
           price: Number(i.price || 0)
-        }))
+        }
+      }));
+
+      const subtotal = mappedItems.reduce((acc, item) => acc + (item.menuItem.price * item.quantity), 0);
+      const total = Number(ord.total_amount || 0);
+      const serviceCharge = Math.max(0, total - subtotal);
+
+      let flatNumber = ord.delivery_address || 'Unknown';
+      let buildingNumber = '-';
+      if (flatNumber.includes(',')) {
+          const parts = flatNumber.split(',');
+          flatNumber = parts[0].trim();
+          buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
+      }
+
+      orders.push({
+        id: String(ord.order_id), // Expo expects 'id'
+        order_id: String(ord.order_id), // Backward compat
+        user_id: ord.user_id ? String(ord.user_id) : 'usr_101',
+        customer_name: ord.customer_name || 'Resident',
+        phone: ord.phone || '',
+        delivery_address: ord.delivery_address || '',
+        flatNumber: flatNumber,
+        buildingNumber: buildingNumber,
+        subtotal: subtotal,
+        tax: 0,
+        deliveryCharge: 0,
+        serviceCharge: serviceCharge,
+        total: total,
+        total_amount: total, // Backward compat
+        status: (ord.status || 'PENDING').toLowerCase(),
+        timestamp: ord.created_at ? new Date(ord.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
+        createdAt: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        items: mappedItems
       });
     }
 
@@ -200,6 +252,8 @@ Please confirm preparation and delivery. Thank you!`;
       items_count: itemsCount
     }).catch(err => console.error('[Order Push Notification Error]:', err.message));
 
+    const whatsapp_url = `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}`;
+
     res.status(201).json({
       order_id: orderId,
       status: 'PENDING',
@@ -222,14 +276,14 @@ Please confirm preparation and delivery. Thank you!`;
 async function updateOrderStatus(req, res) {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const status = req.body.status || req.query.status;
 
     const allowedStatuses = ['PENDING', 'CONFIRMED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'ACCEPTED', 'CANCELLED'];
-    if (!status || !allowedStatuses.includes(status.toUpperCase())) {
+    if (!status || !allowedStatuses.includes(String(status).toUpperCase())) {
       return res.status(400).json({ error: 'Invalid order status value' });
     }
 
-    const uppercaseStatus = status.toUpperCase();
+    const uppercaseStatus = String(status).toUpperCase();
 
     const orderCheck = await query(`SELECT order_id FROM orders WHERE order_id = ?`, [id]);
     if (orderCheck.rows.length === 0) {

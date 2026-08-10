@@ -5,7 +5,9 @@ const {
     generateTokens,
     revokeToken,
     generateOTP,
-    verifyOTP
+    verifyOTP,
+    verifyFirebaseToken,
+    normalizePhone
 } = require('../utils/auth');
 const { recordFailedAttempt, resetFailedAttempts } = require('../middleware/security');
 const { sendEmail } = require('../services/emailService');
@@ -119,7 +121,7 @@ async function registerVendor(req, res) {
             body.password || body.pass || body.create_password || ''
         );
 
-        const phone_number = String(
+        let phone_number = String(
             body.phone_number || body.mobile_number || body.mobile ||
             body.phone || body.phoneNumber || body.mobileNumber || ''
         ).trim();
@@ -150,8 +152,23 @@ async function registerVendor(req, res) {
         );
 
         const otp = body.otp || body.code;
+        const fbToken = body.firebase_token || body.idToken;
 
-        if (otp) {
+        if (fbToken) {
+            console.log('🏪 [VENDOR REGISTER] Authenticating via Firebase Phone Token...');
+            const fbResult = await verifyFirebaseToken(fbToken);
+            const rawPhone = fbResult.phone_number || '';
+            const verifiedPhone = normalizePhone(rawPhone);
+            if (!verifiedPhone) {
+                return res.status(400).json({ error: 'Firebase token does not contain a verified phone number' });
+            }
+            const inputPhone = normalizePhone(phone_number);
+            if (inputPhone && verifiedPhone !== inputPhone) {
+                return res.status(400).json({ error: 'Verified phone number does not match provided phone number' });
+            }
+            // If phone_number wasn't provided but token has it, use the verified one
+            if (!phone_number) phone_number = verifiedPhone;
+        } else if (otp) {
             const otpRes = verifyOTP(email || phone_number, otp);
             if (!otpRes.valid) {
                 return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code' });
