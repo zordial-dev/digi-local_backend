@@ -97,13 +97,13 @@
 
     <label for="firebaseConfig">1. Firebase Web App Configuration (JSON):</label>
     <textarea id="firebaseConfig" rows="9">{
-  "apiKey": "AIzaSyBbfZPdWOGwHRAN1cNqoW3k-hm9H6czvXs",
+  "apiKey": "AIzaSyBkbIdA9m57t-qXZuQZpZReFzj55yELsTs",
   "authDomain": "visitor-log-d3dd2.firebaseapp.com",
   "projectId": "visitor-log-d3dd2",
   "storageBucket": "visitor-log-d3dd2.firebasestorage.app",
   "messagingSenderId": "866177756650",
-  "appId": "1:866177756650:web:8b8995179795218e0e5693",
-  "measurementId": "G-KDMMY3BQV7"
+  "appId": "1:866177756650:web:2af4b3fc59946d9a0e5693",
+  "measurementId": "G-4LXEYZ8C7S"
 }</textarea>
 
     <button onclick="initFirebase()">Init Firebase SDK</button>
@@ -171,11 +171,12 @@
 
     function getOrCreateRecaptcha() {
       if (window.recaptchaVerifier) {
-        return window.recaptchaVerifier;
+        try { window.recaptchaVerifier.clear(); } catch(e) {}
+        window.recaptchaVerifier = null;
       }
 
       try {
-        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('btnSendOtp', {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
           'size': 'invisible',
           'callback': (response) => {
             log('reCAPTCHA / Security verification completed!', 'success');

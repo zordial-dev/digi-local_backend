@@ -10,6 +10,9 @@ router.post('/send-otp', usersController.sendOtp);
 // B0.1 Verify Resident User OTP
 router.post('/verify-otp', usersController.verifyOtp);
 
+// B0.2 Check Resident User Phone Registration
+router.post('/check-phone', usersController.checkPhone);
+
 // B1. Resident User Login
 router.post('/login', usersController.loginUser);
 
