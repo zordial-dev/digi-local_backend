@@ -183,16 +183,37 @@ async function createOrder(req, res) {
       ]
     );
 
+    const populatedItems = [];
     for (const item of items) {
-      const itemPrice = Number(item.price || 0);
+      let itemName = item.item_name;
+      let itemPrice = Number(item.price);
+      
+      if (!itemName || !item.price) {
+        const dbItemRes = await query(`SELECT item_name, price FROM items WHERE item_id = ?`, [item.item_id]);
+        if (dbItemRes.rows.length > 0) {
+          itemName = itemName || dbItemRes.rows[0].item_name;
+          itemPrice = item.price ? itemPrice : Number(dbItemRes.rows[0].price);
+        }
+      }
+      
+      itemName = itemName || 'Item';
+      itemPrice = itemPrice || 0;
       const itemQty = Number(item.quantity || 1);
+
+      populatedItems.push({
+        item_id: item.item_id,
+        item_name: itemName,
+        quantity: itemQty,
+        price: itemPrice
+      });
+
       await query(
         `INSERT INTO order_details (order_id, item_id, item_name, quantity, price, unit_price, item_total)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
           item.item_id || null,
-          item.item_name || 'Item',
+          itemName,
           itemQty,
           itemPrice,
           itemPrice,
@@ -213,7 +234,7 @@ async function createOrder(req, res) {
 
     const societyName = societyRes.rows[0]?.society_name || 'Society Name';
     
-    const subtotal = items.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
+    const subtotal = populatedItems.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
     const serviceCharge = Math.max(0, numTotal - subtotal);
     const timeString = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
@@ -225,7 +246,7 @@ async function createOrder(req, res) {
 
 🛒 *Items Ordered:*\n`;
 
-    items.forEach(item => {
+    populatedItems.forEach(item => {
         msg += `* ${item.quantity || 1}x ${item.item_name || 'Item'} (₹${Number(item.price || 0).toFixed(2)} each)\n`;
     });
 
@@ -241,7 +262,7 @@ Please confirm preparation and delivery. Thank you!`;
 
     const userRes = await query(`SELECT name FROM users WHERE user_id = ?`, [user_id || 'usr_101']).catch(() => ({ rows: [] }));
     const customerName = userRes.rows[0]?.name || req.body.customer_name || 'Resident';
-    const itemsCount = items.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
+    const itemsCount = populatedItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
 
     const notificationService = require('../services/notificationService');
     notificationService.notifyVendorNewOrder({
@@ -250,7 +271,7 @@ Please confirm preparation and delivery. Thank you!`;
       total_amount: numTotal,
       customer_name: customerName,
       items_count: itemsCount,
-      items: items
+      items: populatedItems
     }).catch(err => console.error('[Order Push Notification Error]:', err.message));
 
     const whatsapp_url = `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}`;
