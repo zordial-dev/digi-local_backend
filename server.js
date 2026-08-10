@@ -175,6 +175,8 @@ async function bootServer() {
 
         startSubscriptionCron();
 
+        const { initSocket } = require('./src/socket');
+
         const server = app.listen(PORT, () => {
             console.log(`DigiLocal Server running on PORT ${PORT} | Docs: http://localhost:${PORT}/api-docs`, { port: PORT });
         }).on('error', (err) => {
@@ -184,6 +186,8 @@ async function bootServer() {
                 logger.error('Server boot error', { error: err.message });
             }
         });
+
+        initSocket(server);
 
         const gracefulShutdown = (signal) => {
             logger.info(`Received ${signal}. Initiating graceful shutdown...`, { signal });

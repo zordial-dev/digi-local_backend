@@ -68,7 +68,15 @@ router.post('/forgot-password', validateRequest(forgotPasswordSchema), vendorAut
 // POST /api/vendors/verify-otp
 router.post('/verify-otp', validateRequest(verifyOtpSchema), vendorAuthController.verifyVendorOtp);
 
+const vendorPanelController = require('../controllers/vendorPanelController');
+
 // POST /api/vendors/reset-password
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);
+
+// FCM / Expo Push Device Token Endpoints (/api/vendors/fcm-token)
+router.post('/fcm-token', vendorPanelController.registerFcmToken);
+router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
+router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
+router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
 module.exports = router;

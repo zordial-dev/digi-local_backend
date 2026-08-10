@@ -141,4 +141,10 @@ router.put('/:vendorId/settings', authenticateToken, requireVendorOwner, validat
 // POST /api/vendorPanel/:vendorId/renew - Renew vendor subscription
 router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, vendorPanelController.renewSubscription);
 
+// FCM / Expo Push Device Token Endpoints (Zomato/Swiggy High-Priority Notifications)
+router.post('/fcm-token', vendorPanelController.registerFcmToken);
+router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
+router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
+router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
+
 module.exports = router;

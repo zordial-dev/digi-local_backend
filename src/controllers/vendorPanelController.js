@@ -194,6 +194,45 @@ async function renewSubscription(req, res) {
     }
 }
 
+/**
+ * POST /api/vendorPanel/:vendorId/fcm-token or /api/vendors/fcm-token
+ */
+async function registerFcmToken(req, res) {
+    try {
+        const vendorId = req.params.vendorId || req.user?.vendor_id || req.user?.id || req.body?.vendor_id;
+        const fcmToken = req.body?.fcm_token || req.body?.fcmToken || req.body?.device_token || req.body?.deviceToken;
+        const platform = req.body?.platform || 'android';
+
+        if (!fcmToken) {
+            return res.status(400).json({ error: 'fcm_token is required' });
+        }
+
+        const notificationService = require('../services/notificationService');
+        await notificationService.registerVendorFcmToken(vendorId, fcmToken, platform);
+
+        res.status(200).json({ message: 'FCM Push Notification device token registered successfully' });
+    } catch (err) {
+        console.error('Error registering FCM token:', err);
+        res.status(500).json({ error: 'Failed to register FCM token' });
+    }
+}
+
+/**
+ * DELETE /api/vendorPanel/:vendorId/fcm-token or /api/vendors/fcm-token
+ */
+async function deleteFcmToken(req, res) {
+    try {
+        const vendorId = req.params.vendorId || req.user?.vendor_id || req.user?.id;
+        const notificationService = require('../services/notificationService');
+        await notificationService.unregisterVendorFcmToken(vendorId);
+
+        res.status(200).json({ message: 'FCM token removed successfully' });
+    } catch (err) {
+        console.error('Error removing FCM token:', err);
+        res.status(500).json({ error: 'Failed to remove FCM token' });
+    }
+}
+
 module.exports = {
     uploadImage,
     getDashboard,
@@ -202,5 +241,7 @@ module.exports = {
     deleteItem,
     updateSettings,
     renewSubscription,
-    toggleAvailability
+    toggleAvailability,
+    registerFcmToken,
+    deleteFcmToken
 };

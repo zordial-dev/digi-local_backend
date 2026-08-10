@@ -75,11 +75,16 @@ async function verifyFirebaseToken(idToken) {
   }
 }
 
+function isFirebaseAvailable() {
+  return !!firebaseApp;
+}
+
 // Attempt initialization on file require
 initFirebase();
 
 module.exports = {
   admin,
   initFirebase,
-  verifyFirebaseToken
+  verifyFirebaseToken,
+  isFirebaseAvailable
 };

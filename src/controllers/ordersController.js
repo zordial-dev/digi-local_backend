@@ -187,7 +187,18 @@ async function createOrder(req, res) {
 
 Please confirm preparation and delivery. Thank you!`;
 
-    const whatsapp_url = vendorPhone ? `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}` : '';
+    const userRes = await query(`SELECT name FROM users WHERE user_id = ?`, [user_id || 'usr_101']).catch(() => ({ rows: [] }));
+    const customerName = userRes.rows[0]?.name || req.body.customer_name || 'Resident';
+    const itemsCount = items.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
+
+    const notificationService = require('../services/notificationService');
+    notificationService.notifyVendorNewOrder({
+      vendor_id,
+      order_id: orderId,
+      total_amount: numTotal,
+      customer_name: customerName,
+      items_count: itemsCount
+    }).catch(err => console.error('[Order Push Notification Error]:', err.message));
 
     res.status(201).json({
       order_id: orderId,
