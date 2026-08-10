@@ -108,6 +108,7 @@ class OrderService {
       for (const lineItem of verifiedLineItems) {
         await txQuery(
           `INSERT INTO order_details (order_id, item_id, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?)`,
+          [order_id, lineItem.item_id, lineItem.quantity, lineItem.unit_price, lineItem.item_total]
         );
       }
 
@@ -118,7 +119,8 @@ class OrderService {
         order_id,
         total_amount: computedTotalAmount,
         customer_name,
-        items_count: verifiedLineItems.length
+        items_count: verifiedLineItems.length,
+        items: verifiedLineItems
       }).catch(err => console.error('[Order Notification Error]', err.message));
 
       return {

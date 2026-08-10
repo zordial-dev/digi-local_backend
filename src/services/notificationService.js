@@ -63,7 +63,7 @@ class NotificationService {
   /**
    * Sends high-priority Push Notification (FCM / Expo) & Socket.IO Sound Alert to Vendor on New Order.
    */
-  async notifyVendorNewOrder({ vendor_id, order_id, total_amount, customer_name, items_count = 1 }) {
+  async notifyVendorNewOrder({ vendor_id, order_id, total_amount, customer_name, items_count = 1, items = [] }) {
     try {
       // 1. Deduplication Guard: Prevent double-notifying for the same order_id
       if (order_id && this.processedOrders.has(String(order_id))) {
@@ -193,6 +193,7 @@ class NotificationService {
             total_amount: formattedTotal,
             customer_name: customer_name || 'Resident',
             items_count,
+            items,
             timestamp: new Date().toISOString(),
             sound: 'new_order_alert_sound'
           };

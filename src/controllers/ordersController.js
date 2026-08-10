@@ -249,7 +249,8 @@ Please confirm preparation and delivery. Thank you!`;
       order_id: orderId,
       total_amount: numTotal,
       customer_name: customerName,
-      items_count: itemsCount
+      items_count: itemsCount,
+      items: items
     }).catch(err => console.error('[Order Push Notification Error]:', err.message));
 
     const whatsapp_url = `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}`;

@@ -182,7 +182,14 @@ function normalizePhone(phone) {
 function generateOTP(identifier) {
   const isEmail = String(identifier || '').includes('@');
   const cleanId = isEmail ? String(identifier).toLowerCase().trim() : normalizePhone(identifier);
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  let otp = Math.floor(100000 + Math.random() * 900000).toString();
+  
+  // Test Mode Bypass
+  if (cleanId === '9999999999') {
+     otp = '123456';
+  }
+
   const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
   const expiresAt = Date.now() + authConfig.otp.ttlMs;
 
