@@ -284,6 +284,7 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_token TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_type VARCHAR(50) DEFAULT 'android'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'android'`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
     `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
     `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`
   ];

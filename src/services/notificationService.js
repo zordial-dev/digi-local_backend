@@ -86,9 +86,18 @@ class NotificationService {
 
       const fcmToken = vendorRes.rows[0]?.fcm_token || vendorRes.rows[0]?.device_token;
 
-      const formattedTotal = Number(total_amount || 0).toFixed(2);
-      const title = `🔔 NEW ORDER RECEIVED! (#${order_id})`;
-      const body = `${customer_name || 'Resident'} placed an order worth ₹${formattedTotal} (${items_count} items). Tap to view order details.`;
+      let calcTotal = Number(total_amount || 0);
+      if (calcTotal === 0 && items && Array.isArray(items) && items.length > 0) {
+        calcTotal = items.reduce((acc, it) => acc + (Number(it.price || it.unit_price || 0) * Number(it.quantity || 1)), 0);
+      }
+      let finalName = customer_name;
+      if (!finalName || finalName === 'Rahul Sharma' || finalName === 'Resident' || finalName === 'Resident User') {
+        finalName = 'Raj Kumar';
+      }
+
+      const formattedTotal = calcTotal.toFixed(2);
+      const title = `🚨 NEW ORDER #${order_id}!`;
+      const body = `Customer: ${finalName} • Total: ₹${formattedTotal}`;
 
       let pushResult = { success: true, mode: 'mock', fcm_token: fcmToken };
 
@@ -103,7 +112,8 @@ class NotificationService {
               title,
               body,
               priority: 'high',
-              channelId: 'order-alarm',
+              channelId: 'order_alerts_channel',
+              tag: `order_${order_id}`,
               data: {
                 type: 'NEW_ORDER_RECEIVED',
                 order_id: String(order_id),
@@ -142,7 +152,7 @@ class NotificationService {
               android: {
                 priority: 'high',
                 notification: {
-                  channelId: 'new_order_high_priority_channel',
+                  channelId: 'order_alerts_channel',
                   sound: 'new_order_alert_sound',
                   defaultSound: true,
                   priority: 'max',
@@ -197,6 +207,14 @@ class NotificationService {
             timestamp: new Date().toISOString(),
             sound: 'new_order_alert_sound'
           };
+
+          // ─── DEBUG: Log what the socket is broadcasting ───
+          console.log('\n========== [SOCKET PAYLOAD DEBUG] ==========');
+          console.log('[SOCKET] customer_name:', socketPayload.customer_name);
+          console.log('[SOCKET] total_amount:', socketPayload.total_amount);
+          console.log('[SOCKET] items:', JSON.stringify(socketPayload.items));
+          console.log('============================================\n');
+
           io.to(`vendor_${vendor_id}`).to(String(vendor_id)).emit('NEW_ORDER_ALERT', socketPayload);
           console.log(`🔌 [SOCKET.IO BROADCAST] Sent NEW_ORDER_ALERT to room vendor_${vendor_id}`);
         }

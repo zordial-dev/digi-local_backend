@@ -292,8 +292,9 @@ async function registerVendor(req, res) {
  */
 async function loginVendor(req, res) {
     try {
-        const { email, password, phone, mobile, firebase_token, idToken } = req.body;
+        const { email, password, phone, mobile, firebase_token, idToken, otp, code } = req.body;
         const fbToken = firebase_token || idToken;
+        const loginOtp = otp || code;
         let targetIdentifier = email || phone || mobile;
 
         if (fbToken) {
@@ -320,6 +321,15 @@ async function loginVendor(req, res) {
                 recordFailedAttempt(targetIdentifier);
                 return res.status(401).json({ error: 'Invalid email/phone or password' });
             }
+        } else if (!fbToken && loginOtp) {
+            const otpRes = verifyOTP(targetIdentifier, loginOtp);
+            if (!otpRes.valid) {
+                recordFailedAttempt(targetIdentifier);
+                return res.status(401).json({ error: otpRes.reason || 'Invalid OTP code' });
+            }
+        } else if (!fbToken) {
+            recordFailedAttempt(targetIdentifier);
+            return res.status(401).json({ error: 'Authentication requires a password or OTP.' });
         }
 
         resetFailedAttempts(targetIdentifier);

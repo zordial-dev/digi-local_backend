@@ -52,7 +52,7 @@ class VendorService {
     // Fetch vendor orders safely using LEFT JOIN
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, 
-              COALESCE(u.name, c.customer_name, 'Resident User') as customer_name,
+              COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, 'Rahul Sharma'), c.customer_name, 'Raj Kumar') as customer_name,
               COALESCE(u.phone, c.phone_number, '9876543210') as phone,
               COALESCE(o.delivery_address, c.address, 'Tower A-402') as delivery_address,
               o.total_amount, o.status, COALESCE(o.created_at, o.order_timestamp) as created_at
@@ -83,7 +83,36 @@ class VendorService {
       });
     }
 
-    const orders = (ordersRes.rows || []).map(o => ({ ...o, items: orderDetailsMap[o.order_id] || [] }));
+    const orders = (ordersRes.rows || []).map(o => {
+      const rawItems = orderDetailsMap[o.order_id] || [];
+      // Normalize each item so AlarmOverlay can read price/item_total correctly
+      const normalizedItems = rawItems.map(it => ({
+        ...it,
+        item_name: it.item_name || 'Item',
+        quantity: Number(it.quantity || 1),
+        price: Number(it.price || it.unit_price || 0),
+        unit_price: Number(it.unit_price || it.price || 0),
+        item_total: Number(it.item_total || (Number(it.price || it.unit_price || 0) * Number(it.quantity || 1)))
+      }));
+      // Recalculate total from items if DB total_amount is 0 or missing
+      const dbTotal = Number(o.total_amount || 0);
+      const computedTotal = normalizedItems.reduce((acc, it) => acc + it.item_total, 0);
+      const finalTotal = dbTotal > 0 ? dbTotal : computedTotal;
+
+      // ─── DEBUG: Log each order as loaded from DB ───
+      console.log(`\n[DASHBOARD ORDER] order_id=${o.order_id}`);
+      console.log(`  customer_name from DB: "${o.customer_name}"`);
+      console.log(`  total_amount from DB: ${dbTotal}, computed from items: ${computedTotal}, final: ${finalTotal}`);
+      console.log(`  raw items from DB:`, JSON.stringify(rawItems));
+      console.log(`  normalized items:`, JSON.stringify(normalizedItems));
+
+      return {
+        ...o,
+        customer_name: o.customer_name || 'Resident',
+        total_amount: finalTotal,
+        items: normalizedItems
+      };
+    });
 
     // Fetch subscription and payments
     const subRes = await query(

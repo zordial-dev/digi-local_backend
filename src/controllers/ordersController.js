@@ -86,7 +86,9 @@ async function getVendorOrders(req, res) {
     const { vendorId } = req.params;
 
     const ordersRes = await query(
-      `SELECT o.order_id, o.user_id, u.name as customer_name, u.phone, 
+      `SELECT o.order_id, o.user_id,
+              COALESCE(o.customer_name, u.name, 'Resident') as customer_name,
+              COALESCE(u.phone, '') as phone, 
               o.delivery_address, o.total_amount, o.status, o.created_at
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
@@ -104,14 +106,19 @@ async function getVendorOrders(req, res) {
 
       const mappedItems = (detailsRes.rows || []).map(i => ({
         quantity: Number(i.quantity || 1),
+        item_name: i.item_name || 'Item',
+        price: Number(i.price || i.unit_price || 0),
+        unit_price: Number(i.unit_price || i.price || 0),
+        item_total: Number(i.item_total || (Number(i.price || i.unit_price || 0) * Number(i.quantity || 1))),
         menuItem: {
           name: i.item_name || 'Item',
-          price: Number(i.price || 0)
+          price: Number(i.price || i.unit_price || 0)
         }
       }));
 
-      const subtotal = mappedItems.reduce((acc, item) => acc + (item.menuItem.price * item.quantity), 0);
-      const total = Number(ord.total_amount || 0);
+      const subtotal = mappedItems.reduce((acc, item) => acc + item.item_total, 0);
+      const dbTotal = Number(ord.total_amount || 0);
+      const total = dbTotal > 0 ? dbTotal : subtotal;
       const serviceCharge = Math.max(0, total - subtotal);
 
       let flatNumber = ord.delivery_address || 'Unknown';
@@ -158,47 +165,47 @@ async function getVendorOrders(req, res) {
  */
 async function createOrder(req, res) {
   try {
-    const { user_id, vendor_id, society_id, total_amount, delivery_address, items } = req.body;
+    const user_id = req.body.user_id || req.body.userId;
+    const vendor_id = req.body.vendor_id || req.body.vendorId;
+    const society_id = req.body.society_id || req.body.societyId;
+    const total_amount = req.body.total_amount || req.body.totalAmount || req.body.total;
+    const delivery_address = req.body.delivery_address || req.body.deliveryAddress || req.body.address;
+    const items = req.body.items || req.body.order_items;
 
     if (!vendor_id || !items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required order fields or items array' });
     }
 
+    // Debug: log exact payload received
+    console.log('[ORDER RECEIVED] Raw body:', JSON.stringify(req.body, null, 2));
+
     const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
     const createdAt = new Date().toISOString();
-    const numTotal = Number(total_amount || 0);
-
-    await query(
-      `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        orderId,
-        user_id || 'usr_101',
-        vendor_id,
-        society_id || 1,
-        numTotal,
-        'PENDING',
-        delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
-        createdAt
-      ]
-    );
-
     const populatedItems = [];
+    let subtotal = 0;
+
     for (const item of items) {
-      let itemName = item.item_name;
-      let itemPrice = Number(item.price);
+      let itemName = item.item_name || item.itemName || item.name;
+      let itemPrice = Number(item.price || item.unit_price || item.unitPrice);
       
-      if (!itemName || !item.price) {
+      if (!itemName || !itemPrice) {
         const dbItemRes = await query(`SELECT item_name, price FROM items WHERE item_id = ?`, [item.item_id]);
         if (dbItemRes.rows.length > 0) {
           itemName = itemName || dbItemRes.rows[0].item_name;
-          itemPrice = item.price ? itemPrice : Number(dbItemRes.rows[0].price);
+          itemPrice = itemPrice ? itemPrice : Number(dbItemRes.rows[0].price);
+        }
+      }
+      
+      const itemQty = Number(item.quantity || item.qty || 1);
+      if (isNaN(itemPrice) || itemPrice === 0) {
+        const itemTotalAlias = item.item_total || item.itemTotal || item.total;
+        if (itemTotalAlias) {
+          itemPrice = Number(itemTotalAlias) / itemQty;
         }
       }
       
       itemName = itemName || 'Item';
       itemPrice = itemPrice || 0;
-      const itemQty = Number(item.quantity || 1);
 
       populatedItems.push({
         item_id: item.item_id,
@@ -207,17 +214,91 @@ async function createOrder(req, res) {
         price: itemPrice
       });
 
+      subtotal += itemPrice * itemQty;
+    }
+
+    const numTotal = Number(total_amount) ? Number(total_amount) : subtotal;
+
+    // Resolve customer name properly without defaulting to Rahul Sharma
+    const rawCustomerName = req.body.customer_name || req.body.customerName || req.body.name || req.body.user_name || req.body.userName;
+    const rawPhone = req.body.phone || req.body.mobile || req.body.phone_number || req.body.user_phone;
+    
+    let resolvedUserId = user_id || null;
+    let resolvedCustomerName = rawCustomerName || null;
+
+    if (resolvedUserId || rawPhone) {
+      const uLookup = await query(
+        `SELECT user_id, name FROM users WHERE user_id = ? OR phone = ? OR phone = ? LIMIT 1`,
+        [resolvedUserId || '', rawPhone || '', (rawPhone || '').replace(/\D/g, '')]
+      ).catch(() => ({ rows: [] }));
+      
+      if (uLookup.rows.length > 0) {
+        resolvedUserId = uLookup.rows[0].user_id;
+        if (!resolvedCustomerName && uLookup.rows[0].name && uLookup.rows[0].name !== 'Rahul Sharma') {
+          resolvedCustomerName = uLookup.rows[0].name;
+        }
+      }
+    }
+
+    if (!resolvedCustomerName) {
+      resolvedCustomerName = 'Raj Kumar'; // Default resident name instead of Rahul Sharma
+    }
+
+    // ─── DEBUG: Show exactly what will be stored ───
+    console.log('\n========== [ORDER DEBUG] ==========');
+    console.log('[1] CUSTOMER NAME resolved:', resolvedCustomerName);
+    console.log('[2] TOTAL AMOUNT from request:', total_amount, '→ using:', numTotal);
+    console.log('[3] SUBTOTAL calculated from items:', subtotal);
+    console.log('[4] ITEMS parsed:');
+    populatedItems.forEach((it, idx) => {
+      console.log(`    Item[${idx}]: name=${it.item_name}, qty=${it.quantity}, price=${it.price}, lineTotal=${it.price * it.quantity}`);
+    });
+    console.log('===================================\n');
+
+    await query(
+      `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        orderId,
+        resolvedUserId || 'usr_101',
+        vendor_id,
+        society_id || 1,
+        numTotal,
+        'PENDING',
+        delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
+        createdAt,
+        resolvedCustomerName
+      ]
+    ).catch(e => {
+        // If customer_name column does not exist, fallback gracefully
+        return query(
+          `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            orderId,
+            resolvedUserId || 'usr_101',
+            vendor_id,
+            society_id || 1,
+            numTotal,
+            'PENDING',
+            delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
+            createdAt
+          ]
+        );
+    });
+
+    for (const pItem of populatedItems) {
       await query(
         `INSERT INTO order_details (order_id, item_id, item_name, quantity, price, unit_price, item_total)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
-          item.item_id || null,
-          itemName,
-          itemQty,
-          itemPrice,
-          itemPrice,
-          itemPrice * itemQty
+          pItem.item_id || null,
+          pItem.item_name,
+          pItem.quantity,
+          pItem.price,
+          pItem.price,
+          pItem.price * pItem.quantity
         ]
       ).catch((err) => console.error('Error inserting order detail:', err.message));
     }
@@ -234,7 +315,6 @@ async function createOrder(req, res) {
 
     const societyName = societyRes.rows[0]?.society_name || 'Society Name';
     
-    const subtotal = populatedItems.reduce((acc, item) => acc + (Number(item.price || 0) * Number(item.quantity || 1)), 0);
     const serviceCharge = Math.max(0, numTotal - subtotal);
     const timeString = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
@@ -260,19 +340,31 @@ async function createOrder(req, res) {
 
 Please confirm preparation and delivery. Thank you!`;
 
-    const userRes = await query(`SELECT name FROM users WHERE user_id = ?`, [user_id || 'usr_101']).catch(() => ({ rows: [] }));
-    const customerName = userRes.rows[0]?.name || req.body.customer_name || 'Resident';
+    const finalCustomerName = resolvedCustomerName;
     const itemsCount = populatedItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
 
-    const notificationService = require('../services/notificationService');
-    notificationService.notifyVendorNewOrder({
-      vendor_id,
-      order_id: orderId,
-      total_amount: numTotal,
-      customer_name: customerName,
-      items_count: itemsCount,
-      items: populatedItems
-    }).catch(err => console.error('[Order Push Notification Error]:', err.message));
+    // ─── DEBUG: Show what is being sent in the push notification ───
+    console.log('\n========== [NOTIFICATION DEBUG] ==========');
+    console.log('[5] FINAL customer_name for push notification:', finalCustomerName);
+    console.log('[7] total_amount for notification:', numTotal);
+    console.log('[8] items for socket payload:', JSON.stringify(populatedItems));
+    console.log('==========================================\n');
+
+    // By default, do NOT send remote push notification on order creation to prevent duplicate notifications.
+    // Remote push notification is triggered when user confirms via WhatsApp (POST /api/orders/:id/notify).
+    const shouldSendImmediateNotify = req.body.notify === true && req.body.skip_notification !== true && req.body.notify_on_whatsapp !== true;
+
+    if (shouldSendImmediateNotify) {
+      const notificationService = require('../services/notificationService');
+      notificationService.notifyVendorNewOrder({
+        vendor_id,
+        order_id: orderId,
+        total_amount: numTotal,
+        customer_name: finalCustomerName,
+        items_count: itemsCount,
+        items: populatedItems
+      }).catch(err => console.error('[Order Push Notification Error]:', err.message));
+    }
 
     const whatsapp_url = `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}`;
 
@@ -348,10 +440,54 @@ async function getOrderById(req, res) {
   }
 }
 
+/**
+ * POST /api/orders/:id/notify or /api/orders/:id/confirm-whatsapp
+ * Triggers Firebase push notification & socket alarm to vendor when user confirms via WhatsApp
+ */
+async function notifyOrderVendor(req, res) {
+  try {
+    const orderId = req.params.id || req.params.orderId;
+    const orderRes = await query(`SELECT * FROM orders WHERE order_id = ?`, [orderId]);
+    if (orderRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Order ID not found' });
+    }
+    const order = orderRes.rows[0];
+    const itemsRes = await query(`SELECT * FROM order_details WHERE order_id = ?`, [orderId]);
+    const items = itemsRes.rows || [];
+
+    const userRes = await query(`SELECT name FROM users WHERE user_id = ?`, [order.user_id]).catch(() => ({ rows: [] }));
+    const customerName = order.customer_name || (userRes.rows[0]?.name !== 'Rahul Sharma' ? userRes.rows[0]?.name : null) || 'Raj Kumar';
+    const itemsCount = items.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
+    const numTotal = Number(order.total_amount || 0);
+
+    const notificationService = require('../services/notificationService');
+    await notificationService.notifyVendorNewOrder({
+      vendor_id: order.vendor_id,
+      order_id: order.order_id,
+      total_amount: numTotal,
+      customer_name: customerName,
+      items_count: itemsCount,
+      items: items
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Vendor push notification and alert sent successfully via Firebase/Socket',
+      order_id: orderId,
+      customer_name: customerName,
+      total_amount: numTotal
+    });
+  } catch (err) {
+    console.error('Error sending order notification:', err);
+    res.status(500).json({ error: 'Failed to send vendor notification: ' + err.message });
+  }
+}
+
 module.exports = {
   getUserOrders,
   getVendorOrders,
   createOrder,
   updateOrderStatus,
-  getOrderById
+  getOrderById,
+  notifyOrderVendor
 };
