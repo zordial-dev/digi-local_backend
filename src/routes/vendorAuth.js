@@ -43,6 +43,13 @@ router.get('/:id', vendorAuthController.getVendorPublicProfile);
 // POST /api/vendors/send-otp
 router.post('/send-otp', vendorAuthController.sendVendorOtp);
 
+// POST /api/vendors/check-phone, /check-vendor, /check-mobile, /check-user, /verify-phone
+router.post('/check-phone', vendorAuthController.checkVendorPhone);
+router.post('/check-vendor', vendorAuthController.checkVendorPhone);
+router.post('/check-mobile', vendorAuthController.checkVendorPhone);
+router.post('/check-user', vendorAuthController.checkVendorPhone);
+router.post('/verify-phone', vendorAuthController.checkVendorPhone);
+
 // POST /api/vendors/register
 router.post('/register', validateRequest(registerSchema), vendorAuthController.registerVendor);
 

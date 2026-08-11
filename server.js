@@ -181,9 +181,11 @@ async function bootServer() {
             console.log(`DigiLocal Server running on PORT ${PORT} | Docs: http://localhost:${PORT}/api-docs`, { port: PORT });
         }).on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
-                logger.error(`Port ${PORT} is already in use. Stop existing server or change PORT in .env`, { port: PORT });
+                logger.error(`Port ${PORT} is already in use by another Node process. Run 'npx kill-port ${PORT}' or 'taskkill /F /IM node.exe' to free port ${PORT}.`, { port: PORT });
+                process.exit(1);
             } else {
                 logger.error('Server boot error', { error: err.message });
+                process.exit(1);
             }
         });
 

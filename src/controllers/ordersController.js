@@ -176,9 +176,6 @@ async function createOrder(req, res) {
       return res.status(400).json({ error: 'Missing required order fields or items array' });
     }
 
-    // Debug: log exact payload received
-    console.log('[ORDER RECEIVED] Raw body:', JSON.stringify(req.body, null, 2));
-
     const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
     const createdAt = new Date().toISOString();
     const populatedItems = [];
@@ -243,17 +240,6 @@ async function createOrder(req, res) {
     if (!resolvedCustomerName) {
       resolvedCustomerName = 'Raj Kumar'; // Default resident name instead of Rahul Sharma
     }
-
-    // ─── DEBUG: Show exactly what will be stored ───
-    console.log('\n========== [ORDER DEBUG] ==========');
-    console.log('[1] CUSTOMER NAME resolved:', resolvedCustomerName);
-    console.log('[2] TOTAL AMOUNT from request:', total_amount, '→ using:', numTotal);
-    console.log('[3] SUBTOTAL calculated from items:', subtotal);
-    console.log('[4] ITEMS parsed:');
-    populatedItems.forEach((it, idx) => {
-      console.log(`    Item[${idx}]: name=${it.item_name}, qty=${it.quantity}, price=${it.price}, lineTotal=${it.price * it.quantity}`);
-    });
-    console.log('===================================\n');
 
     await query(
       `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name)
@@ -343,13 +329,6 @@ Please confirm preparation and delivery. Thank you!`;
     const finalCustomerName = resolvedCustomerName;
     const itemsCount = populatedItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
 
-    // ─── DEBUG: Show what is being sent in the push notification ───
-    console.log('\n========== [NOTIFICATION DEBUG] ==========');
-    console.log('[5] FINAL customer_name for push notification:', finalCustomerName);
-    console.log('[7] total_amount for notification:', numTotal);
-    console.log('[8] items for socket payload:', JSON.stringify(populatedItems));
-    console.log('==========================================\n');
-
     // By default, do NOT send remote push notification on order creation to prevent duplicate notifications.
     // Remote push notification is triggered when user confirms via WhatsApp (POST /api/orders/:id/notify).
     const shouldSendImmediateNotify = req.body.notify === true && req.body.skip_notification !== true && req.body.notify_on_whatsapp !== true;
@@ -389,27 +368,53 @@ Please confirm preparation and delivery. Thank you!`;
  */
 async function updateOrderStatus(req, res) {
   try {
-    const { id } = req.params;
-    const status = req.body.status || req.query.status;
+    const id = req.params.id || req.params.orderId;
+    let rawStatus = req.body.status || req.body.orderStatus || req.query.status;
 
-    const allowedStatuses = ['PENDING', 'CONFIRMED', 'OUT_FOR_DELIVERY', 'DELIVERED', 'ACCEPTED', 'CANCELLED'];
-    if (!status || !allowedStatuses.includes(String(status).toUpperCase())) {
-      return res.status(400).json({ error: 'Invalid order status value' });
+    if (!rawStatus) {
+      return res.status(400).json({ error: 'Order status is required in request body or query params' });
     }
 
-    const uppercaseStatus = String(status).toUpperCase();
+    const norm = String(rawStatus).toUpperCase().trim();
+
+    let targetStatus = norm;
+    if (['COMPLETED', 'COMPLETE', 'DELIVERED', 'FULFILLED', 'DONE'].includes(norm)) {
+      targetStatus = 'COMPLETED';
+    } else if (['CONFIRMED', 'ACCEPT', 'ACCEPTED', 'PREPARING'].includes(norm)) {
+      targetStatus = 'ACCEPTED';
+    } else if (['CANCELLED', 'CANCELED', 'REJECTED', 'DECLINED'].includes(norm)) {
+      targetStatus = 'CANCELLED';
+    } else if (['IN_PROGRESS', 'PROCESSING', 'OUT_FOR_DELIVERY'].includes(norm)) {
+      targetStatus = 'IN_PROGRESS';
+    }
+
+    const allowedStatuses = [
+      'PENDING', 'CONFIRMED', 'ACCEPTED', 'IN_PROGRESS', 
+      'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 
+      'COMPLETED', 'COMPLETE', 'FULFILLED', 'DONE', 
+      'CANCELLED', 'CANCELED', 'REJECTED', 'DECLINED'
+    ];
+
+    if (!allowedStatuses.includes(norm)) {
+      return res.status(400).json({ 
+        error: `Invalid order status '${rawStatus}'. Allowed statuses: PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED`,
+        allowedStatuses
+      });
+    }
 
     const orderCheck = await query(`SELECT order_id FROM orders WHERE order_id = ?`, [id]);
     if (orderCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Order ID not found' });
+      return res.status(404).json({ error: `Order ID '${id}' not found` });
     }
 
-    await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [uppercaseStatus, id]);
+    await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
 
     res.status(200).json({
+      success: true,
       message: 'Order status updated successfully',
       order_id: String(id),
-      status: uppercaseStatus
+      status: targetStatus,
+      raw_status: rawStatus
     });
   } catch (err) {
     console.error('Error updating order status:', err);

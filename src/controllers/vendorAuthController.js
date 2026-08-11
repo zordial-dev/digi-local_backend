@@ -79,20 +79,107 @@ async function sendVendorOtp(req, res) {
         const target = email || phone || mobile || identifier;
 
         if (!target) {
-            return res.status(400).json({ error: 'Email or mobile number is required to send OTP' });
+            return res.status(400).json({ error: 'Email or mobile number is required for Firebase Phone Auth' });
         }
 
-        const otp = generateOTP(target);
+        const cleanTarget = String(target).trim();
+        const cleanPhone = normalizePhone(cleanTarget);
+        const cleanEmail = cleanTarget.toLowerCase();
 
-        console.log(`📲 [VENDOR OTP DISPATCH] Generated OTP [${otp}] for target: ${target}`);
+        const vendorRes = await query(
+            `SELECT vendor_id, store_name, vendor_name, email, phone_number, status 
+             FROM vendors 
+             WHERE (LOWER(email) = ? AND email != '') 
+                OR (RIGHT(REGEXP_REPLACE(phone_number, '\\D', 'g', 'g'), 10) = ? AND phone_number != '')`,
+            [cleanEmail, cleanPhone]
+        );
+
+        if (vendorRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Vendor store account not found for this mobile number or email' });
+        }
+
+        const vendor = vendorRes.rows[0];
+
+        console.log(`🔥 [FIREBASE PHONE AUTH VENDOR] Send OTP Request for Vendor #${vendor.vendor_id} (${vendor.store_name}): ${cleanTarget}`);
 
         res.status(200).json({
-            message: 'OTP verification request initiated successfully. Please enter the verification code or Firebase token.',
-            target: String(target)
+            success: true,
+            exists: true,
+            provider: 'firebase',
+            message: 'Firebase Phone SMS OTP verification initiated. Please complete SMS verification on client Firebase SDK and submit firebase_token.',
+            target: cleanTarget,
+            vendor: {
+                vendor_id: Number(vendor.vendor_id),
+                id: Number(vendor.vendor_id),
+                store_name: vendor.store_name,
+                vendor_name: vendor.vendor_name,
+                phone_number: vendor.phone_number
+            }
         });
     } catch (err) {
-        console.error('❌ [VENDOR OTP ERROR] Error sending vendor OTP:', err);
-        res.status(500).json({ error: 'Failed to send OTP' });
+        console.error('❌ [VENDOR FIREBASE OTP ERROR] Error sending vendor OTP:', err);
+        res.status(500).json({ error: 'Failed to initiate Firebase OTP request' });
+    }
+}
+
+/**
+ * POST /api/vendors/check-phone, /api/vendors/check-vendor, /api/vendors/check-mobile
+ * Checks if Vendor Account exists for phone number or email.
+ */
+async function checkVendorPhone(req, res) {
+    try {
+        const { phone, identifier, mobile, email, phone_number, mobile_number } = req.body;
+        const target = String(phone || identifier || mobile || email || phone_number || mobile_number || '').trim();
+
+        if (!target) {
+            return res.status(400).json({ error: 'Phone number or email is required' });
+        }
+
+        const cleanPhone = normalizePhone(target);
+        const cleanEmail = target.toLowerCase();
+
+        const vendorRes = await query(
+            `SELECT vendor_id, store_name, vendor_name, email, phone_number, status 
+             FROM vendors 
+             WHERE (LOWER(email) = ? AND email != '') 
+                OR (RIGHT(REGEXP_REPLACE(phone_number, '\\D', 'g', 'g'), 10) = ? AND phone_number != '')`,
+            [cleanEmail, cleanPhone]
+        );
+
+        const exists = vendorRes.rows && vendorRes.rows.length > 0;
+        const vendor = exists ? vendorRes.rows[0] : null;
+
+        if (!exists) {
+            return res.status(404).json({
+                exists: false,
+                registered: false,
+                message: 'No vendor store account found with this mobile number or email.'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            exists: true,
+            registered: true,
+            message: 'Vendor account found',
+            vendor_id: Number(vendor.vendor_id),
+            id: Number(vendor.vendor_id),
+            store_name: vendor.store_name,
+            vendor_name: vendor.vendor_name,
+            phone_number: vendor.phone_number,
+            email: vendor.email,
+            vendor: {
+                vendor_id: Number(vendor.vendor_id),
+                id: Number(vendor.vendor_id),
+                store_name: vendor.store_name,
+                vendor_name: vendor.vendor_name,
+                phone_number: vendor.phone_number,
+                email: vendor.email
+            }
+        });
+    } catch (err) {
+        console.error('Error checking vendor phone registration:', err);
+        res.status(500).json({ error: 'Failed to check vendor phone registration' });
     }
 }
 
@@ -292,22 +379,34 @@ async function registerVendor(req, res) {
  */
 async function loginVendor(req, res) {
     try {
-        const { email, password, phone, mobile, firebase_token, idToken, otp, code } = req.body;
+        const { email, password, phone, mobile, identifier, firebase_token, idToken, otp, code } = req.body;
         const fbToken = firebase_token || idToken;
         const loginOtp = otp || code;
-        let targetIdentifier = email || phone || mobile;
+        let targetIdentifier = String(email || phone || mobile || identifier || '').trim();
+
+        let cleanPhone = normalizePhone(targetIdentifier);
 
         if (fbToken) {
             console.log('🏪 [VENDOR LOGIN] Authenticating via Firebase Phone Token...');
             const fbResult = await verifyFirebaseToken(fbToken);
             const rawPhone = fbResult.phone_number || '';
-            targetIdentifier = normalizePhone(rawPhone) || targetIdentifier;
+            cleanPhone = normalizePhone(rawPhone) || cleanPhone;
+            targetIdentifier = cleanPhone || targetIdentifier;
             if (!targetIdentifier) {
                 return res.status(400).json({ error: 'Firebase token does not contain a verified phone number' });
             }
         }
 
-        const vendorRes = await query(`SELECT * FROM vendors WHERE (LOWER(email) = LOWER(?) AND email != '') OR (phone_number = ? AND phone_number != '')`, [targetIdentifier || '', targetIdentifier || '']);
+        cleanPhone = normalizePhone(targetIdentifier);
+        const cleanEmail = targetIdentifier.toLowerCase();
+
+        const vendorRes = await query(
+            `SELECT * FROM vendors 
+             WHERE (LOWER(email) = ? AND email != '') 
+                OR (RIGHT(REGEXP_REPLACE(phone_number, '\\D', 'g', 'g'), 10) = ? AND phone_number != '')`,
+            [cleanEmail, cleanPhone]
+        );
+
         if (vendorRes.rows.length === 0) {
             recordFailedAttempt(targetIdentifier);
             return res.status(401).json({ error: 'Vendor store account not found for this mobile or email' });
@@ -336,18 +435,37 @@ async function loginVendor(req, res) {
 
         const tokens = generateTokens(vendor);
 
+        const vendorPayload = {
+            vendor_id: Number(vendor.vendor_id),
+            id: Number(vendor.vendor_id),
+            public_id: vendor.public_id || String(vendor.vendor_id),
+            store_name: vendor.store_name,
+            vendor_name: vendor.vendor_name,
+            email: vendor.email,
+            phone_number: vendor.phone_number,
+            society_id: Number(vendor.society_id),
+            status: vendor.status || 'ACTIVE'
+        };
+
         res.status(200).json({
+            success: true,
             token: tokens.accessToken,
             accessToken: tokens.accessToken,
             refreshToken: tokens.refreshToken,
-            vendor: {
-                vendor_id: Number(vendor.vendor_id),
-                store_name: vendor.store_name,
-                vendor_name: vendor.vendor_name,
-                email: vendor.email,
-                phone_number: vendor.phone_number,
-                society_id: Number(vendor.society_id),
-                status: vendor.status || 'ACTIVE'
+            vendor_id: Number(vendor.vendor_id),
+            id: Number(vendor.vendor_id),
+            store_name: vendor.store_name,
+            vendor_name: vendor.vendor_name,
+            email: vendor.email,
+            phone_number: vendor.phone_number,
+            society_id: Number(vendor.society_id),
+            status: vendor.status || 'ACTIVE',
+            vendor: vendorPayload,
+            data: {
+                token: tokens.accessToken,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                vendor: vendorPayload
             }
         });
     } catch (err) {
@@ -487,13 +605,28 @@ async function forgotPassword(req, res) {
 /**
  * POST /api/vendors/verify-otp
  */
-function verifyVendorOtp(req, res) {
-    const { email, otp } = req.body;
-    const result = verifyOTP(email, otp);
-    if (!result.valid) {
-        return res.status(400).json({ error: result.reason });
+async function verifyVendorOtp(req, res) {
+    try {
+        const { firebase_token, idToken, otp, email, phone, mobile, identifier } = req.body;
+        const token = firebase_token || idToken;
+
+        if (token) {
+            console.log('🔍 [FIREBASE VERIFY VENDOR] Verifying Firebase ID Token...');
+            const fbResult = await verifyFirebaseToken(token);
+            console.log('✅ [FIREBASE VERIFY SUCCESS] Verified Phone:', fbResult.phone_number, '| UID:', fbResult.uid);
+            return res.status(200).json({
+                message: 'Firebase Phone Token verified successfully',
+                phone_number: fbResult.phone_number,
+                firebase_uid: fbResult.uid,
+                valid: true
+            });
+        }
+
+        return res.status(400).json({ error: 'firebase_token or idToken is required for Firebase Phone Auth verification' });
+    } catch (err) {
+        console.error('❌ [FIREBASE VENDOR VERIFY ERROR]:', err.message);
+        res.status(400).json({ error: err.message || 'Firebase token verification failed' });
     }
-    res.status(200).json({ message: 'OTP verified successfully. You may now reset your password.' });
 }
 
 /**
@@ -521,6 +654,7 @@ async function resetPassword(req, res) {
 module.exports = {
     getVendorPublicProfile,
     sendVendorOtp,
+    checkVendorPhone,
     registerVendor,
     loginVendor,
     handleUserLogin,

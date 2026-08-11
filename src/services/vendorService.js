@@ -99,13 +99,6 @@ class VendorService {
       const computedTotal = normalizedItems.reduce((acc, it) => acc + it.item_total, 0);
       const finalTotal = dbTotal > 0 ? dbTotal : computedTotal;
 
-      // ─── DEBUG: Log each order as loaded from DB ───
-      console.log(`\n[DASHBOARD ORDER] order_id=${o.order_id}`);
-      console.log(`  customer_name from DB: "${o.customer_name}"`);
-      console.log(`  total_amount from DB: ${dbTotal}, computed from items: ${computedTotal}, final: ${finalTotal}`);
-      console.log(`  raw items from DB:`, JSON.stringify(rawItems));
-      console.log(`  normalized items:`, JSON.stringify(normalizedItems));
-
       return {
         ...o,
         customer_name: o.customer_name || 'Resident',

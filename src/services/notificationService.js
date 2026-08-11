@@ -208,13 +208,6 @@ class NotificationService {
             sound: 'new_order_alert_sound'
           };
 
-          // ─── DEBUG: Log what the socket is broadcasting ───
-          console.log('\n========== [SOCKET PAYLOAD DEBUG] ==========');
-          console.log('[SOCKET] customer_name:', socketPayload.customer_name);
-          console.log('[SOCKET] total_amount:', socketPayload.total_amount);
-          console.log('[SOCKET] items:', JSON.stringify(socketPayload.items));
-          console.log('============================================\n');
-
           io.to(`vendor_${vendor_id}`).to(String(vendor_id)).emit('NEW_ORDER_ALERT', socketPayload);
           console.log(`🔌 [SOCKET.IO BROADCAST] Sent NEW_ORDER_ALERT to room vendor_${vendor_id}`);
         }
