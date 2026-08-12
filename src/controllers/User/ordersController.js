@@ -1,4 +1,4 @@
-const { query } = require('../models/db');
+const { query } = require('../../models/db');
 
 /**
  * D1. Fetch Resident User Orders (Strictly Filtered by User ID)
@@ -334,7 +334,7 @@ Please confirm preparation and delivery. Thank you!`;
     const shouldSendImmediateNotify = req.body.notify === true && req.body.skip_notification !== true && req.body.notify_on_whatsapp !== true;
 
     if (shouldSendImmediateNotify) {
-      const notificationService = require('../services/notificationService');
+      const notificationService = require('../../services/notificationService');
       notificationService.notifyVendorNewOrder({
         vendor_id,
         order_id: orderId,
@@ -465,7 +465,7 @@ async function notifyOrderVendor(req, res) {
     const itemsCount = items.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
     const numTotal = Number(order.total_amount || 0);
 
-    const notificationService = require('../services/notificationService');
+    const notificationService = require('../../services/notificationService');
     await notificationService.notifyVendorNewOrder({
       vendor_id: order.vendor_id,
       order_id: order.order_id,

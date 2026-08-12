@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const ordersController = require('../controllers/ordersController');
+const ordersController = require('../../controllers/User/ordersController');
 
 // D1. Fetch Resident User Orders
 router.get('/user/:userId', ordersController.getUserOrders);

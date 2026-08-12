@@ -1,5 +1,5 @@
-const { query, getDbType } = require('../models/db');
-const pkg = require('../../package.json');
+const { query, getDbType } = require('../../models/db');
+const pkg = require('../../../package.json');
 
 const startTime = Date.now();
 

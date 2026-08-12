@@ -1,4 +1,4 @@
-const { query } = require('../models/db');
+const { query } = require('../../models/db');
 const {
     hashPassword,
     comparePassword,
@@ -8,12 +8,12 @@ const {
     verifyOTP,
     verifyFirebaseToken,
     normalizePhone
-} = require('../utils/auth');
-const { recordFailedAttempt, resetFailedAttempts } = require('../middleware/security');
-const { sendEmail } = require('../services/emailService');
-const { vendorWelcomeEmail } = require('../templates/vendorWelcomeEmail');
+} = require('../../utils/auth');
+const { recordFailedAttempt, resetFailedAttempts } = require('../../middleware/security');
+const { sendEmail } = require('../../services/emailService');
+const { vendorWelcomeEmail } = require('../../templates/vendorWelcomeEmail');
 
-const { normalizeImageUrl } = require('../utils/imageUtils');
+const { normalizeImageUrl } = require('../../utils/imageUtils');
 
 /**
  * GET /api/vendors/:id - Fetch Vendor Storefront Profile & Catalog Items
@@ -75,7 +75,7 @@ async function getVendorPublicProfile(req, res) {
  */
 async function sendVendorOtp(req, res) {
     try {
-        const { email, phone, mobile, identifier } = req.body;
+        const { email, phone, mobile, identifier, purpose } = req.body;
         const target = email || phone || mobile || identifier;
 
         if (!target) {
@@ -95,6 +95,15 @@ async function sendVendorOtp(req, res) {
         );
 
         if (vendorRes.rows.length === 0) {
+            if (purpose === 'register' || purpose === 'registration') {
+                return res.status(200).json({
+                    success: true,
+                    exists: false,
+                    provider: 'firebase',
+                    message: 'Firebase Phone SMS OTP verification initiated for new vendor registration.',
+                    target: cleanTarget
+                });
+            }
             return res.status(404).json({ error: 'Vendor store account not found for this mobile number or email' });
         }
 
@@ -553,8 +562,8 @@ function refreshToken(req, res) {
     const { refreshToken: rToken } = req.body;
     if (!rToken) return res.status(400).json({ error: 'Refresh token is required' });
 
-    const { verifyJwt, generateTokens: genT } = require('../utils/auth');
-    const authConfig = require('../config/auth');
+    const { verifyJwt, generateTokens: genT } = require('../../utils/auth');
+    const authConfig = require('../../config/auth');
 
     const payload = verifyJwt(rToken, authConfig.jwt.refreshTokenSecret);
     if (!payload || payload.type !== 'refresh') {
@@ -582,18 +591,38 @@ function logoutVendor(req, res) {
 /**
  * POST /api/vendors/forgot-password
  */
+/**
+ * POST /api/vendors/forgot-password
+ */
 async function forgotPassword(req, res) {
     try {
-        const { email } = req.body;
-        const vendorRes = await query(`SELECT vendor_id, vendor_name, email FROM vendors WHERE email = ?`, [email]);
-        if (vendorRes.rows.length === 0) {
-            return res.status(200).json({ message: 'If an account exists with this email, an OTP has been sent.' });
+        const { email, phone, mobile, identifier } = req.body;
+        const target = String(email || phone || mobile || identifier || '').trim();
+
+        if (!target) {
+            return res.status(400).json({ error: 'Email or mobile number is required' });
         }
 
-        const otp = generateOTP(email);
+        const cleanPhone = normalizePhone(target);
+        const cleanEmail = target.toLowerCase();
+
+        const vendorRes = await query(
+            `SELECT vendor_id, vendor_name, email, phone_number FROM vendors 
+             WHERE (LOWER(email) = ? AND email != '') 
+                OR (RIGHT(REGEXP_REPLACE(phone_number, '\\D', 'g', 'g'), 10) = ? AND phone_number != '')`,
+            [cleanEmail, cleanPhone]
+        );
+
+        if (vendorRes.rows.length === 0) {
+            return res.status(200).json({ message: 'If an account exists with this mobile number or email, an OTP has been sent.' });
+        }
+
+        const vendor = vendorRes.rows[0];
+        const otpId = vendor.email || vendor.phone_number || cleanEmail || cleanPhone;
+        const otp = generateOTP(otpId);
 
         res.status(200).json({
-            message: 'OTP sent successfully to registered email address',
+            message: 'OTP sent successfully to registered address or phone number',
             simulationOtp: process.env.NODE_ENV !== 'production' ? otp : undefined
         });
     } catch (err) {
@@ -607,8 +636,9 @@ async function forgotPassword(req, res) {
  */
 async function verifyVendorOtp(req, res) {
     try {
-        const { firebase_token, idToken, otp, email, phone, mobile, identifier } = req.body;
+        const { firebase_token, idToken, otp, code, email, phone, mobile, identifier } = req.body;
         const token = firebase_token || idToken;
+        const inputOtp = otp || code;
 
         if (token) {
             console.log('🔍 [FIREBASE VERIFY VENDOR] Verifying Firebase ID Token...');
@@ -622,7 +652,16 @@ async function verifyVendorOtp(req, res) {
             });
         }
 
-        return res.status(400).json({ error: 'firebase_token or idToken is required for Firebase Phone Auth verification' });
+        const target = String(email || phone || mobile || identifier || '').trim();
+        if (target && inputOtp) {
+            const otpRes = verifyOTP(target, inputOtp);
+            if (otpRes.valid) {
+                return res.status(200).json({ message: 'OTP verified successfully', valid: true });
+            }
+            return res.status(400).json({ error: otpRes.reason || 'Invalid or expired OTP code' });
+        }
+
+        return res.status(400).json({ error: 'firebase_token, idToken, or OTP code is required for verification' });
     } catch (err) {
         console.error('❌ [FIREBASE VENDOR VERIFY ERROR]:', err.message);
         res.status(400).json({ error: err.message || 'Firebase token verification failed' });
@@ -634,16 +673,48 @@ async function verifyVendorOtp(req, res) {
  */
 async function resetPassword(req, res) {
     try {
-        const { email, otp, newPassword } = req.body;
-        const verifyResult = verifyOTP(email, otp);
-        if (!verifyResult.valid) {
-            return res.status(400).json({ error: verifyResult.reason });
+        const { email, phone, mobile, identifier, otp, code, newPassword, new_password } = req.body;
+        const pass = newPassword || new_password;
+        const inputOtp = otp || code;
+        const target = String(email || phone || mobile || identifier || '').trim();
+
+        if (!target || !pass) {
+            return res.status(400).json({ error: 'Email/phone and new password are required' });
         }
 
-        const newHash = await hashPassword(newPassword);
-        await query(`UPDATE vendors SET password = ? WHERE email = ?`, [newHash, email]);
+        const cleanPhone = normalizePhone(target);
+        const cleanEmail = target.toLowerCase();
 
-        resetFailedAttempts(email);
+        const vendorRes = await query(
+            `SELECT vendor_id, email, phone_number FROM vendors 
+             WHERE (LOWER(email) = ? AND email != '') 
+                OR (RIGHT(REGEXP_REPLACE(phone_number, '\\D', 'g', 'g'), 10) = ? AND phone_number != '')`,
+            [cleanEmail, cleanPhone]
+        );
+
+        if (vendorRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Vendor account not found' });
+        }
+
+        const vendor = vendorRes.rows[0];
+        const otpId = vendor.email || vendor.phone_number || cleanEmail || cleanPhone;
+
+        if (inputOtp) {
+            const verifyResult = verifyOTP(otpId, inputOtp);
+            if (!verifyResult.valid) {
+                const altVerify = verifyOTP(target, inputOtp);
+                if (!altVerify.valid) {
+                    return res.status(400).json({ error: verifyResult.reason || altVerify.reason || 'Invalid OTP code' });
+                }
+            }
+        }
+
+        const newHash = await hashPassword(pass);
+        await query(`UPDATE vendors SET password = ?, password_hash = ? WHERE vendor_id = ?`, [newHash, newHash, vendor.vendor_id]);
+
+        resetFailedAttempts(target);
+        if (vendor.email) resetFailedAttempts(vendor.email);
+
         res.status(200).json({ message: 'Password reset successfully! You can now log in with your new password.' });
     } catch (err) {
         console.error('Error resetting password:', err);

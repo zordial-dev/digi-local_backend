@@ -61,22 +61,36 @@ const loginSchema = {
 
 const forgotPasswordSchema = {
   body: z.object({
-    email: z.string().trim().email('Valid email address is required')
+    email: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    mobile: z.string().trim().optional(),
+    identifier: z.string().trim().optional()
   }).passthrough()
 };
 
 const verifyOtpSchema = {
   body: z.object({
-    email: z.string().trim().email('Valid email address is required'),
-    otp: z.string().trim().min(6, 'OTP must be 6 digits').max(6, 'OTP must be 6 digits')
+    email: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    mobile: z.string().trim().optional(),
+    identifier: z.string().trim().optional(),
+    otp: z.string().trim().optional(),
+    firebase_token: z.string().trim().optional(),
+    idToken: z.string().trim().optional()
   }).passthrough()
 };
 
 const resetPasswordSchema = {
   body: z.object({
-    email: z.string().trim().email('Valid email address is required'),
-    otp: z.string().trim().min(6, 'OTP must be 6 digits').max(6, 'OTP must be 6 digits'),
-    newPassword: z.string().min(6, 'New password must be at least 6 characters long')
+    email: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    mobile: z.string().trim().optional(),
+    identifier: z.string().trim().optional(),
+    otp: z.string().trim().optional(),
+    firebase_token: z.string().trim().optional(),
+    idToken: z.string().trim().optional(),
+    newPassword: z.string().optional(),
+    new_password: z.string().optional()
   }).passthrough()
 };
 

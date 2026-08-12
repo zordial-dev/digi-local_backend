@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const usersController = require('../controllers/usersController');
+const usersController = require('../../controllers/User/usersController');
 
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken } = require('../../middleware/auth');
 
 // B0. Send OTP to Resident User Phone or Email
 router.post('/send-otp', usersController.sendOtp);

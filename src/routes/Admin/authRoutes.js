@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const adminPanelController = require('../controllers/adminPanelController');
-const { authenticateAdminToken } = require('../middleware/adminAuth');
+const adminPanelController = require('../../controllers/Admin/adminPanelController');
+const { authenticateAdminToken } = require('../../middleware/adminAuth');
 
 /**
  * 1. Authentication & Profile Management (/api/auth)

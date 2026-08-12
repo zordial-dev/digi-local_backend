@@ -1,7 +1,7 @@
 'use strict';
-const { query } = require('../models/db');
-const { generateTokens, hashPassword, comparePassword } = require('../utils/auth');
-const { sendStandardError } = require('../middleware/adminAuth');
+const { query } = require('../../models/db');
+const { generateTokens, hashPassword, comparePassword } = require('../../utils/auth');
+const { sendStandardError } = require('../../middleware/adminAuth');
 
 /**
  * Controller handling DigiLocal Super Admin Panel REST API Specification v2.0.0

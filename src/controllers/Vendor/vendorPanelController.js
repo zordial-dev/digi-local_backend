@@ -1,6 +1,6 @@
-const vendorService = require('../services/vendorService');
-const { query } = require('../models/db');
-const { normalizeImageUrl, resolveImageUrl } = require('../utils/imageUtils');
+const vendorService = require('../../services/vendorService');
+const { query } = require('../../models/db');
+const { normalizeImageUrl, resolveImageUrl } = require('../../utils/imageUtils');
 
 /**
  * POST /api/vendorPanel/upload-image - Upload item image
@@ -207,7 +207,7 @@ async function registerFcmToken(req, res) {
             return res.status(400).json({ error: 'fcm_token is required' });
         }
 
-        const notificationService = require('../services/notificationService');
+        const notificationService = require('../../services/notificationService');
         await notificationService.registerVendorFcmToken(vendorId, fcmToken, platform);
 
         res.status(200).json({ message: 'FCM Push Notification device token registered successfully' });
@@ -223,7 +223,7 @@ async function registerFcmToken(req, res) {
 async function deleteFcmToken(req, res) {
     try {
         const vendorId = req.params.vendorId || req.user?.vendor_id || req.user?.id;
-        const notificationService = require('../services/notificationService');
+        const notificationService = require('../../services/notificationService');
         await notificationService.unregisterVendorFcmToken(vendorId);
 
         res.status(200).json({ message: 'FCM token removed successfully' });
@@ -270,4 +270,3 @@ module.exports = {
     deleteFcmToken,
     deleteStore
 };
-

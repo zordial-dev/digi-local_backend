@@ -1,5 +1,5 @@
-const { query } = require('../models/db');
-const memoryCache = require('../utils/cache');
+const { query } = require('../../models/db');
+const memoryCache = require('../../utils/cache');
 
 /**
  * A1. List Housing Societies (with Search & Filter)

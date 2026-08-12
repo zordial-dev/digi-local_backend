@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const healthController = require('../controllers/healthController');
+const healthController = require('../../controllers/Health/healthController');
 
 // GET /health - Full Health Check Report & System Observability
 router.get('/', healthController.getHealthStatus);

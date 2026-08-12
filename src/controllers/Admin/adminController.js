@@ -1,7 +1,7 @@
-const { query } = require('../models/db');
-const memoryCache = require('../utils/cache');
-const { generateTokens } = require('../utils/auth');
-const { sendEmail } = require('../services/emailService');
+const { query } = require('../../models/db');
+const memoryCache = require('../../utils/cache');
+const { generateTokens } = require('../../utils/auth');
+const { sendEmail } = require('../../services/emailService');
 
 /**
  * POST /api/admin/login - Admin Login with ADMIN_SECRET

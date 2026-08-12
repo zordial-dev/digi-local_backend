@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const societiesController = require('../controllers/societiesController');
-const adminPanelController = require('../controllers/adminPanelController');
-const { authenticateAdminToken, requirePower } = require('../middleware/adminAuth');
+const societiesController = require('../../controllers/Storefront/societiesController');
+const adminPanelController = require('../../controllers/Admin/adminPanelController');
+const { authenticateAdminToken, requirePower } = require('../../middleware/adminAuth');
 
 // 3.1 List Societies (Supports Admin Search + Status filtering)
 router.get('/', (req, res, next) => {

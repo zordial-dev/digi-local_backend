@@ -1,13 +1,9 @@
-const { query } = require('../models/db');
-const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP, verifyFirebaseToken, normalizePhone } = require('../utils/auth');
-const logger = require('../utils/logger');
+const { query } = require('../../models/db');
+const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP, verifyFirebaseToken, normalizePhone } = require('../../utils/auth');
+const logger = require('../../utils/logger');
 
 /**
  * B0. Send OTP to Resident User Phone or Email
- * POST /api/users/send-otp
- */
-/**
- * B0. Send OTP Information Route
  * POST /api/users/send-otp
  */
 async function sendOtp(req, res) {
@@ -147,11 +143,9 @@ async function verifyOtp(req, res) {
   }
 }
 
-
 async function getAllVendors(Req, res) {
 
 }
-
 
 /**
  * B1. Resident User Login (Password, OTP, or Firebase Phone Token)
@@ -449,7 +443,7 @@ async function deleteAccount(req, res) {
     await query(`DELETE FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userId, String(userId)]);
 
     // Clear cache
-    const memoryCache = require('../utils/cache');
+    const memoryCache = require('../../utils/cache');
     memoryCache.clear();
 
     logger.auth(`User account deleted: ${user.name} (ID: ${user.user_id})`, { userId: user.user_id });
@@ -475,4 +469,3 @@ module.exports = {
   getUserProfile,
   deleteAccount
 };
-

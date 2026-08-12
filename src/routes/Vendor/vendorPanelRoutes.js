@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const multer = require('multer');
-const vendorPanelController = require('../controllers/vendorPanelController');
-const { authenticateToken, requireVendorOwner } = require('../middleware/auth');
-const { validateRequest } = require('../middleware/validate');
-const { addItemSchema, updateSettingsSchema } = require('../schemas/vendorSchema');
+const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
+const { authenticateToken, requireVendorOwner } = require('../../middleware/auth');
+const { validateRequest } = require('../../middleware/validate');
+const { addItemSchema, updateSettingsSchema } = require('../../schemas/vendorSchema');
 
 // ── Multer Storage Config ────────────────────────────────────
 // Allowed MIME types (covers camera photos which may have no extension)
@@ -47,7 +47,7 @@ function resolveExtension(file) {
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const uploadDir = path.join(__dirname, '../../public/uploads');
+        const uploadDir = path.join(__dirname, '../../../public/uploads');
         // Ensure uploads directory exists
         const fs = require('fs');
         if (!fs.existsSync(uploadDir)) {

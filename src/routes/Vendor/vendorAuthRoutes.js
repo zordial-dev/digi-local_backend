@@ -1,18 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const vendorAuthController = require('../controllers/vendorAuthController');
-const adminPanelController = require('../controllers/adminPanelController');
-const vendorPanelController = require('../controllers/vendorPanelController');
-const { authenticateAdminToken, requirePower } = require('../middleware/adminAuth');
-const { loginBruteForceGuard } = require('../middleware/security');
-const { validateRequest } = require('../middleware/validate');
+const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
+const adminPanelController = require('../../controllers/Admin/adminPanelController');
+const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
+const { authenticateAdminToken, requirePower } = require('../../middleware/adminAuth');
+const { loginBruteForceGuard } = require('../../middleware/security');
+const { validateRequest } = require('../../middleware/validate');
 const {
   registerSchema,
   loginSchema,
   forgotPasswordSchema,
   verifyOtpSchema,
   resetPasswordSchema
-} = require('../schemas/authSchema');
+} = require('../../schemas/authSchema');
 
 /**
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)

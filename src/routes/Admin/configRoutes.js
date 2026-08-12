@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const adminPanelController = require('../controllers/adminPanelController');
-const { authenticateAdminToken, requirePower } = require('../middleware/adminAuth');
+const adminPanelController = require('../../controllers/Admin/adminPanelController');
+const { authenticateAdminToken, requirePower } = require('../../middleware/adminAuth');
 
 /**
  * 6. Platform Branding & Security Config (/api/config)

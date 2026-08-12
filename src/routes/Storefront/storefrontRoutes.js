@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const storefrontController = require('../controllers/storefrontController');
+const storefrontController = require('../../controllers/Storefront/storefrontController');
 
 // GET /api/societies/:societyId/vendors - List ACTIVE vendors in a society
 router.get('/societies/:societyId/vendors', storefrontController.getSocietyVendorsStorefront);

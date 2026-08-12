@@ -1,4 +1,4 @@
-const { query } = require('../models/db');
+const { query } = require('../../models/db');
 
 /**
  * GET /api/societies/:societyId/vendors - List ACTIVE vendors in a society

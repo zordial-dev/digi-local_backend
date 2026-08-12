@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const adminController = require('../controllers/adminController');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const adminController = require('../../controllers/Admin/adminController');
+const { authenticateToken, requireAdmin } = require('../../middleware/auth');
 
 // POST /api/admin/login
 router.post('/login', adminController.loginAdmin);
@@ -31,7 +31,7 @@ router.put('/logo', authenticateToken, requireAdmin, adminController.updateConfi
 router.post('/logo', authenticateToken, requireAdmin, adminController.updateConfig);
 
 // Society approval routes in admin.js
-const societiesController = require('../controllers/societiesController');
+const societiesController = require('../../controllers/Storefront/societiesController');
 router.post('/societies/:id/approve', societiesController.approveSociety);
 router.put('/societies/:id/approve', societiesController.approveSociety);
 router.post('/societies/:id/status', societiesController.approveSociety);
