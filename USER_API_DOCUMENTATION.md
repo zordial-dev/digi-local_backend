@@ -235,6 +235,30 @@ Fetches account details and housing society information for the logged-in reside
 
 ---
 
+### 1.6 Delete User Account (`DELETE /api/users/profile`)
+Permanently deletes the resident user's account and profile details from the platform.
+
+- **HTTP Method:** `DELETE`
+- **Endpoint:** `/api/users/profile` (Aliases: `/api/users/me`, `/api/users/:userId`)
+- **Authentication Required:** Yes (`Authorization: Bearer <ACCESS_TOKEN>`)
+- **Headers:** `Authorization: Bearer <ACCESS_TOKEN>`
+
+#### Success Response (200 OK):
+```json
+{
+  "success": true,
+  "message": "User account for \"Rohan Mehta\" (ID: usr_379378) deleted successfully.",
+  "user_id": "usr_379378"
+}
+```
+
+#### Error Responses:
+- **401 Unauthorized:** Missing or invalid access token.
+- **404 Not Found:** User account not found.
+
+---
+
+
 ## 2. Housing Societies & Enclaves APIs
 
 ### 2.1 List / Search Housing Societies (`GET /api/societies`)

@@ -217,6 +217,42 @@ class VendorService {
       endDateStr: paymentResult.end_date
     };
   }
+
+  /**
+   * Deletes vendor store and associated catalog items from database.
+   */
+  async deleteVendorStore(vendorIdParam) {
+    const rawIdStr = String(vendorIdParam || '').trim();
+    const isPureNum = /^\d+$/.test(rawIdStr);
+
+    let vendorRes;
+    if (isPureNum) {
+      const numId = parseInt(rawIdStr, 10);
+      vendorRes = await query(`SELECT vendor_id, store_name FROM vendors WHERE vendor_id = ?`, [numId]);
+    } else {
+      vendorRes = await query(`SELECT vendor_id, store_name FROM vendors WHERE public_id = ? OR CAST(vendor_id AS TEXT) = ?`, [rawIdStr, rawIdStr]);
+    }
+
+    if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      throw new Error('Vendor store not found');
+    }
+
+    const actualVendorId = Number(vendorRes.rows[0].vendor_id);
+
+    // Delete associated catalog items and items
+    await query(`DELETE FROM items WHERE vendor_id = ?`, [actualVendorId]).catch(() => {});
+    await query(`DELETE FROM catalog_items WHERE vendor_id = ?`, [actualVendorId]).catch(() => {});
+    
+    // Delete vendor record
+    await query(`DELETE FROM vendors WHERE vendor_id = ?`, [actualVendorId]);
+
+    // Clear cache
+    const memoryCache = require('../utils/cache');
+    memoryCache.clear();
+
+    return { vendor_id: actualVendorId, store_name: vendorRes.rows[0].store_name };
+  }
 }
 
 module.exports = new VendorService();
+

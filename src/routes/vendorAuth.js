@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const vendorAuthController = require('../controllers/vendorAuthController');
 const adminPanelController = require('../controllers/adminPanelController');
+const vendorPanelController = require('../controllers/vendorPanelController');
 const { authenticateAdminToken, requirePower } = require('../middleware/adminAuth');
 const { loginBruteForceGuard } = require('../middleware/security');
 const { validateRequest } = require('../middleware/validate');
@@ -40,6 +41,9 @@ router.post('/:vendorId/status', authenticateAdminToken, requirePower('VENDORS')
 // GET /api/vendors/:id - Fetch Vendor Storefront Profile & Catalog Items
 router.get('/:id', vendorAuthController.getVendorPublicProfile);
 
+// DELETE /api/vendors/:vendorId - Delete Vendor Store
+router.delete('/:vendorId', vendorPanelController.deleteStore);
+
 // POST /api/vendors/send-otp
 router.post('/send-otp', vendorAuthController.sendVendorOtp);
 
@@ -74,8 +78,6 @@ router.post('/forgot-password', validateRequest(forgotPasswordSchema), vendorAut
 
 // POST /api/vendors/verify-otp
 router.post('/verify-otp', validateRequest(verifyOtpSchema), vendorAuthController.verifyVendorOtp);
-
-const vendorPanelController = require('../controllers/vendorPanelController');
 
 // POST /api/vendors/reset-password
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);

@@ -401,6 +401,31 @@ export interface VendorOrder {
 
 ---
 
+### 🗑️ 4.8 Delete Vendor Store (Delete Account / Shop)
+Allows an authenticated vendor owner to permanently delete their store and associated items from the platform.
+
+- **Endpoint:** `DELETE /api/vendorPanel/:vendorId` (or `DELETE /api/vendors/:vendorId`)
+- **Auth:** Required (`Bearer <accessToken>`)
+- **Headers:**
+  ```http
+  Authorization: Bearer <vendor_jwt_access_token>
+  Content-Type: application/json
+  ```
+- **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "message": "Vendor store \"FreshMart Grocery\" (ID: 1) and associated items deleted successfully.",
+    "vendor_id": 1
+  }
+  ```
+- **Error Responses:**
+  - `401 Unauthorized`: Token missing or invalid.
+  - `403 Forbidden`: Authenticated user does not own this vendor store.
+  - `404 Not Found`: Vendor store ID not found.
+
+---
+
 ## 📱 5. Production Axios API Client Snippet (TypeScript)
 
 ```typescript

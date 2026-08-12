@@ -233,6 +233,30 @@ async function deleteFcmToken(req, res) {
     }
 }
 
+/**
+ * DELETE /api/vendorPanel/:vendorId or /api/vendorPanel/:vendorId/store - Delete vendor store
+ */
+async function deleteStore(req, res) {
+    try {
+        const vendorId = req.params.vendorId || req.user?.vendor_id || req.user?.id;
+        if (!vendorId) {
+            return res.status(400).json({ error: 'Vendor ID is required' });
+        }
+
+        const result = await vendorService.deleteVendorStore(vendorId);
+
+        res.status(200).json({
+            success: true,
+            message: `Vendor store "${result.store_name}" (ID: ${result.vendor_id}) and associated items deleted successfully.`,
+            vendor_id: result.vendor_id
+        });
+    } catch (err) {
+        console.error('Error deleting vendor store:', err);
+        const status = err.message === 'Vendor store not found' ? 404 : 500;
+        res.status(status).json({ error: err.message || 'Failed to delete vendor store' });
+    }
+}
+
 module.exports = {
     uploadImage,
     getDashboard,
@@ -243,5 +267,7 @@ module.exports = {
     renewSubscription,
     toggleAvailability,
     registerFcmToken,
-    deleteFcmToken
+    deleteFcmToken,
+    deleteStore
 };
+

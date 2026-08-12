@@ -147,6 +147,12 @@ async function verifyOtp(req, res) {
   }
 }
 
+
+async function getAllVendors(Req, res) {
+
+}
+
+
 /**
  * B1. Resident User Login (Password, OTP, or Firebase Phone Token)
  * POST /api/users/login
@@ -200,23 +206,13 @@ async function loginUser(req, res) {
     let user;
 
     if (userRes.rows.length === 0) {
-      if (fbToken || otp) {
-        // Auto-register user verified via Firebase Phone Auth or OTP
-        const userName = `Resident ${userPhone.slice(-4)}`;
-        const userId = `usr_${Date.now().toString().slice(-6)}`;
-        await query(
-          `INSERT INTO users (user_id, name, phone, society_id, flat, joined_date, avatar)
-           VALUES (?, ?, ?, 1, 'Tower A-402', 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')`,
-          [userId, userName, userPhone]
-        );
-        userRes = await query(`SELECT * FROM users WHERE user_id = ?`, [userId]);
-        user = userRes.rows[0];
-      } else {
-        return res.status(401).json({ error: 'Invalid mobile number or account does not exist' });
-      }
-    } else {
-      user = userRes.rows[0];
+      return res.status(404).json({
+        exists: false,
+        error: 'No account found with this mobile number. Please register your account first.'
+      });
     }
+
+    user = userRes.rows[0];
 
     if (password && !fbToken && !otp) {
       const matchRes = await comparePassword(password, user.password_hash);
@@ -428,6 +424,47 @@ async function getUserProfile(req, res) {
   }
 }
 
+/**
+ * DELETE /api/users/profile, /api/users/me, or /api/users/:userId - Delete Resident User Account
+ */
+async function deleteAccount(req, res) {
+  try {
+    const userId = req.params.userId || req.user?.id || req.query.userId || req.body?.user_id || req.body?.userId;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized: User ID is required' });
+    }
+
+    const userRes = await query(
+      `SELECT user_id, name, phone FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+      [userId, String(userId)]
+    );
+
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'User account not found' });
+    }
+
+    const user = userRes.rows[0];
+
+    // Delete user account from database
+    await query(`DELETE FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userId, String(userId)]);
+
+    // Clear cache
+    const memoryCache = require('../utils/cache');
+    memoryCache.clear();
+
+    logger.auth(`User account deleted: ${user.name} (ID: ${user.user_id})`, { userId: user.user_id });
+
+    res.status(200).json({
+      success: true,
+      message: `User account for "${user.name}" (ID: ${user.user_id}) deleted successfully.`,
+      user_id: String(user.user_id)
+    });
+  } catch (err) {
+    console.error('Error deleting user account:', err);
+    res.status(500).json({ error: 'Failed to delete user account' });
+  }
+}
+
 module.exports = {
   sendOtp,
   verifyOtp,
@@ -435,5 +472,7 @@ module.exports = {
   loginUser,
   registerUser,
   getUserOrders,
-  getUserProfile
+  getUserProfile,
+  deleteAccount
 };
+

@@ -8,6 +8,10 @@ const { sendEmail } = require('../services/emailService');
  */
 function loginAdmin(req, res) {
     const { admin_secret, secret, password, email } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: "Username and Password is required" });
+    }
+
     const configuredSecret = process.env.ADMIN_SECRET || 'admin123';
     const inputSecret = admin_secret || secret || password;
 
@@ -23,8 +27,7 @@ function loginAdmin(req, res) {
             expiresIn: tokens.expiresIn
         });
     }
-
-    res.status(401).json({ error: 'Invalid admin secret key' });
+    res.status(401).json({ error: 'Invalid admin credentials' });
 }
 
 /**
