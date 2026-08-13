@@ -210,10 +210,10 @@ async function registerFcmToken(req, res) {
         const notificationService = require('../../services/notificationService');
         await notificationService.registerVendorFcmToken(vendorId, pushToken, platform);
 
-        res.status(200).json({ success: true, message: 'Push token updated successfully' });
+        res.status(200).json({ success: true, message: 'Push token updated successfully', vendor_id: vendorId, push_token: pushToken });
     } catch (err) {
         console.error('Error registering push token:', err);
-        res.status(500).json({ success: false, error: 'Failed to register push token' });
+        res.status(500).json({ success: false, error: 'Failed to register push token: ' + err.message });
     }
 }
 
@@ -231,6 +231,41 @@ async function deleteFcmToken(req, res) {
     } catch (err) {
         console.error('Error removing FCM token:', err);
         res.status(500).json({ error: 'Failed to remove FCM token' });
+    }
+}
+
+/**
+ * POST /api/vendors/test-push
+ * Test push notification pipeline for a vendor from backend
+ */
+async function testPushNotification(req, res) {
+    try {
+        const vendorId = req.body?.vendor_id || req.params?.vendorId || req.user?.vendor_id || 1;
+        const customToken = req.body?.push_token || req.body?.pushToken;
+
+        const notificationService = require('../../services/notificationService');
+
+        if (customToken) {
+            await notificationService.registerVendorFcmToken(vendorId, customToken);
+        }
+
+        const result = await notificationService.notifyVendorNewOrder({
+            vendor_id: vendorId,
+            order_id: `TEST-${Math.floor(1000 + Math.random() * 9000)}`,
+            total_amount: 150.00,
+            customer_name: 'Test Resident',
+            items_count: 1,
+            items: [{ item_name: 'Test Milk Pouch', price: 150.00, quantity: 1 }]
+        });
+
+        res.status(200).json({
+            success: result.success !== false,
+            vendor_id: vendorId,
+            push_result: result
+        });
+    } catch (err) {
+        console.error('Error executing test push:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 }
 
@@ -269,5 +304,6 @@ module.exports = {
     toggleAvailability,
     registerFcmToken,
     deleteFcmToken,
+    testPushNotification,
     deleteStore
 };

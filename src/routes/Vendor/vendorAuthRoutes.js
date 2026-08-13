@@ -93,5 +93,9 @@ router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
+// Test Push Notification directly from Backend
+router.post('/test-push', vendorPanelController.testPushNotification);
+router.post('/:vendorId/test-push', vendorPanelController.testPushNotification);
+
 module.exports = router;
 
