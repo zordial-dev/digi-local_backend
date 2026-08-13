@@ -4,11 +4,14 @@ const adminPanelController = require('../../controllers/Admin/adminPanelControll
 const { authenticateAdminToken } = require('../../middleware/adminAuth');
 
 /**
- * 1. Authentication & Profile Management (/api/auth)
+ * 1. Authentication & Session Management (/api/auth)
  */
 
-// POST /api/auth/login - Admin / Sub-Admin Login
+// POST /api/auth/login - Super Admin & Sub-Admin Login
 router.post('/login', adminPanelController.login);
+
+// POST /api/auth/refresh - JWT Token Refresh
+router.post('/refresh', adminPanelController.refreshToken);
 
 // GET /api/auth/me - Get Current User Profile & RBAC Powers
 router.get('/me', authenticateAdminToken, adminPanelController.getMe);

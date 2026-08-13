@@ -1,40 +1,76 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../../controllers/Admin/adminController');
-const { authenticateToken, requireAdmin } = require('../../middleware/auth');
+const adminPanelController = require('../../controllers/Admin/adminPanelController');
 
-// POST /api/admin/login
-router.post('/login', adminController.loginAdmin);
+// ── Auth ─────────────────────────────────────────────────────────────
+router.post('/login', adminPanelController.login);
+router.post('/refresh', adminPanelController.refreshToken);
 
-// GET /api/admin/vendors
-router.get('/vendors', authenticateToken, requireAdmin, adminController.getAllVendors);
+// ── Societies ────────────────────────────────────────────────────────
+router.get('/societies', adminPanelController.listSocieties);
+router.post('/societies', adminPanelController.registerSociety);
+router.put('/societies/:id', adminPanelController.updateSociety);
+router.delete('/societies/:id', adminPanelController.deleteSociety);
+router.post('/societies/:id/status', adminPanelController.updateSocietyStatus);
 
-// POST /api/admin/vendors/:vendorId/status - Block/Unblock vendor
-router.post('/vendors/:vendorId/status', authenticateToken, requireAdmin, adminController.updateVendorStatus);
+// ── Vendors ──────────────────────────────────────────────────────────
+router.get('/vendors', adminPanelController.listVendors);
+router.patch('/vendors/:id/status', adminPanelController.updateVendorStatus);
+router.post('/vendors/:id/status', adminPanelController.updateVendorStatus);
+router.get('/requests', adminPanelController.listPendingVendors);
+router.post('/requests/:id/approve', adminPanelController.approveVendor);
+router.post('/requests/:id/reject', adminPanelController.rejectVendor);
 
-// GET /api/admin/requests
-router.get('/requests', authenticateToken, requireAdmin, adminController.getVendorRequests);
+// ── Users & People Directory ──────────────────────────────────────────
+router.get('/users', adminPanelController.listUsers);
+router.post('/users/:id/flag', adminPanelController.flagUser);
+router.put('/users/:id/status', adminPanelController.updateUserStatus);
+router.patch('/users/:id/status', adminPanelController.updateUserStatus);
 
-// POST /api/admin/requests/:vendorId/approve
-router.post('/requests/:vendorId/approve', authenticateToken, requireAdmin, adminController.approveVendorRequest);
+// ── Subscriptions ────────────────────────────────────────────────────
+router.get('/subscriptions', adminPanelController.listSubscriptions);
+router.get('/subscriptions/stats', adminPanelController.getFinancialStats);
+router.post('/subscriptions/renew', adminPanelController.renewSubscription);
+router.post('/subscriptions/:id/renew', adminPanelController.renewSubscription);
 
-// POST /api/admin/requests/:vendorId/reject
-router.post('/requests/:vendorId/reject', authenticateToken, requireAdmin, adminController.rejectVendorRequest);
+// ── Payments & Refunds ───────────────────────────────────────────────
+router.get('/payments/transactions', adminPanelController.getPaymentTransactions);
+router.post('/payments/refund', adminPanelController.processRefund);
 
-// GET /api/admin/config
-router.get('/config', adminController.getConfig);
+// ── Promotions ───────────────────────────────────────────────────────
+router.get('/promotions', adminPanelController.listPromotions);
+router.post('/promotions', adminPanelController.createPromotion);
+router.put('/promotions/:id', adminPanelController.updatePromotion);
+router.delete('/promotions/:id', adminPanelController.deletePromotion);
 
-// PUT & POST /api/admin/config
-router.put('/config', authenticateToken, requireAdmin, adminController.updateConfig);
-router.post('/config', authenticateToken, requireAdmin, adminController.updateConfig);
-router.put('/logo', authenticateToken, requireAdmin, adminController.updateConfig);
-router.post('/logo', authenticateToken, requireAdmin, adminController.updateConfig);
+// ── Sub-Admins ───────────────────────────────────────────────────────
+router.get('/sub-admins', adminPanelController.listSubAdmins);
+router.post('/sub-admins', adminPanelController.createSubAdmin);
+router.put('/sub-admins/:id', adminPanelController.updateSubAdminPowers);
+router.delete('/sub-admins/:id', adminPanelController.deleteSubAdmin);
 
-// Society approval routes in admin.js
-const societiesController = require('../../controllers/Storefront/societiesController');
-router.post('/societies/:id/approve', societiesController.approveSociety);
-router.put('/societies/:id/approve', societiesController.approveSociety);
-router.post('/societies/:id/status', societiesController.approveSociety);
-router.put('/societies/:id/status', societiesController.approveSociety);
+// ── Support Desk ─────────────────────────────────────────────────────
+router.get('/support/tickets', adminPanelController.listSupportTickets);
+router.get('/support/tickets/:id/messages', adminPanelController.getTicketMessages);
+router.post('/support/tickets/:id/messages', adminPanelController.replyToTicket);
+
+// ── Executive Reports & Exports ───────────────────────────────────────
+router.get('/reports/executive', adminPanelController.getExecutiveReports);
+router.get('/reports/export', adminPanelController.exportReportData);
+
+// ── Real-Time Notifications ──────────────────────────────────────────
+router.get('/notifications', adminPanelController.listNotifications);
+router.patch('/notifications/read-all', adminPanelController.markAllNotificationsRead);
+
+// ── Audit Logs ───────────────────────────────────────────────────────
+router.get('/audit-logs', adminPanelController.listAuditLogs);
+
+// ── Platform Settings & Configuration ────────────────────────────────
+router.get('/settings', adminPanelController.getPlatformConfig);
+router.put('/settings', adminPanelController.updateBrandingConfig);
+router.get('/config', adminPanelController.getPlatformConfig);
+router.put('/config', adminPanelController.updateBrandingConfig);
+router.post('/config', adminPanelController.updateBrandingConfig);
 
 module.exports = router;

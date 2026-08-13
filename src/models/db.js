@@ -244,12 +244,19 @@ async function setupTablesPg() {
   const schemaPath = path.join(__dirname, 'schema.sql');
   if (fs.existsSync(schemaPath)) {
     const schemaSql = fs.readFileSync(schemaPath, 'utf8');
-    await pgPool.query(schemaSql);
+    await pgPool.query(schemaSql).catch(() => {});
   }
 
   const columns = [
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS code VARCHAR(50)`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS address TEXT`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS city VARCHAR(100)`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS pincode VARCHAR(20)`,
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS secretary_name VARCHAR(255) DEFAULT 'Society Secretary'`,
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS secretary_mobile VARCHAR(20) DEFAULT '9876543210'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS owner_name VARCHAR(255)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS gstin VARCHAR(50)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS opening_time VARCHAR(20) DEFAULT '08:00 AM'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS closing_time VARCHAR(20) DEFAULT '10:00 PM'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS opening_timing VARCHAR(20) DEFAULT '08:00 AM'`,
@@ -264,6 +271,17 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS city VARCHAR(100)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS pincode VARCHAR(20)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(50) DEFAULT 'pro'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS renewal_date TIMESTAMP DEFAULT '2026-12-31 00:00:00'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS total_orders INT DEFAULT 0`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS total_revenue DECIMAL(15,2) DEFAULT 0.00`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS avatar_url TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS person_type VARCHAR(50) DEFAULT 'user'`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS society_name VARCHAR(255)`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS store_name VARCHAR(255)`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS flags_count INT DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE orders ALTER COLUMN order_id TYPE VARCHAR(100) USING order_id::text`,
     `ALTER TABLE order_details ALTER COLUMN order_id TYPE VARCHAR(100) USING order_id::text`,
     `ALTER TABLE order_details ADD COLUMN IF NOT EXISTS item_name VARCHAR(255)`,
@@ -272,16 +290,28 @@ async function setupTablesPg() {
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active'`,
-    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS subscription_tier VARCHAR(20) DEFAULT 'pro'`,
-    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS renewal_date TIMESTAMP DEFAULT '2026-12-31 00:00:00'`,
+    `ALTER TABLE sub_admins ADD COLUMN IF NOT EXISTS phone VARCHAR(50)`,
+    `ALTER TABLE sub_admins ADD COLUMN IF NOT EXISTS assigned_society_id BIGINT`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS user_name VARCHAR(255)`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS email VARCHAR(255)`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS ticket_number VARCHAR(50)`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS subject VARCHAR(255)`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS category VARCHAR(100)`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS priority VARCHAR(20)`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_name VARCHAR(255) DEFAULT 'DigiLocal'`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6'`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS admin_password_hash VARCHAR(255)`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5,2) DEFAULT 18.00`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS maintenance_mode BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR'`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS society_id INT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS push_token TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS fcm_token TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_token TEXT`,
+
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_type VARCHAR(50) DEFAULT 'android'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'android'`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
@@ -297,8 +327,10 @@ async function setupTablesPg() {
       id VARCHAR(100) PRIMARY KEY,
       name VARCHAR(255) NOT NULL,
       email VARCHAR(255) UNIQUE NOT NULL,
+      phone VARCHAR(50),
       password_hash VARCHAR(255) NOT NULL,
       role VARCHAR(50) DEFAULT 'SUB_ADMIN',
+      assigned_society_id BIGINT,
       powers TEXT[] DEFAULT '{}',
       status VARCHAR(20) DEFAULT 'active',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -312,6 +344,9 @@ async function setupTablesPg() {
       platform_name VARCHAR(255) DEFAULT 'DigiLocal',
       platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6',
       admin_password_hash VARCHAR(255),
+      gst_percentage DECIMAL(5,2) DEFAULT 18.00,
+      maintenance_mode BOOLEAN DEFAULT FALSE,
+      currency VARCHAR(10) DEFAULT 'INR',
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
@@ -335,11 +370,11 @@ async function seedInitialData() {
   try {
     const logoCheck = await query(`SELECT config_value FROM platform_config WHERE config_key = 'platform_logo'`);
     if (!logoCheck.rows || logoCheck.rows.length === 0) {
-      await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_logo', 'https://imgh.in/host/ucila6')`);
+      await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_logo', 'https://imgh.in/host/ucila6')`).catch(() => {});
     }
     const nameCheck = await query(`SELECT config_value FROM platform_config WHERE config_key = 'platform_name'`);
     if (!nameCheck.rows || nameCheck.rows.length === 0) {
-      await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_name', 'DigiLocal')`);
+      await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_name', 'DigiLocal')`).catch(() => {});
     }
   } catch (_) { }
 
@@ -349,15 +384,15 @@ async function seedInitialData() {
 
   const usrCheck = await query(`SELECT user_id FROM users WHERE user_id = ?`, ['usr_101']);
   if (!usrCheck.rows || usrCheck.rows.length === 0) {
-    await query(`INSERT INTO users (user_id, name, email, phone, password_hash, society_id, flat, joined_date, avatar) VALUES
-      ('usr_101', 'Rahul Sharma', 'rahul.sharma@gmail.com', '9876543210', '${pwdHash}', 1, 'Tower A-402', 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')
+    await query(`INSERT INTO users (user_id, name, email, phone, password_hash, person_type, status, society_id, society_name, flat, flags_count, joined_date, avatar) VALUES
+      ('usr_101', 'Shivin', 'lovelysethia53@gmail.com', '9764694949', '${pwdHash}', 'user_vendor', 'active', 1, 'Udb', 'Tower A-402', 0, 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')
     `).catch(() => { });
   }
 
   const vCheck = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = 1`);
   if (!vCheck.rows || vCheck.rows.length === 0) {
-    await query(`INSERT INTO vendors (vendor_id, society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, opening_time, closing_time, logo, description, status, public_id) VALUES 
-      (1, 1, 'Rajesh Sharma', '07AAACR12341Z5', '9876543210', 'vendor@digilocal.com', 'vendor123', '${vendorPwdHash}', 'FreshMart Grocery & Organic', '08:00 AM', '10:00 PM', 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200', 'Quality goods & daily essentials delivered within society via WhatsApp.', 'ACTIVE', '${genPublicId(6)}')
+    await query(`INSERT INTO vendors (vendor_id, society_id, society_name, vendor_name, store_name, owner_name, gstin, gst_number, phone_number, email, password, password_hash, opening_time, closing_time, logo, avatar_url, description, subscription_tier, status, total_orders, total_revenue, public_id) VALUES 
+      (1, 1, 'Greenwood Residency', 'Rajesh Sharma', 'Apna Store Grocery', 'Apna Store Grocery', '07AAAAA140001Z5', '07AAAAA140001Z5', '8890450564', 'apnastore@gmail.com', 'vendor123', '${vendorPwdHash}', '08:00 AM', '10:00 PM', 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400', 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400', 'Quality goods & daily essentials delivered within society via WhatsApp.', 'pro', 'active', 9525, 4170000.00, '${genPublicId(6)}')
     `).catch(() => { });
   }
 
@@ -391,6 +426,14 @@ async function seedInitialData() {
       ('ORD-9843', 102, 'Fresh Butter 500g', 1, 180.00, 180.00, 180.00)
     `).catch((err) => console.error('Error seeding order_details:', err.message));
   }
+
+  const tckCheck = await query(`SELECT id FROM support_tickets WHERE id = ?`, ['tck_501']);
+  if (!tckCheck.rows || tckCheck.rows.length === 0) {
+    await query(`INSERT INTO support_tickets (id, ticket_number, user_id, user_name, email, subject, category, status, priority) VALUES
+      ('tck_501', 'TCK-501', 'usr_101', 'Shivin', 'lovelysethia53@gmail.com', 'Payment verification delay for order #9842', 'Billing & Payments', 'OPEN', 'HIGH')
+    `).catch((err) => console.error('Error seeding support_tickets:', err.message));
+  }
+
 }
 
 /**

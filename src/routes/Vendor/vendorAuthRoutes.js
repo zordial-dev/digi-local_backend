@@ -82,10 +82,16 @@ router.post('/verify-otp', validateRequest(verifyOtpSchema), vendorAuthControlle
 // POST /api/vendors/reset-password
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);
 
-// FCM / Expo Push Device Token Endpoints (/api/vendors/fcm-token)
+// FCM / Expo Push Device Token Endpoints (/api/vendors/push-token & /api/vendors/fcm-token)
+router.post('/push-token', vendorPanelController.registerFcmToken);
+router.post('/:vendorId/push-token', vendorPanelController.registerFcmToken);
+router.delete('/push-token', vendorPanelController.deleteFcmToken);
+router.delete('/:vendorId/push-token', vendorPanelController.deleteFcmToken);
+
 router.post('/fcm-token', vendorPanelController.registerFcmToken);
 router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
 module.exports = router;
+

@@ -200,22 +200,23 @@ async function renewSubscription(req, res) {
 async function registerFcmToken(req, res) {
     try {
         const vendorId = req.params.vendorId || req.user?.vendor_id || req.user?.id || req.body?.vendor_id;
-        const fcmToken = req.body?.fcm_token || req.body?.fcmToken || req.body?.device_token || req.body?.deviceToken;
+        const pushToken = req.body?.push_token || req.body?.pushToken || req.body?.fcm_token || req.body?.fcmToken || req.body?.device_token || req.body?.deviceToken;
         const platform = req.body?.platform || 'android';
 
-        if (!fcmToken) {
-            return res.status(400).json({ error: 'fcm_token is required' });
+        if (!pushToken) {
+            return res.status(400).json({ success: false, error: 'push_token is required' });
         }
 
         const notificationService = require('../../services/notificationService');
-        await notificationService.registerVendorFcmToken(vendorId, fcmToken, platform);
+        await notificationService.registerVendorFcmToken(vendorId, pushToken, platform);
 
-        res.status(200).json({ message: 'FCM Push Notification device token registered successfully' });
+        res.status(200).json({ success: true, message: 'Push token updated successfully' });
     } catch (err) {
-        console.error('Error registering FCM token:', err);
-        res.status(500).json({ error: 'Failed to register FCM token' });
+        console.error('Error registering push token:', err);
+        res.status(500).json({ success: false, error: 'Failed to register push token' });
     }
 }
+
 
 /**
  * DELETE /api/vendorPanel/:vendorId/fcm-token or /api/vendors/fcm-token

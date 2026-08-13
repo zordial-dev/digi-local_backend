@@ -17,8 +17,8 @@ class NotificationService {
     if (!vendorId || !fcmToken) return { success: false, error: 'Missing vendorId or token' };
     try {
       await query(
-        `UPDATE vendors SET fcm_token = ?, device_token = ?, device_type = ?, platform = ? WHERE vendor_id = ? OR public_id = ?`,
-        [fcmToken, fcmToken, platform, platform, vendorId, String(vendorId)]
+        `UPDATE vendors SET push_token = ?, fcm_token = ?, device_token = ?, device_type = ?, platform = ? WHERE vendor_id = ? OR public_id = ?`,
+        [fcmToken, fcmToken, fcmToken, platform, platform, vendorId, String(vendorId)]
       );
       console.log(`📱 [PUSH TOKEN SAVED] Updated token for Vendor #${vendorId}`);
       return { success: true };
@@ -42,7 +42,7 @@ class NotificationService {
     if (!vendorId) return { success: false, error: 'Missing vendorId' };
     try {
       await query(
-        `UPDATE vendors SET fcm_token = NULL, device_token = NULL WHERE vendor_id = ? OR public_id = ?`,
+        `UPDATE vendors SET push_token = NULL, fcm_token = NULL, device_token = NULL WHERE vendor_id = ? OR public_id = ?`,
         [vendorId, String(vendorId)]
       );
       console.log(`📱 [PUSH TOKEN CLEARED] Cleared token for Vendor #${vendorId}`);
@@ -80,11 +80,11 @@ class NotificationService {
 
       // 2. Fetch vendor's registered FCM / Expo device token
       const vendorRes = await query(
-        `SELECT fcm_token, device_token FROM vendors WHERE vendor_id = ? OR public_id = ?`,
+        `SELECT push_token, fcm_token, device_token FROM vendors WHERE vendor_id = ? OR public_id = ?`,
         [vendor_id, String(vendor_id)]
       );
 
-      const fcmToken = vendorRes.rows[0]?.fcm_token || vendorRes.rows[0]?.device_token;
+      const fcmToken = vendorRes.rows[0]?.push_token || vendorRes.rows[0]?.fcm_token || vendorRes.rows[0]?.device_token;
 
       let calcTotal = Number(total_amount || 0);
       if (calcTotal === 0 && items && Array.isArray(items) && items.length > 0) {
@@ -108,22 +108,24 @@ class NotificationService {
           try {
             const expoPayload = {
               to: fcmToken,
-              sound: 'default',
+              sound: 'order_alert_chime.wav',
               title,
               body,
               priority: 'high',
               channelId: 'order_alerts_channel',
+              _displayInForeground: true,
               tag: `order_${order_id}`,
               data: {
-                type: 'NEW_ORDER_RECEIVED',
+                orderId: isNaN(Number(order_id)) ? order_id : Number(order_id),
                 order_id: String(order_id),
+                type: 'NEW_ORDER',
                 vendor_id: String(vendor_id),
-                total_amount: String(formattedTotal),
-                sound: 'new_order_alert_sound'
+                total_amount: String(formattedTotal)
               },
               ttl: 60,
               expiration: Math.floor(Date.now() / 1000) + 60
             };
+
 
             const response = await fetch('https://exp.host/--/api/v2/push/send', {
               method: 'POST',
