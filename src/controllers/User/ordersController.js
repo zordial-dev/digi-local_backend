@@ -329,11 +329,8 @@ Please confirm preparation and delivery. Thank you!`;
     const finalCustomerName = resolvedCustomerName;
     const itemsCount = populatedItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
 
-    // By default, do NOT send remote push notification on order creation to prevent duplicate notifications.
-    // Remote push notification is triggered when user confirms via WhatsApp (POST /api/orders/:id/notify).
-    const shouldSendImmediateNotify = req.body.notify === true && req.body.skip_notification !== true && req.body.notify_on_whatsapp !== true;
-
-    if (shouldSendImmediateNotify) {
+    // Trigger instant high-priority Expo Push Notification & Socket alert to vendor on order placement
+    if (req.body.skip_notification !== true) {
       const notificationService = require('../../services/notificationService');
       notificationService.notifyVendorNewOrder({
         vendor_id,
@@ -344,6 +341,7 @@ Please confirm preparation and delivery. Thank you!`;
         items: populatedItems
       }).catch(err => console.error('[Order Push Notification Error]:', err.message));
     }
+
 
     const whatsapp_url = `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}`;
 
