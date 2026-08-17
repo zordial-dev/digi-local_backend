@@ -21,13 +21,27 @@ const { normalizeImageUrl } = require('../../utils/imageUtils');
 async function getVendorPublicProfile(req, res) {
     try {
         const { id } = req.params;
+
+        if (!id || id === 'all' || id === 'nearby' || id === 'list' || id === 'public' || id === 'storefront' || id === 'society') {
+            const adminPanelController = require('../Admin/adminPanelController');
+            return adminPanelController.listVendors(req, res);
+        }
+
         const vendorRes = await query(
             `SELECT * FROM vendors 
-             WHERE (CAST(vendor_id AS TEXT) = ? OR public_id = ? OR LOWER(email) = LOWER(?)) AND status = 'ACTIVE'`,
+             WHERE (CAST(vendor_id AS TEXT) = ? OR public_id = ? OR LOWER(email) = LOWER(?)) AND LOWER(COALESCE(status, 'active')) IN ('active', 'approved')`,
             [id, id, id]
         );
         if (vendorRes.rows.length === 0) {
-            return res.status(404).json({ error: 'Vendor not found' });
+            // Try matching without status restriction if active query returned nothing
+            const fallbackRes = await query(
+                `SELECT * FROM vendors WHERE CAST(vendor_id AS TEXT) = ? OR public_id = ? OR LOWER(email) = LOWER(?)`,
+                [id, id, id]
+            );
+            if (!fallbackRes.rows || fallbackRes.rows.length === 0) {
+                return res.status(404).json({ success: false, error: `Vendor store ID "${id}" not found` });
+            }
+            vendorRes.rows = fallbackRes.rows;
         }
 
         const vendor = vendorRes.rows[0];
@@ -315,6 +329,17 @@ async function registerVendor(req, res) {
             `INSERT INTO payments (subscription_id, vendor_id, amount, payment_method, transaction_id, status) VALUES (?, ?, 2999.00, ?, ?, 'SUCCESS')`,
             [subscription_id, vendor_id, payMethod, txnId]
         );
+
+        // Dispatch vendor welcome email asynchronously
+        const { sendAccountRegistrationEmail } = require('../../templates/accountRegistrationEmail');
+        sendAccountRegistrationEmail('vendor', {
+            store_name,
+            owner_name: vendor_name,
+            email,
+            phone: phone_number,
+            society_name: 'Omaxe Greenwood Residency',
+            subscription_tier: 'Pro'
+        });
 
         const newVendor = {
             vendor_id,

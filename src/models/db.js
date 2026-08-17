@@ -42,7 +42,7 @@ let initPromise = null;
 /**
  * Initializes PostgreSQL Database Pool, executes schema migrations, and seeds initial data.
  */
-async function initDb() {
+async function initDb(maxRetries = 5, initialDelayMs = 2000) {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
@@ -68,7 +68,7 @@ async function initDb() {
         ssl: sslOption,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000
+        connectionTimeoutMillis: 30000
       }
       : {
         host: process.env.PGHOST || 'localhost',
@@ -79,7 +79,7 @@ async function initDb() {
         ssl: sslOption,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 10000
+        connectionTimeoutMillis: 30000
       };
 
     pgPool = new Pool(poolConfig);
@@ -88,17 +88,28 @@ async function initDb() {
       console.error('[PostgreSQL Pool Error] Unexpected error on idle client:', err.message);
     });
 
-    try {
-      const client = await pgPool.connect();
-      client.release();
-      console.log('[Database] Connected to PostgreSQL successfully (Pool max: 20).');
-      await setupTablesPg();
-      await removeDuplicateVendors();
-      await createIndexes();
-      await seedInitialData();
-    } catch (err) {
-      console.error('[Database Error] Failed to connect to PostgreSQL:', err.message);
-      throw new DatabaseError('Failed to connect to PostgreSQL database', err);
+    let attempt = 0;
+    while (attempt < maxRetries) {
+      try {
+        attempt++;
+        const client = await pgPool.connect();
+        client.release();
+        console.log('[Database] Connected to PostgreSQL successfully (Pool max: 20).');
+        await setupTablesPg();
+        await removeDuplicateVendors();
+        await createIndexes();
+        await seedInitialData();
+        return;
+      } catch (err) {
+        console.error(`[Database Error] Connection attempt ${attempt}/${maxRetries} failed: ${err.message}`);
+        if (attempt >= maxRetries) {
+          initPromise = null;
+          throw new DatabaseError('Failed to connect to PostgreSQL database after multiple retries', err);
+        }
+        const delay = initialDelayMs * attempt;
+        console.log(`[Database] Retrying connection in ${delay / 1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   })();
 
@@ -211,29 +222,38 @@ async function withTransaction(callback) {
 }
 
 /**
- * Safely creates missing database indexes for optimized query lookup.
+ * Creates targeted performance database indexes for societies and vendors.
  */
 async function createIndexes() {
-  await query(`DROP INDEX IF EXISTS idx_vendors_society_vname`).catch(() => {});
-  const indexQueries = [
-    `CREATE INDEX IF NOT EXISTS idx_vendors_email ON vendors(email)`,
-    `CREATE INDEX IF NOT EXISTS idx_vendors_society ON vendors(society_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_vendors_status ON vendors(status)`,
-    `CREATE UNIQUE INDEX IF NOT EXISTS idx_vendors_society_sname ON vendors (society_id, LOWER(TRIM(store_name)))`,
-    `CREATE INDEX IF NOT EXISTS idx_items_vendor ON items(vendor_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_items_category ON items(category)`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_vendor ON orders(vendor_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status)`,
-    `CREATE INDEX IF NOT EXISTS idx_subscriptions_vendor ON subscriptions(vendor_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_payments_vendor ON payments(vendor_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone_number)`
+  try {
+    await query('CREATE EXTENSION IF NOT EXISTS pg_trgm');
+  } catch (_) { }
+
+  const indexesToCreate = [
+    // Indexes for Societies
+    'CREATE INDEX IF NOT EXISTS idx_societies_name ON societies (society_name)',
+    'CREATE INDEX IF NOT EXISTS idx_societies_status_name ON societies (status, society_name)',
+    'CREATE INDEX IF NOT EXISTS idx_societies_lower_name ON societies (LOWER(society_name))',
+    'CREATE INDEX IF NOT EXISTS idx_societies_trgm_name ON societies USING gin (LOWER(society_name) gin_trgm_ops)',
+
+    // Indexes for Vendors
+    'CREATE INDEX IF NOT EXISTS idx_vendors_name ON vendors (vendor_name)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_store_name ON vendors (store_name)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_status ON vendors (status)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_status_society ON vendors (status, society_id)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_society_id ON vendors (society_id)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_lower_store ON vendors (LOWER(store_name))',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_lower_name ON vendors (LOWER(vendor_name))',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_trgm_store ON vendors USING gin (LOWER(store_name) gin_trgm_ops)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_trgm_name ON vendors USING gin (LOWER(vendor_name) gin_trgm_ops)'
   ];
 
-  for (const q of indexQueries) {
+  for (const sql of indexesToCreate) {
     try {
-      await query(q);
-    } catch (_) { }
+      await query(sql);
+    } catch (err) {
+      console.warn(`[Index Notice] ${err.message}`);
+    }
   }
 }
 
@@ -427,13 +447,52 @@ async function seedInitialData() {
     `).catch((err) => console.error('Error seeding order_details:', err.message));
   }
 
-  const tckCheck = await query(`SELECT id FROM support_tickets WHERE id = ?`, ['tck_501']);
-  if (!tckCheck.rows || tckCheck.rows.length === 0) {
-    await query(`INSERT INTO support_tickets (id, ticket_number, user_id, user_name, email, subject, category, status, priority) VALUES
-      ('tck_501', 'TCK-501', 'usr_101', 'Shivin', 'lovelysethia53@gmail.com', 'Payment verification delay for order #9842', 'Billing & Payments', 'OPEN', 'HIGH')
-    `).catch((err) => console.error('Error seeding support_tickets:', err.message));
+  // Ensure cms_pages table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS cms_pages (
+      id SERIAL PRIMARY KEY,
+      slug VARCHAR(50) UNIQUE NOT NULL,
+      title VARCHAR(255) NOT NULL,
+      content TEXT NOT NULL,
+      meta_description TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => { });
+
+  // Ensure support_contacts table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS support_contacts (
+      id INT PRIMARY KEY DEFAULT 1,
+      phone VARCHAR(50) NOT NULL DEFAULT '+91 800-562-5999',
+      email VARCHAR(255) NOT NULL DEFAULT 'support@digilocal.in',
+      toll_free VARCHAR(50) DEFAULT '1800-123-4567',
+      whatsapp VARCHAR(50) DEFAULT '+91 80056 25999',
+      address TEXT DEFAULT 'DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309',
+      working_hours VARCHAR(100) DEFAULT 'Monday to Saturday: 9:00 AM - 8:00 PM IST',
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => { });
+
+  // Seed support contacts
+  const scCheck = await query(`SELECT id FROM support_contacts WHERE id = 1`).catch(() => null);
+  if (!scCheck || !scCheck.rows || scCheck.rows.length === 0) {
+    await query(`
+      INSERT INTO support_contacts (id, phone, email, toll_free, whatsapp, address, working_hours, updated_at)
+      VALUES (1, '+91 800-562-5999', 'support@digilocal.in', '1800-123-4567', '+91 80056 25999', 'DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309', 'Monday to Saturday: 9:00 AM - 8:00 PM IST', NOW())
+    `).catch(() => {});
   }
 
+  // Seed CMS pages
+  const cmsCheck = await query(`SELECT slug FROM cms_pages WHERE slug = 'help-support'`).catch(() => null);
+  if (!cmsCheck || !cmsCheck.rows || cmsCheck.rows.length === 0) {
+    await query(`
+      INSERT INTO cms_pages (slug, title, content, meta_description, updated_at) VALUES
+      ('help-support', 'Help & Support Center', '# DigiLocal Help & Support Center\n\nWelcome to the DigiLocal Help & Support Center. We are committed to providing seamless assistance to resident customers, society secretaries, and local vendor merchants.\n\n---\n\n## 📞 Quick Contact Information\n- **Support Hotline**: +91 800-562-5999\n- **Official Email**: support@digilocal.in\n- **Toll-Free Support**: 1800-123-4567\n- **WhatsApp Support**: +91 80056 25999\n- **Working Hours**: Monday - Saturday | 9:00 AM - 8:00 PM IST\n- **Head Office**: DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309\n\n---\n\n## 📋 Frequently Asked Questions (FAQ)\n\n### 1. How do I place an order on DigiLocal?\nYou can browse verified vendor stores inside your registered residential society, select items into your cart, and checkout using Razorpay UPI, Cards, NetBanking, or Cash on Delivery.\n\n### 2. What should I do if my order is delayed?\nYou can track live delivery status on your app dashboard or contact your society delivery rider directly using the phone number listed on your order invoice. For escalation, reach our support team at **+91 800-562-5999**.\n\n### 3. How do refunds work for cancelled orders?\nRefunds for prepaid orders are processed immediately upon order cancellation and are credited back to your original payment source within **3-5 business days** via Razorpay.\n\n### 4. How can a store owner register as a Vendor?\nLocal merchants can apply by filling out the Merchant Registration form in the Vendor App or Admin Portal. Once verified by the Society Admin or Super Admin, your store will go live.\n\n### 5. Need Urgent Help?\nEmail us directly at **support@digilocal.in** with your Order ID or Ticket Number for priority assistance.', 'Official DigiLocal Help & Support, FAQ, Order Assistance, and Customer Service Contacts.', NOW()),
+      ('about-us', 'About DigiLocal', '# About DigiLocal\n\nDigiLocal is India''s leading **Hyperlocal Enclave E-Commerce Platform**, empowering residential enclave societies, gated communities, and local neighborhood merchants.\n\n---\n\n## 🚀 Our Mission\nOur mission is to bridge the gap between residential society families and trusted local store owners. By digitizing neighborhood stores, we deliver fresh groceries, daily essentials, artisan goods, and doorstep services with lightning-fast local delivery.\n\n---\n\n## 🌟 Why DigiLocal?\n- **Verified Society Stores**: All vendor merchants are vetted and approved for your gated enclave.\n- **Zero Delivery Delays**: Local neighborhood delivery within minutes directly to your flat.\n- **Direct Merchant Connect**: Chat or call store owners directly for custom requests.\n- **Secure Payments**: Powered by bank-grade Razorpay payment security and transparent order tracking.\n\n---\n\n## 🏢 Contact & Corporate Info\n- **Corporate Email**: support@digilocal.in\n- **Customer Helpline**: +91 800-562-5999\n- **Corporate Address**: DigiLocal Tech Hub, Sector 62, Noida, UP - 201309', 'Learn about DigiLocal, India premier hyperlocal enclave e-commerce and residential merchant ecosystem.', NOW()),
+      ('privacy-policy', 'Privacy Policy', '# DigiLocal Privacy Policy\n\n**Effective Date**: August 14, 2026 | **Version**: 3.2.0\n\nDigiLocal ("we", "our", or "us") respects your privacy and is dedicated to protecting your personal data. This Privacy Policy governs your use of the DigiLocal mobile applications, website, and admin platforms.\n\n---\n\n## 1. Information We Collect\n- **Account Data**: Name, email address, mobile phone number, residential society name, and flat/tower details.\n- **Transaction Data**: Order history, payment reference IDs, delivery addresses, and invoice summaries.\n- **Technical Data**: Device IP address, app operating system, and secure session tokens.\n\n---\n\n## 2. How We Use Your Data\n- To process and fulfill your daily local orders.\n- To communicate order updates, delivery notifications, and support responses.\n- To verify society residency and prevent fraudulent account creation.\n\n---\n\n## 3. Data Protection & Security\nWe enforce **256-bit SSL/TLS encryption** across all API traffic. Payment card and UPI details are securely handled by PCI-DSS compliant payment gateways (Razorpay). We **never** sell your personal information to third parties.\n\n---\n\n## 4. User Rights & Account Deletion\nYou reserve the right to request permanent deletion of your DigiLocal account and personal data at any time via App Settings or by emailing **support@digilocal.in**.\n\n---\n\n## 5. Contact Privacy Officer\nFor any privacy inquiries or data access requests, please contact our Data Protection Officer at:\n- **Email**: support@digilocal.in\n- **Phone**: +91 800-562-5999', 'DigiLocal Privacy Policy detailing data protection, encryption, user consent, and security standards.', NOW()),
+      ('terms-conditions', 'Terms & Conditions', '# DigiLocal Terms & Conditions\n\n**Effective Date**: August 14, 2026 | **Version**: 3.2.0\n\nPlease read these Terms & Conditions carefully before using the DigiLocal platform, mobile apps, or vendor services.\n\n---\n\n## 1. Acceptance of Terms\nBy creating an account on DigiLocal as a Resident User, Society Admin, or Vendor Merchant, you agree to comply with and be bound by these Terms & Conditions.\n\n---\n\n## 2. Resident Customer Terms\n- Account details provided during registration must be accurate and reflect your true society residency.\n- Payments must be completed through official platform channels (Razorpay UPI/Cards/COD).\n\n---\n\n## 3. Vendor Merchant Terms\n- Merchants must maintain accurate product pricing, stock availability, and GST compliance.\n- Orders must be fulfilled promptly in accordance with society delivery standards.\n\n---\n\n## 4. Cancellations & Dispute Resolution\n- Orders cancelled prior to merchant dispatch qualify for a 100% instant refund.\n- Any quality disputes regarding goods should be raised within **2 hours of delivery** through our Support Desk or by calling **+91 800-562-5999**.\n\n---\n\n## 5. Contact Information\nFor any legal inquiries regarding these terms:\n- **Email**: support@digilocal.in\n- **Phone**: +91 800-562-5999', 'DigiLocal Terms & Conditions of Service for residents, customers, and vendor merchants.', NOW())
+    `).catch((err) => console.error('Error seeding cms_pages:', err.message));
+  }
 }
 
 /**

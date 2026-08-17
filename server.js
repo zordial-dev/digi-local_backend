@@ -20,16 +20,11 @@ const routes = require('./src/routes');
 const app = express();
 
 // ── OWASP Security & CORS Configuration ──────────────────────
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(',');
 app.use(cors({
-    origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-            callback(null, true);
-        } else {
-            callback(new Error('Blocked by CORS policy'));
-        }
-    },
-    credentials: true
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Platform-Client', 'X-Request-ID', 'X-Idempotency-Key', 'Accept']
 }));
 
 app.use(owaspSecurityHeaders);

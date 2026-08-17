@@ -18,12 +18,16 @@ const {
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
  */
 
-// 4.1 List Vendors (Admin Panel Spec v2.0.0)
-router.get('/', (req, res, next) => {
-  if (req.query.status || req.query.tier || req.query.search || req.headers.authorization) {
-    return adminPanelController.listVendors(req, res, next);
-  }
-  return res.status(400).json({ error: 'Vendor ID required or specify search/status query params.' });
+// 4.1 List Vendors & Website Storefront Endpoints
+router.get('/', adminPanelController.listVendors);
+router.get('/all', adminPanelController.listVendors);
+router.get('/list', adminPanelController.listVendors);
+router.get('/public', adminPanelController.listVendors);
+router.get('/nearby', adminPanelController.listVendors);
+router.get('/storefront', adminPanelController.listVendors);
+router.get('/society/:societyId', (req, res, next) => {
+  req.query.society_id = req.params.societyId;
+  return adminPanelController.listVendors(req, res, next);
 });
 
 // 4.2 List Pending Merchant Requests

@@ -108,7 +108,7 @@ class NotificationService {
       }
 
       const formattedTotal = calcTotal.toFixed(2);
-      const title = `🚨 NEW ORDER #${order_id}!`;
+      const title = `NEW ORDER #${order_id}!`;
       const body = `Customer: ${finalName} • Total: ₹${formattedTotal}`;
 
       let pushResult = { success: true, mode: 'mock', fcm_token: fcmToken };
@@ -125,6 +125,7 @@ class NotificationService {
               body,
               priority: 'high',
               channelId: 'order_alerts_channel',
+              categoryId: 'NEW_ORDER_ACTIONS',
               _displayInForeground: true,
               tag: `order_${order_id}`,
               data: {
@@ -132,7 +133,8 @@ class NotificationService {
                 order_id: String(order_id),
                 type: 'NEW_ORDER',
                 vendor_id: String(vendor_id),
-                total_amount: String(formattedTotal)
+                total_amount: String(formattedTotal),
+                actions: ['ACCEPT', 'REJECT', 'MUTE']
               },
               ttl: 60,
               expiration: Math.floor(Date.now() / 1000) + 60
@@ -172,14 +174,16 @@ class NotificationService {
                   sound: 'new_order_alert_sound',
                   defaultSound: true,
                   priority: 'max',
-                  visibility: 'public'
+                  visibility: 'public',
+                  clickAction: 'NEW_ORDER_ACTIONS'
                 }
               },
               apns: {
                 payload: {
                   aps: {
                     sound: 'new_order_alert_sound.caf',
-                    badge: 1
+                    badge: 1,
+                    category: 'NEW_ORDER_ACTIONS'
                   }
                 }
               },
@@ -188,12 +192,13 @@ class NotificationService {
                 order_id: String(order_id),
                 vendor_id: String(vendor_id),
                 total_amount: String(formattedTotal),
-                sound: 'new_order_alert_sound'
+                sound: 'new_order_alert_sound',
+                actions: JSON.stringify(['ACCEPT', 'REJECT', 'MUTE'])
               }
             };
 
             const messageId = await admin.messaging().send(message);
-            console.log(`✅ [FCM PUSH SUCCESS] Sent to Vendor #${vendor_id} | Message ID: ${messageId}`);
+            console.log(`[FCM PUSH SUCCESS] Sent to Vendor #${vendor_id} | Message ID: ${messageId}`);
             pushResult = { success: true, mode: 'fcm', service: 'fcm', messageId, fcm_token: fcmToken };
           } catch (fcmErr) {
             console.error('[NotificationService] FCM send error:', fcmErr.message);
@@ -204,7 +209,7 @@ class NotificationService {
           pushResult = { success: true, mode: 'mock_fallback', service: 'fcm', fcm_token: fcmToken };
         }
       } else {
-        console.warn(`⚠️ [NotificationService] No push token registered for Vendor #${vendor_id}`);
+        console.warn(`[NotificationService] No push token registered for Vendor #${vendor_id}`);
         pushResult = { success: false, mode: 'no_token', message: `No device push_token registered in DB for vendor #${vendor_id}` };
       }
 

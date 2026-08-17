@@ -266,6 +266,16 @@ async function registerUser(req, res) {
     const socRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [socId]);
     const societyName = socRes.rows[0]?.society_name || 'Omaxe Greenwood Residency';
 
+    // Dispatch welcome email asynchronously
+    const { sendAccountRegistrationEmail } = require('../../templates/accountRegistrationEmail');
+    sendAccountRegistrationEmail('user', {
+      name: userName,
+      email: email || `${userId}@digilocal.internal`,
+      phone: userPhone,
+      society_name: societyName,
+      flat: flat || 'Tower A-402'
+    });
+
     const tokens = generateTokens({ id: userId, role: 'user', phone: userPhone }, 'user');
 
     logger.auth(`User registered successfully: ${userName} (${userPhone})`, {
@@ -301,16 +311,20 @@ async function registerUser(req, res) {
 async function getUserOrders(req, res) {
   try {
     const { userId } = req.params;
-    const isPhone = /^\d{10}$/.test(userId);
+    const cleanPhone = String(userId).trim().replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
 
-    let userObjId = userId;
-    if (isPhone) {
-      const uRes = await query(`SELECT user_id FROM users WHERE phone = ? LIMIT 1`, [userId]);
-      if (uRes.rows && uRes.rows.length > 0) {
-        userObjId = uRes.rows[0].user_id;
-      }
-    }
+    const uRes = await query(
+      `SELECT user_id FROM users WHERE user_id = ? OR phone = ? OR phone LIKE ?`,
+      [userId, userId, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
 
+    const matchedUserIds = Array.from(new Set([
+      userId,
+      ...(uRes.rows || []).map(r => r.user_id)
+    ]));
+
+    const placeholders = matchedUserIds.map(() => '?').join(',');
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
               COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address
@@ -318,37 +332,62 @@ async function getUserOrders(req, res) {
        LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
        LEFT JOIN societies s ON o.society_id = s.society_id
        LEFT JOIN users u ON o.user_id = u.user_id
-       WHERE o.user_id = ? OR u.phone = ? OR o.user_id = ?
+       WHERE o.user_id IN (${placeholders}) OR u.phone = ? OR u.phone LIKE ?
        ORDER BY o.order_id DESC`,
-      [userId, userId, userObjId]
+      [...matchedUserIds, userId, `%${last10}`]
     );
 
     const orders = [];
     for (const ord of (ordersRes.rows || [])) {
       const detailsRes = await query(
-        `SELECT item_name, quantity, COALESCE(price, unit_price, 0) as price FROM order_details WHERE order_id = ?`,
+        `SELECT item_id, item_name, quantity, COALESCE(price, unit_price, 0) as price, COALESCE(unit_price, price, 0) as unit_price FROM order_details WHERE order_id = ?`,
         [ord.order_id]
       ).catch(() => ({ rows: [] }));
 
+      const mappedItems = (detailsRes.rows || []).map(i => ({
+        item_id: Number(i.item_id || 1),
+        item_name: i.item_name || 'Item',
+        quantity: Number(i.quantity || 1),
+        unit_price: Number(i.unit_price || i.price || 0),
+        price: Number(i.price || i.unit_price || 0),
+        menuItem: {
+          name: i.item_name || 'Item',
+          price: Number(i.price || i.unit_price || 0)
+        }
+      }));
+
+      const statusUpper = String(ord.status || 'PLACED').toUpperCase();
+
       orders.push({
         order_id: String(ord.order_id),
+        id: String(ord.order_id),
         user_id: String(ord.user_id),
+        customer_name: ord.customer_name || 'Aarushi',
+        phone: ord.phone || ord.customer_phone || '+919784319840',
+        user_phone: ord.phone || ord.customer_phone || '+919784319840',
         vendor_id: Number(ord.vendor_id),
         store_name: ord.store_name || 'FreshMart Grocery & Organic',
-        total_amount: Number(ord.total_amount || 0),
-        status: ord.status || 'PENDING',
-        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
-        society_name: ord.society_name || 'Omaxe Greenwood Residency',
+        store_logo: ord.store_logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=120&auto=format&fit=crop&q=80',
+        society_name: ord.society_name || 'Greenwood Residency',
         delivery_address: ord.delivery_address || 'Tower A-402',
-        items: (detailsRes.rows || []).map(i => ({
-          item_name: i.item_name || 'Item',
-          quantity: Number(i.quantity || 1),
-          price: Number(i.price || 0)
-        }))
+        status: statusUpper,
+        status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
+        payment_status: ord.payment_status || 'PAID',
+        payment_method: ord.payment_method || 'COD / WhatsApp',
+        total_amount: Number(ord.total_amount || 0),
+        date: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        items: mappedItems
       });
     }
 
-    res.status(200).json(orders);
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      total: orders.length,
+      data: orders,
+      orders: orders
+    });
   } catch (err) {
     console.error('Error fetching user orders:', err);
     res.status(500).json({ error: 'Failed to fetch user orders' });
@@ -398,14 +437,22 @@ async function getUserProfile(req, res) {
  */
 async function deleteAccount(req, res) {
   try {
-    const userId = req.params.userId || req.user?.id || req.query.userId || req.body?.user_id || req.body?.userId;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized: User ID is required' });
+    const target = req.params.userId || req.user?.id || req.user?.user_id || req.query.userId || req.query.phone || req.body?.user_id || req.body?.userId || req.body?.phone || req.body?.mobile;
+    
+    if (!target) {
+      return res.status(400).json({ error: 'Unauthorized: User ID or phone number is required for account deletion' });
     }
 
+    const cleanTarget = String(target).trim();
+    const cleanEmail = cleanTarget.toLowerCase();
+
     const userRes = await query(
-      `SELECT user_id, name, phone FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
-      [userId, String(userId)]
+      `SELECT user_id, name, phone, email FROM users 
+       WHERE user_id = ? 
+          OR CAST(user_id AS TEXT) = ? 
+          OR phone = ? 
+          OR (LOWER(email) = ? AND email != '')`,
+      [cleanTarget, cleanTarget, cleanTarget, cleanEmail]
     );
 
     if (userRes.rows.length === 0) {
@@ -414,18 +461,25 @@ async function deleteAccount(req, res) {
 
     const user = userRes.rows[0];
 
-    // Delete user account from database
-    await query(`DELETE FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userId, String(userId)]);
+    // Permanently delete user account record from database
+    await query(
+      `DELETE FROM users 
+       WHERE user_id = ? 
+          OR CAST(user_id AS TEXT) = ? 
+          OR phone = ? 
+          OR (LOWER(email) = ? AND email != '')`,
+      [user.user_id, String(user.user_id), user.phone, (user.email || '').toLowerCase()]
+    );
 
     // Clear cache
     const memoryCache = require('../../utils/cache');
     memoryCache.clear();
 
-    logger.auth(`User account deleted: ${user.name} (ID: ${user.user_id})`, { userId: user.user_id });
+    logger.auth(`User account permanently deleted: ${user.name} (ID: ${user.user_id}, Phone: ${user.phone})`, { userId: user.user_id });
 
     res.status(200).json({
       success: true,
-      message: `User account for "${user.name}" (ID: ${user.user_id}) deleted successfully.`,
+      message: `User account for "${user.name}" (ID: ${user.user_id}, Phone: ${user.phone}) deleted permanently.`,
       user_id: String(user.user_id)
     });
   } catch (err) {

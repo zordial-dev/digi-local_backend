@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const ordersController = require('../../controllers/User/ordersController');
 
+// GET /api/orders (Query Params: phone, user_id, vendor_id)
+router.get('/', ordersController.getOrdersByQuery);
+
 // D1. Fetch Resident User Orders
 router.get('/user/:userId', ordersController.getUserOrders);
 

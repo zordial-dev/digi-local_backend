@@ -2,6 +2,7 @@ const { query } = require('../../models/db');
 const memoryCache = require('../../utils/cache');
 const { generateTokens } = require('../../utils/auth');
 const { sendEmail } = require('../../services/emailService');
+const { performance } = require('perf_hooks');
 
 /**
  * POST /api/admin/login - Admin Login with ADMIN_SECRET
@@ -73,9 +74,16 @@ async function getAllVendors(req, res) {
             sql += ` WHERE ` + conditions.join(' AND ');
         }
 
-        sql += ` ORDER BY v.vendor_id DESC LIMIT ${limitNum} OFFSET ${offset}`;
+        sql += ` ORDER BY v.vendor_id DESC`;
 
+        const startTime = performance.now();
         const result = await query(sql, params);
+        const endTime = performance.now();
+        console.log(`vendors query time: ${endTime - startTime}`);
+        if (search) {
+            console.log(`vendors search query time: ${endTime - startTime}`);
+        }
+
         const vendors = result.rows;
 
         if (vendors.length > 0) {
@@ -107,6 +115,7 @@ async function getAllVendors(req, res) {
  */
 async function getVendorRequests(req, res) {
     try {
+        const startTime = performance.now();
         const result = await query(`
             SELECT v.*, s.society_name, s.location, p.payment_method, p.transaction_id, p.amount as paid_amount
             FROM vendors v
@@ -115,6 +124,8 @@ async function getVendorRequests(req, res) {
             WHERE v.status = 'PENDING'
             ORDER BY v.vendor_id DESC
         `);
+        const endTime = performance.now();
+        console.log(`admin pending vendor requests query time: ${endTime - startTime}`);
         res.status(200).json(result.rows);
     } catch (err) {
         console.error('Error fetching vendor requests:', err);

@@ -216,6 +216,179 @@
           "403": { "$ref": "#/components/responses/403Error" }
         }
       }
+    },
+    "/api/admin/login": {
+      "post": {
+        "summary": "Admin Login (Super Admin & Sub-Admins)",
+        "tags": ["Admin Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "email": "admin@digilocal.com",
+                "password": "Password123!"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authentication successful",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Authentication successful.",
+                  "data": {
+                    "user": { "id": "usr-admin-01", "name": "Super Administrator", "role": "SUPER_ADMIN", "permissions": ["ALL"] },
+                    "access_token": "eyJhbGciOiJIUzI1Ni...",
+                    "refresh_token": "def456uvw789...",
+                    "expires_in": 900
+                  },
+                  "timestamp": "2026-08-14T12:30:00.000Z",
+                  "request_id": "req_99f2b801"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/societies": {
+      "get": {
+        "summary": "List All Societies with Status Filtering",
+        "tags": ["Admin Societies"],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["all", "active", "suspended", "pending"] } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Societies list retrieved successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": [{ "society_id": 1, "society_name": "Greenwood Residency", "status": "active" }],
+                  "pagination": { "total": 36, "page": 1, "limit": 20, "total_pages": 2, "has_next": true, "has_prev": false }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Register New Society",
+        "tags": ["Admin Societies"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "society_name": "Grand Sapphire Towers",
+                "location": "Sector 128, Noida, UP",
+                "secretary_name": "Vikramaditya Roy",
+                "secretary_mobile": "9810012345",
+                "pincode": "201304"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Society registered successfully" }
+        }
+      }
+    },
+    "/api/admin/vendors": {
+      "get": {
+        "summary": "List All Vendors with Status & Search Filtering",
+        "tags": ["Admin Vendor Management"],
+        "parameters": [
+          { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Vendors list retrieved successfully" }
+        }
+      }
+    },
+    "/api/admin/subscriptions/stats": {
+      "get": {
+        "summary": "Subscription Telemetry & MRR Summary",
+        "tags": ["Admin Subscriptions"],
+        "responses": {
+          "200": {
+            "description": "Telemetry stats retrieved",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "mrr": 58450.00,
+                    "arr": 701400.00,
+                    "active_subscriptions": 980,
+                    "expiring_soon_15_days": 14,
+                    "tier_breakdown": { "free": 120, "pro": 650, "enterprise": 210 }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/payments/refund": {
+      "post": {
+        "summary": "Process Refund via Payment Gateway",
+        "tags": ["Admin Payments & Revenue"],
+        "parameters": [
+          { "name": "X-Idempotency-Key", "in": "header", "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": { "transaction_id": "TXN-9001", "amount": 450.00, "reason": "Damaged goods" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Refund processed successfully" }
+        }
+      }
+    },
+    "/api/admin/notifications/broadcast": {
+      "post": {
+        "summary": "Broadcast System Announcement to Vendors / Users",
+        "tags": ["Admin Real-Time Notifications"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "title": "Platform Scheduled Maintenance",
+                "message": "DigiLocal will undergo scheduled maintenance tonight 2 AM - 4 AM.",
+                "target_audience": "ALL_VENDORS"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "System broadcast announcement dispatched successfully" }
+        }
+      }
+    },
+    "/api/admin/reports/telemetry": {
+      "get": {
+        "summary": "Executive Analytics Telemetry Metrics",
+        "tags": ["Admin Executive Analytics"],
+        "responses": {
+          "200": { "description": "Executive telemetry metrics retrieved" }
+        }
+      }
     }
   },
   "components": {
