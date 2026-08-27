@@ -28,7 +28,12 @@ router.delete('/profile', authenticateToken, usersController.deleteAccount);
 router.delete('/me', authenticateToken, usersController.deleteAccount);
 router.delete('/:userId', authenticateToken, usersController.deleteAccount);
 
+const enquiryController = require('../../controllers/Vendor/enquiryController');
+
 // B3. Fetch Resident User Orders
 router.get('/:userId/orders', usersController.getUserOrders);
+
+// B4. Fetch Resident User Service Enquiries
+router.get('/:userId/enquiries', enquiryController.getUserEnquiries);
 
 module.exports = router;

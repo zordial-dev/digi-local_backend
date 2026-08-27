@@ -24,10 +24,16 @@ class StringSchema {
     this._optional = false;
     this._trim = true;
     this._enum = null;
+    this._defaultValue = undefined;
   }
 
   optional() {
     this._optional = true;
+    return this;
+  }
+
+  default(val) {
+    this._defaultValue = val;
     return this;
   }
 
@@ -59,6 +65,7 @@ class StringSchema {
 
   parse(val, path = '') {
     if (val === undefined || val === null || val === '') {
+      if (this._defaultValue !== undefined) return this._defaultValue;
       if (this._optional) return undefined;
       throw [{ field: path, message: 'Field is required' }];
     }
@@ -99,10 +106,16 @@ class NumberSchema {
     this._max = null;
     this._positive = false;
     this._optional = false;
+    this._defaultValue = undefined;
   }
 
   optional() {
     this._optional = true;
+    return this;
+  }
+
+  default(val) {
+    this._defaultValue = val;
     return this;
   }
 
@@ -124,6 +137,7 @@ class NumberSchema {
 
   parse(val, path = '') {
     if (val === undefined || val === null || val === '') {
+      if (this._defaultValue !== undefined) return this._defaultValue;
       if (this._optional) return undefined;
       throw [{ field: path, message: 'Field is required' }];
     }
@@ -157,6 +171,7 @@ class BooleanSchema {
   constructor(coerce = false) {
     this._coerce = coerce;
     this._optional = false;
+    this._defaultValue = undefined;
   }
 
   optional() {
@@ -164,8 +179,14 @@ class BooleanSchema {
     return this;
   }
 
+  default(val) {
+    this._defaultValue = val;
+    return this;
+  }
+
   parse(val, path = '') {
     if (val === undefined || val === null || val === '') {
+      if (this._defaultValue !== undefined) return this._defaultValue;
       if (this._optional) return undefined;
       throw [{ field: path, message: 'Field is required' }];
     }
@@ -188,10 +209,16 @@ class ArraySchema {
     this._elementSchema = elementSchema;
     this._min = null;
     this._optional = false;
+    this._defaultValue = undefined;
   }
 
   optional() {
     this._optional = true;
+    return this;
+  }
+
+  default(val) {
+    this._defaultValue = val;
     return this;
   }
 
@@ -202,6 +229,7 @@ class ArraySchema {
 
   parse(val, path = '') {
     if (val === undefined || val === null) {
+      if (this._defaultValue !== undefined) return this._defaultValue;
       if (this._optional) return undefined;
       throw [{ field: path, message: 'Field is required' }];
     }
@@ -234,10 +262,16 @@ class ObjectSchema {
     this._shape = shape;
     this._optional = false;
     this._passthrough = false;
+    this._defaultValue = undefined;
   }
 
   optional() {
     this._optional = true;
+    return this;
+  }
+
+  default(val) {
+    this._defaultValue = val;
     return this;
   }
 
@@ -248,6 +282,7 @@ class ObjectSchema {
 
   parse(val, path = '') {
     if (val === undefined || val === null) {
+      if (this._defaultValue !== undefined) return this._defaultValue;
       if (this._optional) return undefined;
       throw [{ field: path || 'root', message: 'Expected object payload' }];
     }
@@ -281,6 +316,7 @@ class UnionSchema {
   constructor(schemas) {
     this._schemas = schemas;
     this._optional = false;
+    this._defaultValue = undefined;
   }
 
   optional() {
@@ -288,8 +324,14 @@ class UnionSchema {
     return this;
   }
 
+  default(val) {
+    this._defaultValue = val;
+    return this;
+  }
+
   parse(val, path = '') {
     if (val === undefined || val === null || val === '') {
+      if (this._defaultValue !== undefined) return this._defaultValue;
       if (this._optional) return undefined;
       throw [{ field: path, message: 'Field is required' }];
     }
@@ -304,6 +346,31 @@ class UnionSchema {
   }
 }
 
+class AnySchema {
+  constructor() {
+    this._optional = false;
+    this._defaultValue = undefined;
+  }
+
+  optional() {
+    this._optional = true;
+    return this;
+  }
+
+  default(val) {
+    this._defaultValue = val;
+    return this;
+  }
+
+  parse(val, path = '') {
+    if (val === undefined || val === null) {
+      if (this._defaultValue !== undefined) return this._defaultValue;
+      if (this._optional) return undefined;
+    }
+    return val;
+  }
+}
+
 const z = {
   string: () => new StringSchema(),
   number: () => new NumberSchema(false),
@@ -312,6 +379,7 @@ const z = {
   object: (shape) => new ObjectSchema(shape),
   union: (schemas) => new UnionSchema(schemas),
   enum: (values, msg) => new StringSchema().enum(values, msg),
+  any: () => new AnySchema(),
   coerce: {
     number: () => new NumberSchema(true),
     boolean: () => new BooleanSchema(true)

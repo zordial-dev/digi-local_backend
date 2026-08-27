@@ -56,7 +56,7 @@ async function verifyFirebaseToken(idToken) {
       const payloadB64 = idToken.split('.')[1];
       const payloadStr = Buffer.from(payloadB64, 'base64').toString('utf8');
       const decodedToken = JSON.parse(payloadStr);
-      
+
       console.log(`🔥 [FIREBASE DEV TOKEN DECODED] UID: ${decodedToken.user_id || decodedToken.sub}`);
       return {
         uid: decodedToken.user_id || decodedToken.sub,

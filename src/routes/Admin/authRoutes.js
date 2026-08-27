@@ -16,4 +16,7 @@ router.post('/refresh', adminPanelController.refreshToken);
 // GET /api/auth/me - Get Current User Profile & RBAC Powers
 router.get('/me', authenticateAdminToken, adminPanelController.getMe);
 
+// POST /api/auth/logout - Admin Session Logout
+router.post('/logout', adminPanelController.logout);
+
 module.exports = router;

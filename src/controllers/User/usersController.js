@@ -18,31 +18,40 @@ async function sendOtp(req, res) {
 
     const cleanTarget = String(target).trim();
     const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
-    const last10 = cleanPhoneDigits.slice(-10);
-    const mode = purpose || type;
+    const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+    const mode = (purpose || type || '').toLowerCase();
 
-    if (mode === 'login' || mode === 'check_login') {
-      const userRes = await query(
-        `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone LIKE ?`,
-        [cleanTarget, last10, `%${last10}`]
-      );
-      if (!userRes.rows || userRes.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          exists: false,
-          error: 'No account found with this mobile number. Please register your account first.'
-        });
-      }
-    } else if (mode === 'register' || mode === 'check_register') {
-      const userRes = await query(
-        `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone LIKE ?`,
-        [cleanTarget, last10, `%${last10}`]
-      );
-      if (userRes.rows && userRes.rows.length > 0) {
+    const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
+
+    // Verify user/vendor account existence in database
+    const userRes = await query(
+      `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
+      [cleanTarget, cleanPhoneDigits, last10, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
+
+    const vendorRes = await query(
+      `SELECT vendor_id FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR phone_number LIKE ?`,
+      [cleanTarget, cleanPhoneDigits, last10, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
+
+    const userExists = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
+
+    if (isRegistrationIntent) {
+      if (userExists) {
         return res.status(400).json({
           success: false,
           exists: true,
           error: 'An account with this mobile number already exists. Please log in instead.'
+        });
+      }
+    } else {
+      // Default / Login intent: Must verify account exists in DB before sending OTP
+      if (!userExists) {
+        console.log(`⚠️ [SEND OTP BLOCKED] Account "${cleanTarget}" not found in database. Disallowing OTP send.`);
+        return res.status(404).json({
+          success: false,
+          exists: false,
+          error: 'No account found with this mobile number. Please register your account first.'
         });
       }
     }
@@ -77,11 +86,12 @@ async function checkPhone(req, res) {
     }
 
     const cleanPhone = rawTarget.replace(/[^0-9+]/g, '');
-    const last10 = cleanPhone.slice(-10);
+    const cleanPhoneDigits = rawTarget.replace(/[^0-9]/g, '');
+    const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
 
     const userRes = await query(
-      `SELECT user_id, name, phone FROM users WHERE phone = ? OR phone = ? OR phone LIKE ?`,
-      [cleanPhone, last10, `%${last10}`]
+      `SELECT user_id, name, phone FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
+      [rawTarget, cleanPhone, last10, `%${last10}`]
     );
 
     const exists = userRes.rows && userRes.rows.length > 0;
@@ -166,13 +176,16 @@ async function loginUser(req, res) {
       return res.status(400).json({ error: 'Either password or OTP is required for login' });
     }
 
+    const cleanPhoneDigits = userPhone.replace(/[^0-9]/g, '');
+    const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+
     // Database Lookup for Phone Number
     let userRes = await query(
       `SELECT u.*, s.society_name 
        FROM users u 
        LEFT JOIN societies s ON u.society_id = s.society_id 
-       WHERE u.phone = ? OR u.phone = ? OR u.phone LIKE ?`,
-      [userPhone, userPhone.slice(-10), `%${userPhone.slice(-10)}`]
+       WHERE u.phone = ? OR u.phone = ? OR u.phone = ? OR u.phone LIKE ?`,
+      [userPhone, cleanPhoneDigits, last10, `%${last10}`]
     );
 
     if (userRes.rows.length === 0) {
@@ -185,8 +198,8 @@ async function loginUser(req, res) {
     const user = userRes.rows[0];
 
     if (password && !loginOtp) {
-      const matchRes = await comparePassword(password, user.password_hash);
-      if (!matchRes.matches) {
+      const matchRes = await comparePassword(password, user.password_hash || user.password);
+      if (!matchRes || !matchRes.matches) {
         return res.status(401).json({ error: 'Invalid mobile number or password' });
       }
     }
@@ -248,7 +261,13 @@ async function registerUser(req, res) {
       return res.status(400).json({ error: 'Mobile number is required for user registration' });
     }
 
-    const existing = await query(`SELECT user_id FROM users WHERE phone = ?`, [userPhone]);
+    const cleanPhoneDigits = userPhone.replace(/[^0-9]/g, '');
+    const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+
+    const existing = await query(
+      `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
+      [userPhone, cleanPhoneDigits, last10, `%${last10}`]
+    );
     if (existing.rows && existing.rows.length > 0) {
       return res.status(400).json({ error: 'An account with this mobile number already exists' });
     }
@@ -438,7 +457,7 @@ async function getUserProfile(req, res) {
 async function deleteAccount(req, res) {
   try {
     const target = req.params.userId || req.user?.id || req.user?.user_id || req.query.userId || req.query.phone || req.body?.user_id || req.body?.userId || req.body?.phone || req.body?.mobile;
-    
+
     if (!target) {
       return res.status(400).json({ error: 'Unauthorized: User ID or phone number is required for account deletion' });
     }

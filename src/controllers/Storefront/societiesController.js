@@ -12,7 +12,7 @@ async function getAllSocieties(req, res) {
     const isPaginated = page !== undefined || limit !== undefined;
 
     const pageNum = parseInt(page || 1, 10);
-    const limitNum = parseInt(limit || 25, 10);
+    const limitNum = parseInt(limit || 24, 10);
     const offset = (pageNum - 1) * limitNum;
 
     const startTime = performance.now();
@@ -203,7 +203,7 @@ async function getSocietyVendors(req, res) {
     const isPaginated = page !== undefined || limit !== undefined;
 
     const pageNum = parseInt(page || 1, 10);
-    const limitNum = parseInt(limit || 25, 10);
+    const limitNum = parseInt(limit || 24, 10);
     const offset = (pageNum - 1) * limitNum;
 
     const startTime = performance.now();
@@ -218,8 +218,9 @@ async function getSocietyVendors(req, res) {
     const params = [];
 
     if (!isAll) {
-      sql += ` AND v.society_id = ?`;
-      params.push(id);
+      const socIdStr = String(id);
+      sql += ` AND (v.society_id = ? OR (v.is_global_coverage = TRUE AND (v.selected_zones::text LIKE ? OR v.selected_zones::text LIKE ?)))`;
+      params.push(id, `%"zone_id":${socIdStr}%`, `%"zone_id":"${socIdStr}"%`);
     }
 
     if (search) {

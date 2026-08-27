@@ -153,8 +153,9 @@ async function query(sqlText, params = []) {
         else if (uSql.includes('INTO SUBSCRIPTIONS')) insertedId = firstRow.subscription_id || firstRow.id;
         else if (uSql.includes('INTO PAYMENTS')) insertedId = firstRow.payment_id || firstRow.id;
         else if (uSql.includes('INTO CUSTOMERS')) insertedId = firstRow.customer_id || firstRow.id;
+        else if (uSql.includes('INTO ENQUIRIES')) insertedId = firstRow.enquiry_id || firstRow.id;
         else {
-          insertedId = firstRow.id || firstRow.vendor_id || firstRow.society_id || firstRow.item_id || firstRow.order_id || firstRow.subscription_id || firstRow.payment_id || null;
+          insertedId = firstRow.id || firstRow.enquiry_id || firstRow.vendor_id || firstRow.society_id || firstRow.item_id || firstRow.order_id || firstRow.subscription_id || firstRow.payment_id || null;
         }
       }
 
@@ -194,7 +195,7 @@ async function withTransaction(callback) {
         if (err) return reject(new DatabaseError('PG Transaction Query Failed', err, sqlText));
         const firstRow = result.rows && result.rows[0] ? result.rows[0] : null;
         const insertedId = firstRow ? (
-          firstRow.society_id || firstRow.vendor_id || firstRow.customer_id ||
+          firstRow.enquiry_id || firstRow.society_id || firstRow.vendor_id || firstRow.customer_id ||
           firstRow.order_id || firstRow.item_id || firstRow.subscription_id ||
           firstRow.payment_id || firstRow.id || null
         ) : null;
@@ -331,15 +332,76 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS push_token TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS fcm_token TEXT`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_token TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_number VARCHAR(50)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(50)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS ifsc_code VARCHAR(20)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS ifsc VARCHAR(20)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_holder_name VARCHAR(255)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS upi_id VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS qr_code_url TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS upi_qr_code TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS qr_code TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS whatsapp_number VARCHAR(20)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS accepted_payment_methods VARCHAR(255) DEFAULT 'COD,UPI,BANK_TRANSFER,QR_CODE'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS payment_instructions TEXT`,
 
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_type VARCHAR(50) DEFAULT 'android'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'android'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS vendor_type VARCHAR(20) DEFAULT 'product'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS can_add_items BOOLEAN DEFAULT TRUE`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS location_type VARCHAR(50) DEFAULT 'society'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS is_global_coverage BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS delivery_radius_km DECIMAL(5,2) DEFAULT 0.00`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS selected_zones JSONB DEFAULT '[]'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7) DEFAULT 28.6270`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7) DEFAULT 77.3720`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS location_address TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS location VARCHAR(255)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS city VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS pincode VARCHAR(20)`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7) DEFAULT 28.6270`,
+    `ALTER TABLE societies ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7) DEFAULT 77.3720`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
     `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
     `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`
   ];
 
   await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => { })));
+
+  // Ensure locations table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS locations (
+      location_id BIGSERIAL PRIMARY KEY,
+      area VARCHAR(255) NOT NULL,
+      city VARCHAR(100) NOT NULL,
+      state VARCHAR(100) NOT NULL,
+      pincode VARCHAR(20) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `).catch(() => { });
+
+  // Ensure enquiries table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS enquiries (
+      enquiry_id BIGSERIAL PRIMARY KEY,
+      vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+      user_id VARCHAR(100),
+      user_name VARCHAR(255) NOT NULL,
+      user_phone VARCHAR(50) NOT NULL,
+      society_id BIGINT,
+      society_name VARCHAR(255),
+      sector VARCHAR(100),
+      service_type VARCHAR(255),
+      preferred_time VARCHAR(100),
+      description TEXT,
+      issue_photos TEXT[] DEFAULT '{}',
+      status VARCHAR(50) DEFAULT 'NEW',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => { });
 
   // Ensure sub_admins table
   await pgPool.query(`
@@ -397,6 +459,17 @@ async function seedInitialData() {
       await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_name', 'DigiLocal')`).catch(() => {});
     }
   } catch (_) { }
+
+  const socCheck = await query(`SELECT society_id FROM societies WHERE society_id = 1`);
+  if (!socCheck.rows || socCheck.rows.length === 0) {
+    await query(`INSERT INTO societies (society_id, society_name, location, latitude, longitude, secretary_name, secretary_mobile, pincode) VALUES
+      (1, 'Omaxe Greenwood Residency', 'Sector 62, Noida', 28.6270, 77.3720, 'Ramesh Gupta', '9876543210', '201309'),
+      (2, 'Apex Golf Avenue', 'Sector 1, Greater Noida West', 28.6320, 77.3780, 'Suresh Sharma', '9876543211', '201306'),
+      (3, 'Cleo County', 'Sector 121, Noida', 28.6210, 77.3650, 'Anil Verma', '9876543212', '201307'),
+      (4, 'Supertech Capetown', 'Sector 74, Noida', 28.6100, 77.3850, 'Vikram Singh', '9876543213', '201301'),
+      (5, 'Gaur City 1', 'Sector 4, Greater Noida West', 28.6050, 77.4250, 'Pradeep Kumar', '9876543214', '201318')
+    `).catch(() => {});
+  }
 
   const { hashPassword } = require('../utils/auth');
   const pwdHash = await hashPassword('password123');
@@ -516,9 +589,14 @@ async function removeDuplicateVendors() {
 
       const sKey = `${societyId}:${sNameNorm}`;
 
+      // Skip deduplication for core seed vendors (IDs 1-20, 79, 89, 90, 104) to strictly protect production & seed data
+      const isProtectedSeedVendor = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 79, 89, 90, 104].includes(currentVendorId);
+
       if (seenStoreNames.has(sKey)) {
         const keptVendorId = seenStoreNames.get(sKey);
-        duplicatesToRemove.push({ duplicateVendorId: currentVendorId, keptVendorId });
+        if (!isProtectedSeedVendor) {
+          duplicatesToRemove.push({ duplicateVendorId: currentVendorId, keptVendorId });
+        }
       } else {
         seenStoreNames.set(sKey, currentVendorId);
       }

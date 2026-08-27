@@ -7,34 +7,76 @@ const { normalizeImageUrl, resolveImageUrl } = require('../../utils/imageUtils')
  * Supports: camera photos (JPEG, HEIC, no-extension), gallery picks, file picker
  */
 function uploadImage(req, res) {
-    if (!req.file) {
-        // Check if no file was sent at all vs. multer silently skipped it
-        const contentType = req.headers['content-type'] || '';
-        if (!contentType.includes('multipart/form-data')) {
-            return res.status(400).json({
-                error: 'Request must be multipart/form-data with field name "image"',
-                hint: 'Set Content-Type: multipart/form-data and use field name "image" for the file',
-                code: 'WRONG_CONTENT_TYPE'
+    const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+    if (!file) {
+        const bodyUrl = req.body?.image_url || req.body?.logo_url || req.body?.logo || req.body?.image;
+        if (bodyUrl) {
+            return res.json({
+                success: true,
+                image_url: bodyUrl,
+                logo_url: bodyUrl,
+                logo: bodyUrl
             });
         }
         return res.status(400).json({
-            error: 'No image file received. Send the photo with field name: image',
-            hint: 'Make sure the field name is exactly "image" (not "photo", "file", "img", etc.)',
+            error: 'No image file or URL received.',
+            hint: 'Upload camera/gallery photo via multipart form-data or pass image_url string.',
             code: 'NO_FILE_RECEIVED'
         });
     }
 
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const imageUrl = `${baseUrl}/uploads/${req.file.filename}`;
+    const imageUrl = `${baseUrl}/uploads/${file.filename}`;
 
     res.json({
         success: true,
         image_url: imageUrl,
-        filename: req.file.filename,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-        original_name: req.file.originalname || 'camera_photo'
+        logo_url: imageUrl,
+        logo: imageUrl,
+        filename: file.filename,
+        size: file.size,
+        mimetype: file.mimetype,
+        original_name: file.originalname || 'shop_logo'
     });
+}
+
+/**
+ * POST/PUT /api/vendorPanel/:vendorId/logo or /api/vendors/:vendorId/logo - Directly upload & set shop logo
+ */
+async function updateVendorLogo(req, res) {
+    try {
+        const vendorId = req.params.vendorId || req.user?.vendor_id || req.user?.id;
+        if (!vendorId) {
+            return res.status(400).json({ error: 'Vendor ID is required' });
+        }
+
+        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+        let logoUrl = req.body?.logo_url || req.body?.logo || req.body?.image_url || req.body?.image;
+
+        if (file) {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            logoUrl = `${baseUrl}/uploads/${file.filename}`;
+        }
+
+        if (!logoUrl) {
+            return res.status(400).json({ error: 'Please provide a logo image file (camera photo/gallery file) or logo_url string' });
+        }
+
+        await query(`UPDATE vendors SET logo = ? WHERE vendor_id = ? OR public_id = ?`, [logoUrl, vendorId, String(vendorId)]);
+        const memoryCache = require('../../utils/cache');
+        memoryCache.clear();
+
+        res.status(200).json({
+            success: true,
+            message: 'Shop logo updated successfully!',
+            vendor_id: vendorId,
+            logo: logoUrl,
+            logo_url: logoUrl
+        });
+    } catch (err) {
+        console.error('Error updating vendor logo:', err);
+        res.status(500).json({ error: err.message || 'Failed to update shop logo' });
+    }
 }
 
 /**
@@ -62,6 +104,20 @@ async function getDashboard(req, res) {
 async function addItem(req, res) {
     try {
         const { vendorId } = req.params;
+
+        // Verify if vendor is allowed to add catalog items (Product vs Service split)
+        const vendorCheck = await query(`SELECT vendor_type, can_add_items FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`, [vendorId, String(vendorId)]);
+        if (vendorCheck.rows && vendorCheck.rows.length > 0) {
+            const v = vendorCheck.rows[0];
+            if (v.can_add_items === false || v.vendor_type === 'service') {
+                return res.status(403).json({
+                    error: 'Item catalog is disabled for Service Providers. Service requests are managed via the Service Enquiries panel.',
+                    can_add_items: false,
+                    vendor_type: v.vendor_type
+                });
+            }
+        }
+
         const { item_name, description, price, stock, category, unit, is_available } = req.body;
         const rawImg = req.body.image_url || req.body.imageUrl || req.body.image || req.body.item_image || req.body.itemImage || req.body.photo || req.body.photo_url;
 
@@ -293,8 +349,133 @@ async function deleteStore(req, res) {
     }
 }
 
+/**
+ * PUT /api/vendorPanel/:vendorId/coverage or /api/vendors/:vendorId/coverage
+ * Updates vendor baseline location type, global coverage toggle, delivery radius, and zone selections.
+ */
+async function updateVendorCoverage(req, res) {
+    try {
+        const vendorId = req.params.vendorId || req.params.id || req.user?.vendor_id || req.user?.id;
+        if (!vendorId) {
+            return res.status(400).json({ error: 'Vendor ID is required' });
+        }
+
+        const { location_type, is_global_coverage, delivery_radius_km, selected_zones, latitude, longitude, location_address, address, location, area, city, state, pincode } = req.body;
+
+        const vendorCheck = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`, [vendorId, String(vendorId)]);
+        if (!vendorCheck.rows || vendorCheck.rows.length === 0) {
+            return res.status(404).json({ error: `Vendor with ID "${vendorId}" not found` });
+        }
+        const actualVendorId = vendorCheck.rows[0].vendor_id;
+
+        const updateFields = [];
+        const updateParams = [];
+
+        const newLoc = String(location || area || location_address || address || '').trim();
+        if (newLoc) {
+            updateFields.push('location = ?');
+            updateParams.push(newLoc);
+            updateFields.push('location_address = ?');
+            updateParams.push(newLoc);
+        }
+
+        if (city !== undefined) {
+            updateFields.push('city = ?');
+            updateParams.push(String(city).trim());
+        }
+
+        if (state !== undefined) {
+            updateFields.push('state = ?');
+            updateParams.push(String(state).trim());
+        }
+
+        if (pincode !== undefined) {
+            updateFields.push('pincode = ?');
+            updateParams.push(String(pincode).trim());
+        }
+
+        // Insert into locations table for autocomplete search
+        if (newLoc) {
+            await query(
+                `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
+                [newLoc, city || 'N/A', state || 'N/A', pincode || '000000']
+            ).catch(() => {});
+        }
+
+        if (location_type !== undefined) {
+            const locTypeNorm = String(location_type).toLowerCase() === 'area_sector' ? 'area_sector' : 'society';
+            updateFields.push('location_type = ?');
+            updateParams.push(locTypeNorm);
+        }
+
+        if (is_global_coverage !== undefined) {
+            updateFields.push('is_global_coverage = ?');
+            updateParams.push(Boolean(is_global_coverage));
+        }
+
+        if (delivery_radius_km !== undefined) {
+            updateFields.push('delivery_radius_km = ?');
+            updateParams.push(Math.max(0, Number(delivery_radius_km) || 0));
+        }
+
+        if (latitude !== undefined) {
+            updateFields.push('latitude = ?');
+            updateParams.push(Number(latitude));
+        }
+
+        if (longitude !== undefined) {
+            updateFields.push('longitude = ?');
+            updateParams.push(Number(longitude));
+        }
+
+        if (location_address !== undefined || address !== undefined) {
+            updateFields.push('location_address = ?');
+            updateParams.push(String(location_address || address || ''));
+        }
+
+        if (selected_zones !== undefined) {
+            const zonesJson = typeof selected_zones === 'string' ? selected_zones : JSON.stringify(Array.isArray(selected_zones) ? selected_zones : []);
+            updateFields.push('selected_zones = ?');
+            updateParams.push(zonesJson);
+        }
+
+        if (updateFields.length === 0) {
+            return res.status(400).json({ error: 'No coverage fields provided to update' });
+        }
+
+        updateParams.push(actualVendorId);
+        await query(`UPDATE vendors SET ${updateFields.join(', ')} WHERE vendor_id = ?`, updateParams);
+
+        const memoryCache = require('../../utils/cache');
+        memoryCache.clear();
+
+        const updatedVendorRes = await query(
+            `SELECT vendor_id, location_type, is_global_coverage, delivery_radius_km, selected_zones, latitude, longitude, location_address FROM vendors WHERE vendor_id = ?`,
+            [actualVendorId]
+        );
+        const v = updatedVendorRes.rows[0];
+
+        res.status(200).json({
+            success: true,
+            message: 'Vendor delivery coverage settings updated successfully',
+            vendor_id: Number(v.vendor_id),
+            location_type: v.location_type,
+            is_global_coverage: Boolean(v.is_global_coverage),
+            delivery_radius_km: Number(v.delivery_radius_km || 0),
+            latitude: v.latitude !== null ? Number(v.latitude) : 28.6270,
+            longitude: v.longitude !== null ? Number(v.longitude) : 77.3720,
+            location_address: v.location_address || '',
+            selected_zones: typeof v.selected_zones === 'string' ? JSON.parse(v.selected_zones || '[]') : (v.selected_zones || [])
+        });
+    } catch (err) {
+        console.error('Error updating vendor coverage:', err);
+        res.status(500).json({ error: err.message || 'Failed to update vendor coverage settings' });
+    }
+}
+
 module.exports = {
     uploadImage,
+    updateVendorLogo,
     getDashboard,
     addItem,
     updateItem,
@@ -305,5 +486,6 @@ module.exports = {
     registerFcmToken,
     deleteFcmToken,
     testPushNotification,
-    deleteStore
+    deleteStore,
+    updateVendorCoverage
 };

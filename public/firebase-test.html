@@ -171,7 +171,7 @@
 
     function getOrCreateRecaptcha() {
       if (window.recaptchaVerifier) {
-        try { window.recaptchaVerifier.clear(); } catch(e) {}
+        try { window.recaptchaVerifier.clear(); } catch (e) { }
         window.recaptchaVerifier = null;
       }
 
@@ -220,7 +220,7 @@
         if (error.code === 'auth/invalid-app-credential') {
           log('👉 Note: If testing with fictional test numbers, enable appVerificationDisabledForTesting.', 'error');
         }
-        try { if (window.recaptchaVerifier) window.recaptchaVerifier.clear(); } catch(e) {}
+        try { if (window.recaptchaVerifier) window.recaptchaVerifier.clear(); } catch (e) { }
         window.recaptchaVerifier = null;
       }
     }

@@ -3,11 +3,12 @@ const router = express.Router();
 const adminController = require('../../controllers/Admin/adminController');
 const adminPanelController = require('../../controllers/Admin/adminPanelController');
 
-// ── Auth ─────────────────────────────────────────────────────────────
+// ── Auth & Dashboard ──────────────────────────────────────────────────
 router.post('/login', adminPanelController.login);
 router.post('/refresh', adminPanelController.refreshToken);
 router.get('/me', adminPanelController.getMe);
 router.post('/logout', adminPanelController.logout);
+router.get('/dashboard', adminPanelController.getDashboardData);
 
 // ── Societies ────────────────────────────────────────────────────────
 router.get('/societies', adminPanelController.listSocieties);

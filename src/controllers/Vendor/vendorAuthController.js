@@ -78,6 +78,12 @@ async function getVendorPublicProfile(req, res) {
             logo: vendor.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200',
             description: vendor.description,
             society_id: Number(vendor.society_id),
+            vendor_type: vendor.vendor_type || 'product',
+            can_add_items: vendor.can_add_items !== false && (vendor.vendor_type || 'product') === 'product',
+            location_type: vendor.location_type || 'society',
+            is_global_coverage: Boolean(vendor.is_global_coverage),
+            delivery_radius_km: Number(vendor.delivery_radius_km || 0),
+            selected_zones: typeof vendor.selected_zones === 'string' ? (JSON.parse(vendor.selected_zones || '[]')) : (vendor.selected_zones || []),
             status: vendor.status,
             items
         });
@@ -93,7 +99,7 @@ async function getVendorPublicProfile(req, res) {
  */
 async function sendVendorOtp(req, res) {
     try {
-        const { email, phone, mobile, identifier, phone_number, mobile_number, country_code, countryCode } = req.body;
+        const { email, phone, mobile, identifier, phone_number, mobile_number, purpose, type, country_code, countryCode } = req.body;
         const target = phone || mobile || phone_number || mobile_number || identifier || email;
 
         if (!target) {
@@ -101,6 +107,37 @@ async function sendVendorOtp(req, res) {
         }
 
         const cleanTarget = String(target).trim();
+        const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
+        const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+        const mode = (purpose || type || '').toLowerCase();
+        const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
+
+        const vendorRes = await query(
+            `SELECT vendor_id FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR phone_number LIKE ? OR LOWER(email) = LOWER(?)`,
+            [cleanTarget, cleanPhoneDigits, last10, `%${last10}`, cleanTarget]
+        );
+
+        const vendorExists = vendorRes.rows && vendorRes.rows.length > 0;
+
+        if (isRegistrationIntent) {
+            if (vendorExists) {
+                return res.status(400).json({
+                    success: false,
+                    exists: true,
+                    error: 'A vendor account with this mobile number/email already exists. Please log in instead.'
+                });
+            }
+        } else {
+            if (!vendorExists) {
+                console.log(`⚠️ [VENDOR SEND OTP BLOCKED] Account "${cleanTarget}" not found in database. Disallowing OTP send.`);
+                return res.status(404).json({
+                    success: false,
+                    exists: false,
+                    error: 'No vendor account found with this mobile number/email. Please register your vendor account first.'
+                });
+            }
+        }
+
         const msg91Result = await sendMsg91OTP(cleanTarget, country_code || countryCode);
 
         res.status(200).json({
@@ -133,7 +170,8 @@ async function checkVendorPhone(req, res) {
         const cleanEmail = target.toLowerCase();
 
         const vendorRes = await query(
-            `SELECT vendor_id, store_name, vendor_name, email, phone_number, status 
+            `SELECT vendor_id, store_name, vendor_name, email, phone_number, status,
+                    account_number, ifsc_code, bank_name, account_holder_name, upi_id 
              FROM vendors 
              WHERE (LOWER(email) = ? AND email != '') 
                 OR (RIGHT(REGEXP_REPLACE(phone_number, '\\D', 'g', 'g'), 10) = ? AND phone_number != '')`,
@@ -162,13 +200,23 @@ async function checkVendorPhone(req, res) {
             vendor_name: vendor.vendor_name,
             phone_number: vendor.phone_number,
             email: vendor.email,
+            account_number: vendor.account_number || '',
+            ifsc_code: vendor.ifsc_code || '',
+            bank_name: vendor.bank_name || '',
+            account_holder_name: vendor.account_holder_name || vendor.vendor_name || '',
+            upi_id: vendor.upi_id || '',
             vendor: {
                 vendor_id: Number(vendor.vendor_id),
                 id: Number(vendor.vendor_id),
                 store_name: vendor.store_name,
                 vendor_name: vendor.vendor_name,
                 phone_number: vendor.phone_number,
-                email: vendor.email
+                email: vendor.email,
+                account_number: vendor.account_number || '',
+                ifsc_code: vendor.ifsc_code || '',
+                bank_name: vendor.bank_name || '',
+                account_holder_name: vendor.account_holder_name || vendor.vendor_name || '',
+                upi_id: vendor.upi_id || ''
             }
         });
     } catch (err) {
@@ -231,6 +279,50 @@ async function registerVendor(req, res) {
             body.logo || body.shop_images?.[0] || body.images?.[0] ||
             'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80'
         );
+
+        const account_number = String(
+            body.account_number || body.bank_account_number || body.accountNumber || body.bankAccountNumber || body.accountNo || ''
+        ).trim();
+
+        const ifsc_code = String(
+            body.ifsc_code || body.ifsc || body.ifscCode || ''
+        ).trim().toUpperCase();
+
+        const bank_name = String(
+            body.bank_name || body.bankName || body.bank || ''
+        ).trim();
+
+        const account_holder_name = String(
+            body.account_holder_name || body.accountHolderName || body.account_holder || vendor_name || ''
+        ).trim();
+
+        const upi_id = String(
+            body.upi_id || body.upiId || body.upi || ''
+        ).trim();
+
+        const qr_code_url = String(
+            body.qr_code_url || body.qr_code || body.upi_qr_code || body.qrCodeUrl || body.qrCode || ''
+        ).trim();
+
+        const whatsapp_number = String(
+            body.whatsapp_number || body.whatsapp || body.merchant_whatsapp || phone_number || ''
+        ).trim();
+
+        const accepted_payment_methods = String(
+            body.accepted_payment_methods || body.payment_modes || body.paymentMethods || 'COD,UPI,BANK_TRANSFER,QR_CODE'
+        ).trim();
+
+        const payment_instructions = String(
+            body.payment_instructions || body.instructions || ''
+        ).trim();
+
+        if (!account_number) {
+            return res.status(400).json({ error: 'Bank account_number is a mandatory field for vendor registration' });
+        }
+
+        if (!ifsc_code) {
+            return res.status(400).json({ error: 'Bank ifsc_code is a mandatory field for vendor registration' });
+        }
 
         const otp = body.otp || body.code;
         const fbToken = body.firebase_token || body.idToken;
@@ -304,13 +396,44 @@ async function registerVendor(req, res) {
             }
         }
 
+        // New Location & Address Model (Area, City, State, Pincode)
+        const vendorLocation = String(body.location || body.area || body.location_name || address || '').trim();
+        const vendorCity = String(body.city || city || '').trim();
+        const vendorState = String(body.state || state || '').trim();
+        const vendorPincode = String(body.pincode || pincode || '').trim();
+
+        // Parse Vendor Classification & Zone Coverage Model
+        const rawVendorType = String(body.vendor_type || body.vendorType || body.business_type || 'product').toLowerCase().trim();
+        const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
+        const can_add_items = vendor_type === 'product';
+
+        const rawLocType = String(body.location_type || body.locationType || '').toLowerCase().trim();
+        const location_type = (rawLocType === 'area_sector' || rawLocType === 'area') ? 'area_sector' : 'society';
+
+        const is_global_coverage = Boolean(body.is_global_coverage || body.isGlobalCoverage || body.go_global || body.is_global);
+        const delivery_radius_km = Number(body.delivery_radius_km || body.deliveryRadiusKm || body.radius || (is_global_coverage ? 3 : 0));
+
+        let selected_zones = body.selected_zones || [];
+        if (typeof selected_zones === 'string') {
+            try { selected_zones = JSON.parse(selected_zones); } catch (_) { selected_zones = []; }
+        }
+        const selected_zones_json = JSON.stringify(Array.isArray(selected_zones) ? selected_zones : []);
+
         const vendorRes = await query(
-            `INSERT INTO vendors (society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, category, address, city, pincode, logo, description, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE') RETURNING *`,
-            [society_id, vendor_name, gst_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, address, city, pincode, logo, defaultDesc]
+            `INSERT INTO vendors (society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, category, address, location, city, state, pincode, logo, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones, status) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE') RETURNING *`,
+            [society_id, vendor_name, gst_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, address, vendorLocation, vendorCity, vendorState, vendorPincode, logo, defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones_json]
         );
         const newVendorRow = vendorRes.rows[0] || {};
         const vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
+
+        // Store in locations table for area lookup & autocompletion
+        if (vendorLocation) {
+            await query(
+                `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
+                [vendorLocation, vendorCity || 'N/A', vendorState || 'N/A', vendorPincode || '000000']
+            ).catch(() => {});
+        }
 
         if (!vendor_id || isNaN(vendor_id)) {
             throw new Error('Failed to obtain vendor ID during registration');
@@ -352,10 +475,39 @@ async function registerVendor(req, res) {
             address,
             city,
             pincode,
+            account_number,
+            ifsc_code,
+            bank_name,
+            account_holder_name,
+            upi_id,
+            qr_code_url,
+            upi_qr_code: qr_code_url,
+            qr_code: qr_code_url,
+            whatsapp_number,
+            accepted_payment_methods,
+            payment_instructions,
+            vendor_type,
+            can_add_items,
+            location_type,
+            is_global_coverage,
+            delivery_radius_km,
+            selected_zones: Array.isArray(selected_zones) ? selected_zones : [],
             status: 'ACTIVE'
         };
 
         const tokens = generateTokens(newVendor);
+
+        /* 
+        // Cashfree Payment Gateway Session Creation (Commented out per user directive)
+        const cfService = require('../../services/cashfreeService');
+        const cfSession = await cfService.createVendorRegistrationPayment({
+            vendor_id,
+            store_name,
+            vendor_name,
+            email,
+            phone_number
+        }).catch(e => console.error('[Cashfree Session Error]:', e.message));
+        */
 
         res.status(201).json({
             token: tokens.accessToken,
@@ -714,6 +866,25 @@ async function resetPassword(req, res) {
     }
 }
 
+/*
+Cashfree Payment Gateway Handlers (Commented out per user directive)
+async function createCashfreeSession(req, res) { ... }
+async function verifyCashfreePayment(req, res) { ... }
+*/
+
+/**
+ * POST /api/vendors/check-coverage
+ * [DEPRECATED / COMMENTED OUT PER USER DIRECTIVE]
+ * Go Global map dynamic coverage selection is disabled in the new location workflow.
+ */
+async function checkCoverage(req, res) {
+    return res.status(200).json({
+        success: false,
+        disabled: true,
+        message: 'Go Global map dynamic radius selection has been commented out per the new location workflow. Vendors now register with Area, City, State, and Pincode.'
+    });
+}
+
 module.exports = {
     getVendorPublicProfile,
     sendVendorOtp,
@@ -726,5 +897,6 @@ module.exports = {
     logoutVendor,
     forgotPassword,
     verifyVendorOtp,
-    resetPassword
+    resetPassword,
+    checkCoverage
 };

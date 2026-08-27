@@ -3,6 +3,9 @@ node_modules/
 jspm_packages/
 web_modules/
 
+# avoiding pushing api documenation files
+.md
+
 # Environment variables & secrets (CRITICAL: Do NOT commit secrets to Git)
 .env
 .env.local

@@ -113,6 +113,22 @@ class VendorService {
       [actualVendorId]
     ).catch(() => ({ rows: [] }));
 
+    // Fetch service enquiries if vendor is a Service provider
+    let enquiries = [];
+    const vendorType = vendor.vendor_type || 'product';
+    if (vendorType === 'service') {
+      const enquiriesRes = await query(
+        `SELECT * FROM enquiries WHERE vendor_id = ? ORDER BY enquiry_id DESC`,
+        [actualVendorId]
+      ).catch(() => ({ rows: [] }));
+      enquiries = (enquiriesRes.rows || []).map(r => ({
+        ...r,
+        enquiry_id: Number(r.enquiry_id),
+        vendor_id: Number(r.vendor_id),
+        society_id: r.society_id ? Number(r.society_id) : null
+      }));
+    }
+
     const payRes = await query(
       `SELECT * FROM payments WHERE vendor_id = ? ORDER BY payment_id DESC`,
       [actualVendorId]
@@ -123,10 +139,19 @@ class VendorService {
       image_url: normalizeImageUrl(item.image_url)
     }));
 
+    // Normalize vendor classification and zone coverage attributes
+    vendor.vendor_type = vendorType;
+    vendor.can_add_items = vendor.can_add_items !== false && vendorType === 'product';
+    vendor.location_type = vendor.location_type || 'society';
+    vendor.is_global_coverage = Boolean(vendor.is_global_coverage);
+    vendor.delivery_radius_km = Number(vendor.delivery_radius_km || 0);
+    vendor.selected_zones = typeof vendor.selected_zones === 'string' ? (JSON.parse(vendor.selected_zones || '[]')) : (vendor.selected_zones || []);
+
     return {
       vendor,
       items: normalizedItems,
       orders,
+      enquiries,
       subscription: subRes.rows[0] || null,
       payments: payRes.rows || []
     };

@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DigiLocal - Go Global Map Checkpoints & Resident Location Search</title>
+  <!-- Google Fonts & Leaflet CSS for Map Visual Overlay -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root {
+      --bg-primary: #0F172A;
+      --bg-card: #1E293B;
+      --bg-card-hover: #334155;
+      --accent-emerald: #10B981;
+      --accent-emerald-glow: rgba(16, 185, 129, 0.25);
+      --accent-indigo: #6366F1;
+      --accent-amber: #F59E0B;
+      --text-main: #F8FAFC;
+      --text-muted: #94A3B8;
+      --border-color: #334155;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(30, 41, 59, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--accent-emerald), var(--accent-indigo));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 20px;
+      color: white;
+      box-shadow: 0 0 15px var(--accent-emerald-glow);
+    }
+
+    .brand-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      background: linear-gradient(to right, #ffffff, #94A3B8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .badge-pill {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--accent-emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .container {
+      max-width: 1600px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 1.5rem 2rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .panel-switcher {
+      display: flex;
+      gap: 1rem;
+      background: var(--bg-card);
+      padding: 6px;
+      border-radius: var(--radius-md);
+      width: fit-content;
+      border: 1px solid var(--border-color);
+    }
+
+    .tab-btn {
+      padding: 10px 24px;
+      border-radius: var(--radius-sm);
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn.active {
+      background: var(--accent-indigo);
+      color: white;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 1100px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 1rem;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 600;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    input, select {
+      background: #0F172A;
+      border: 1px solid var(--border-color);
+      color: white;
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--accent-indigo);
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border-radius: var(--radius-sm);
+      border: none;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-emerald {
+      background: var(--accent-emerald);
+      color: #042F2E;
+    }
+
+    .btn-emerald:hover {
+      background: #059669;
+      box-shadow: 0 0 20px var(--accent-emerald-glow);
+    }
+
+    .btn-indigo {
+      background: var(--accent-indigo);
+      color: white;
+    }
+
+    .btn-indigo:hover {
+      background: #4F46E5;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    .btn-outline:hover {
+      background: var(--bg-card-hover);
+      color: white;
+    }
+
+    #map, #residentMap {
+      height: 380px;
+      width: 100%;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+      z-index: 1;
+      position: relative;
+    }
+
+    /* Map Checkpoint Square Box Styling */
+    .map-checkpoint {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 15px;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .map-checkpoint:hover {
+      transform: scale(1.3);
+      z-index: 999;
+    }
+
+    /* Selected (Active) Serviceable Area: Box showing Checkmark ✓ */
+    .checkpoint-active {
+      background: #10B981;
+      border: 2px solid #FFFFFF;
+      color: #FFFFFF;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.9);
+    }
+
+    /* Unselected (Removed) Area: Empty box with NO tick inside */
+    .checkpoint-inactive {
+      background: rgba(30, 41, 59, 0.85);
+      border: 2px solid #94A3B8;
+      color: transparent;
+      opacity: 0.75;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155;
+      transition: .4s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-emerald);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    .map-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+
+    .selected-zones-container {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .zone-chip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0F172A;
+      border: 1px solid var(--border-color);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+    }
+
+    .store-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .store-card {
+      background: #0F172A;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      position: relative;
+    }
+
+    .store-badge {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); }
+
+    .status-toast {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      display: none;
+    }
+
+    .toast-success { background: rgba(16, 185, 129, 0.2); color: var(--accent-emerald); border: 1px solid var(--accent-emerald); display: block; }
+    .toast-info { background: rgba(99, 102, 241, 0.2); color: var(--accent-indigo); border: 1px solid var(--accent-indigo); display: block; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="brand-logo">D</div>
+      <div>
+        <div class="brand-title">DigiLocal Engine</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Go Global Checkpoints & Resident Location Map Search</div>
+      </div>
+    </div>
+    <div class="badge-pill">Location Search Mode Active</div>
+  </header>
+
+  <div class="container">
+    
+    <div class="panel-switcher">
+      <button class="tab-btn active" onclick="switchVendorType('product')">🛍️ Product Merchant Panel</button>
+      <button class="tab-btn" onclick="switchVendorType('service')">🛠️ Service Provider Panel</button>
+    </div>
+
+    <div class="grid-2">
+
+      <!-- LEFT COLUMN: VENDOR GO GLOBAL PANEL -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🗺️</span>
+            <span id="panelTitle">Go Global: Vendor Coverage Checkpoints</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 12px; color: var(--text-muted);">Go Global:</span>
+            <label class="switch">
+              <input type="checkbox" id="globalToggle" checked onchange="toggleGoGlobal()" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div id="toast" class="status-toast"></div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+          <div class="form-group">
+            <label>Coverage Circle Radius</label>
+            <select id="radiusSelect" onchange="onRadiusChange()">
+              <option value="1">1 km (Neighborhood)</option>
+              <option value="3" selected>3 km (Local Sector)</option>
+              <option value="5">5 km (Sub-Market)</option>
+              <option value="10">10 km (Max Service Distance Limit)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Vendor Store Address</label>
+            <div style="display: flex; gap: 6px;">
+              <input type="text" id="vendorAddress" value="Sector 62, Noida, UP" style="flex: 1; padding: 10px;" />
+              <button class="btn btn-indigo" style="padding: 8px 14px;" onclick="detectLocation()">📍 GPS</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- INTERACTIVE VENDOR MAP -->
+        <div id="map"></div>
+
+        <div class="map-controls">
+          <button class="btn btn-emerald" onclick="clickGoGlobal()">✨ Refresh Map Checkpoints</button>
+          <button class="btn btn-outline" onclick="selectAllInside()">🟢 Select All Inside Circle</button>
+          <button class="btn btn-outline" onclick="clearAllOutside()">⚪ Remove All Outside Circle</button>
+          <button class="btn btn-outline" onclick="clearAll()">❌ Clear All</button>
+        </div>
+
+        <div class="card-title" style="font-size: 15px; margin-top: 10px;">
+          <span>📋</span>
+          <span>Societies, Sectors & Commercial Areas (Tick Boxes)</span>
+          <span id="activeCount" style="font-size: 12px; color: var(--accent-emerald); margin-left: auto;">(0 active / 0 total)</span>
+        </div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" id="filterTabAll" onclick="setZoneTypeFilter('all')">All Zones</button>
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" id="filterTabActive" onclick="setZoneTypeFilter('active')">🟢 Active Only</button>
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" id="filterTabSociety" onclick="setZoneTypeFilter('society')">🏢 Societies</button>
+          <button class="btn btn-outline" style="padding: 4px 10px; font-size: 11px;" id="filterTabSector" onclick="setZoneTypeFilter('sector')">🛍️ Sectors</button>
+        </div>
+
+        <div class="form-group">
+          <input type="text" id="searchZoneInput" placeholder="🔍 Search society, sector or area name to toggle tick box..." oninput="filterZonesList()" />
+        </div>
+
+        <div class="selected-zones-container" id="selectedZonesList" style="max-height: 240px;">
+          <!-- All zone tick boxes rendered dynamically -->
+        </div>
+
+        <button class="btn btn-emerald" style="width: 100%; margin-top: 10px;" onclick="saveCoverageSettings()">
+          💾 Save Go Global Serviceable Areas to Vendor Store
+        </button>
+
+      </div>
+
+      <!-- RIGHT COLUMN: RESIDENT / USER LOCATION SEARCH & STORE ACCESS SIMULATOR -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>🏡</span>
+            <span>Resident / User Location & Store Access</span>
+          </div>
+          <div class="badge-pill" style="background: rgba(99, 102, 241, 0.15); color: var(--accent-indigo); border-color: rgba(99, 102, 241, 0.3);">
+            Live Autocomplete Search
+          </div>
+        </div>
+
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+          When a resident enters the website, they type their location into the field below to get <b>live autocompleting suggestions</b> or select on Google Maps. The platform automatically displays <b>ONLY vendors servicing that resident's area</b>.
+        </p>
+
+        <!-- RESIDENT GOOGLE MAP / LOCATION SEARCH INPUT BOX WITH AUTOCOMPLETE & GPS -->
+        <div class="form-group" style="position: relative;">
+          <label style="font-weight: 700; color: white;">🏠 Resident Current Location / Housing Society / Sector</label>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input type="text" id="residentSearchInput" value="Sector 62, Noida" placeholder="Type city, sector, or area (e.g. Kumbha Marg Jaipur, Sector 62 Noida, Vaishali Nagar...)" style="flex: 1; min-width: 200px; padding: 12px 14px;" oninput="onResidentSearchInput(this.value)" onkeypress="if(event.key==='Enter') searchResidentLocationOnMap()" />
+            <button class="btn btn-indigo" style="padding: 10px 16px;" onclick="searchResidentLocationOnMap()">🔍 Select Area on Map</button>
+            <button class="btn btn-emerald" style="padding: 10px 16px;" onclick="detectResidentGPSLocation()">📍 Use Live GPS</button>
+          </div>
+          <!-- AUTOCOMPLETE SUGGESTIONS DROPDOWN -->
+          <div id="residentSearchSuggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: #1E293B; border: 1px solid var(--border-color); border-radius: var(--radius-sm); z-index: 9999; max-height: 260px; overflow-y: auto; box-shadow: 0 12px 30px rgba(0,0,0,0.7);"></div>
+        </div>
+
+        <!-- RESIDENT INTERACTIVE MAP -->
+        <div id="residentMap"></div>
+
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
+          <span style="font-size: 11px; color: var(--text-muted); align-self: center;">Quick Test Locations:</span>
+          <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px;" onclick="setQuickResidentLocation(28.6270, 77.3720, 'Sector 62, Noida')">Sector 62 Noida</button>
+          <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px;" onclick="setQuickResidentLocation(28.6320, 77.3780, 'Apex Golf Avenue')">Apex Golf Avenue</button>
+          <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px;" onclick="setQuickResidentLocation(26.8920, 75.8120, 'Kumbha Marg, Jaipur')">Kumbha Marg Jaipur</button>
+          <button class="btn btn-outline" style="padding: 3px 8px; font-size: 11px;" onclick="setQuickResidentLocation(28.5800, 77.4500, 'Gaur City 1 [6.5km away]')">Gaur City 1</button>
+        </div>
+
+        <div class="card-title" style="font-size: 15px; margin-top: 10px;">
+          <span>🏪</span>
+          <span>Vendors Servicing Resident Location</span>
+        </div>
+
+        <div class="store-grid" id="storefrontResults">
+          <!-- Accessible vendors rendered here -->
+        </div>
+
+        <div id="accessCheckLog" style="background: #0F172A; border: 1px solid var(--border-color); padding: 12px; border-radius: var(--radius-sm); font-size: 12px; font-family: monospace; color: #38BDF8; max-height: 180px; overflow-y: auto; margin-top: 10px;">
+          Ready to verify resident storefront access...
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- Leaflet JS for Map rendering -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let currentVendorType = 'product';
+    let currentVendorId = 1;
+    let vendorLat = 28.6270;
+    let vendorLng = 77.3720;
+    let currentRadiusKm = 3;
+    let map = null;
+    let circleLayer = null;
+    let storeMarker = null;
+    let checkpointMarkers = {};
+    let currentZones = [];
+
+    // Resident Map state
+    let residentMap = null;
+    let residentMarker = null;
+    let residentLat = 28.6270;
+    let residentLng = 77.3720;
+    let residentAddressName = 'Sector 62, Noida';
+    let searchDebounceTimer = null;
+
+    const presetLocations = [
+      { name: 'Kumbha Marg, Jaipur', lat: 26.8920, lng: 75.8120, type: 'Sector / Main Road' },
+      { name: 'Malviya Nagar, Jaipur', lat: 26.8520, lng: 75.8220, type: 'Major Commercial Hub' },
+      { name: 'Mansarovar Sector 1-10, Jaipur', lat: 26.8620, lng: 75.7720, type: 'Residential Area' },
+      { name: 'Vaishali Nagar, Jaipur', lat: 26.9120, lng: 75.7420, type: 'Popular Residential Hub' },
+      { name: 'Tonk Road, Jaipur', lat: 26.8420, lng: 75.8020, type: 'Main Arterial Sector' },
+      { name: 'Jagatpura, Jaipur', lat: 26.8320, lng: 75.8420, type: 'Institutional & Housing Hub' },
+      { name: 'Raja Park, Jaipur', lat: 26.8980, lng: 75.8280, type: 'Central Market Sector' },
+      { name: 'Pratap Nagar, Jaipur', lat: 26.8120, lng: 75.8020, type: 'Housing Board Area' },
+      { name: 'Sector 62 Main Market, Noida', lat: 28.6270, lng: 77.3720, type: 'Commercial Sector' },
+      { name: 'Cleo County (Sector 121), Noida', lat: 28.6210, lng: 77.3650, type: 'Premium Housing Society' },
+      { name: 'Gaur City 1, Greater Noida West', lat: 28.6050, lng: 77.4250, type: 'Large Township Sector' },
+      { name: 'Apex Golf Avenue, Greater Noida West', lat: 28.6320, lng: 77.3780, type: 'Golf Residential Complex' },
+      { name: 'Supertech Capetown (Sector 74), Noida', lat: 28.6100, lng: 77.3850, type: 'High-rise Society' },
+      { name: 'Indirapuram Commercial Belt, Ghaziabad', lat: 28.6420, lng: 77.3680, type: 'Sub-Market Hub' },
+      { name: 'Greenwood Residency, Sector 62', lat: 28.6280, lng: 77.3730, type: 'Housing Society' }
+    ];
+
+    // Initialize Page
+    window.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      initResidentMap();
+      clickGoGlobal();
+      simulateResidentSearch();
+    });
+
+    function switchVendorType(type) {
+      currentVendorType = type;
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      document.getElementById('panelTitle').innerText = 
+        type === 'product' ? 'Go Global: Product Merchant Map Checkpoints' : 'Go Global: Service Provider Map Checkpoints';
+      
+      showToast(`Switched to ${type === 'product' ? 'Product Merchant' : 'Service Provider'} Panel`, 'info');
+      clickGoGlobal();
+      simulateResidentSearch();
+    }
+
+    function initMap() {
+      map = L.map('map').setView([vendorLat, vendorLng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap & DigiLocal Engine'
+      }).addTo(map);
+
+      // Store Center Marker (Blue Store Icon)
+      storeMarker = L.marker([vendorLat, vendorLng], { draggable: true }).addTo(map);
+      storeMarker.bindPopup("<b>🏪 Vendor Store Center</b><br/>Drag to move store location").openPopup();
+      
+      storeMarker.on('dragend', function(e) {
+        const coord = e.target.getLatLng();
+        vendorLat = coord.lat;
+        vendorLng = coord.lng;
+        updateCircle();
+        clickGoGlobal();
+      });
+    }
+
+    function initResidentMap() {
+      residentMap = L.map('residentMap').setView([residentLat, residentLng], 13);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap & DigiLocal Engine'
+      }).addTo(residentMap);
+
+      const residentIcon = L.divIcon({
+        html: `<div style="background: #6366F1; width: 32px; height: 32px; border-radius: 50%; border: 3px solid white; display: flex; align-items: center; justify-content: center; font-size: 15px; box-shadow: 0 0 14px rgba(99,102,241,0.9);">🏡</div>`,
+        className: 'resident-home-pin',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+
+      residentMarker = L.marker([residentLat, residentLng], { draggable: true, icon: residentIcon }).addTo(residentMap);
+      residentMarker.bindPopup(`<b>🏡 Resident Home Location</b><br/>${residentAddressName}<br/><span style="font-size:11px; color:#6366F1;">Drag marker to test store access</span>`).openPopup();
+
+      residentMarker.on('dragend', function(e) {
+        const coord = e.target.getLatLng();
+        residentLat = coord.lat;
+        residentLng = coord.lng;
+        residentAddressName = `Lat: ${coord.lat.toFixed(4)}, Lng: ${coord.lng.toFixed(4)}`;
+        document.getElementById('residentSearchInput').value = residentAddressName;
+        simulateResidentSearch();
+      });
+    }
+
+    async function onResidentSearchInput(val) {
+      clearTimeout(searchDebounceTimer);
+      const suggBox = document.getElementById('residentSearchSuggestions');
+      const query = (val || '').toLowerCase().trim();
+
+      if (!query || query.length < 2) {
+        suggBox.style.display = 'none';
+        return;
+      }
+
+      // First check preset Indian locations matching query
+      const matchedPresets = presetLocations.filter(p => p.name.toLowerCase().includes(query) || p.type.toLowerCase().includes(query));
+
+      suggBox.innerHTML = '';
+
+      if (matchedPresets.length > 0) {
+        matchedPresets.forEach(item => {
+          const div = document.createElement('div');
+          div.style.cssText = 'padding: 10px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border-color); color: #F8FAFC; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center;';
+          div.onmouseover = () => div.style.background = '#334155';
+          div.onmouseout = () => div.style.background = '#1E293B';
+          div.innerHTML = `
+            <div>
+              <div style="font-weight: 700;">📍 ${item.name}</div>
+              <div style="font-size: 11px; color: #94A3B8;">${item.type}</div>
+            </div>
+            <span style="font-size: 11px; color: var(--accent-emerald); background: rgba(16,185,129,0.15); padding: 2px 6px; border-radius: 4px;">Instant Select</span>
+          `;
+          div.onclick = () => {
+            suggBox.style.display = 'none';
+            setQuickResidentLocation(item.lat, item.lng, item.name);
+          };
+          suggBox.appendChild(div);
+        });
+        suggBox.style.display = 'block';
+      }
+
+      // Also trigger live OpenStreetMap / Google Geocoding for any custom global area
+      searchDebounceTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=4`);
+          const items = await res.json();
+          if (items && items.length > 0) {
+            items.forEach(item => {
+              const nameStr = item.display_name.split(',').slice(0, 3).join(', ');
+              // Check if not already in suggestions
+              if ([...suggBox.children].some(c => c.innerText.includes(nameStr))) return;
+
+              const div = document.createElement('div');
+              div.style.cssText = 'padding: 10px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border-color); color: #F8FAFC; transition: background 0.15s; display: flex; justify-content: space-between; align-items: center;';
+              div.onmouseover = () => div.style.background = '#334155';
+              div.onmouseout = () => div.style.background = '#1E293B';
+              div.innerHTML = `
+                <div>
+                  <div style="font-weight: 700;">🌐 ${nameStr}</div>
+                  <div style="font-size: 11px; color: #94A3B8;">Global Map Location (${parseFloat(item.lat).toFixed(4)}, ${parseFloat(item.lon).toFixed(4)})</div>
+                </div>
+                <span style="font-size: 11px; color: var(--accent-indigo); background: rgba(99,102,241,0.15); padding: 2px 6px; border-radius: 4px;">Map Geocode</span>
+              `;
+              div.onclick = () => {
+                suggBox.style.display = 'none';
+                setQuickResidentLocation(parseFloat(item.lat), parseFloat(item.lon), nameStr);
+              };
+              suggBox.appendChild(div);
+            });
+            suggBox.style.display = 'block';
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }, 250);
+    }
+
+    async function searchResidentLocationOnMap() {
+      const queryStr = document.getElementById('residentSearchInput').value.trim();
+      if (!queryStr) return;
+
+      showToast(`Searching resident location for "${queryStr}"...`, 'info');
+
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(queryStr)}`);
+        const results = await res.json();
+
+        if (results && results.length > 0) {
+          const topResult = results[0];
+          residentLat = parseFloat(topResult.lat);
+          residentLng = parseFloat(topResult.lon);
+          residentAddressName = topResult.display_name.split(',').slice(0, 3).join(', ');
+
+          document.getElementById('residentSearchInput').value = residentAddressName;
+          
+          residentMap.setView([residentLat, residentLng], 14);
+          residentMarker.setLatLng([residentLat, residentLng]);
+          residentMarker.bindPopup(`<b>🏡 Resident Home Location</b><br/>${residentAddressName}`).openPopup();
+
+          await simulateResidentSearch();
+          showToast(`📍 Resident map pinned to "${residentAddressName}". Loaded servicing stores!`, 'success');
+        } else {
+          showToast(`Location "${queryStr}" not found. Try entering city or sector name.`, 'danger');
+        }
+      } catch (err) {
+        showToast('Resident Location Search Error: ' + err.message, 'danger');
+      }
+    }
+
+    function detectResidentGPSLocation() {
+      if (navigator.geolocation) {
+        showToast('Detecting your live GPS location...', 'info');
+        navigator.geolocation.getCurrentPosition(async (pos) => {
+          residentLat = pos.coords.latitude;
+          residentLng = pos.coords.longitude;
+          
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${residentLat}&lon=${residentLng}`);
+            const data = await res.json();
+            if (data && data.display_name) {
+              residentAddressName = data.display_name.split(',').slice(0, 3).join(', ');
+            } else {
+              residentAddressName = `Live GPS (${residentLat.toFixed(4)}, ${residentLng.toFixed(4)})`;
+            }
+          } catch(e) {
+            residentAddressName = `Live GPS (${residentLat.toFixed(4)}, ${residentLng.toFixed(4)})`;
+          }
+
+          document.getElementById('residentSearchInput').value = residentAddressName;
+          residentMap.setView([residentLat, residentLng], 14);
+          residentMarker.setLatLng([residentLat, residentLng]);
+          residentMarker.bindPopup(`<b>🏡 Resident Home Location (Live GPS)</b><br/>${residentAddressName}`).openPopup();
+
+          await simulateResidentSearch();
+          showToast(`📍 Live GPS detected: "${residentAddressName}". Loaded servicing stores!`, 'success');
+        }, () => {
+          showToast('GPS Permission Denied. Please enter location manually or select on map.', 'danger');
+        });
+      } else {
+        showToast('Geolocation is not supported by your browser.', 'danger');
+      }
+    }
+
+    function setQuickResidentLocation(lat, lng, name) {
+      residentLat = lat;
+      residentLng = lng;
+      residentAddressName = name;
+      document.getElementById('residentSearchInput').value = name;
+      residentMap.setView([lat, lng], 14);
+      residentMarker.setLatLng([lat, lng]);
+      residentMarker.bindPopup(`<b>🏡 Resident Location</b><br/>${name}`).openPopup();
+      simulateResidentSearch();
+    }
+
+    function updateCircle() {
+      if (circleLayer) map.removeLayer(circleLayer);
+
+      circleLayer = L.circle([vendorLat, vendorLng], {
+        color: '#10B981',
+        fillColor: '#10B981',
+        fillOpacity: 0.15,
+        radius: currentRadiusKm * 1000
+      }).addTo(map);
+
+      map.fitBounds(circleLayer.getBounds(), { padding: [30, 30] });
+    }
+
+    function detectLocation() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+          vendorLat = pos.coords.latitude;
+          vendorLng = pos.coords.longitude;
+          storeMarker.setLatLng([vendorLat, vendorLng]);
+          updateCircle();
+          showToast('📍 Location detected via GPS', 'success');
+          clickGoGlobal();
+        }, () => {
+          showToast('Location permission denied. Using Sector 62 coordinates.', 'info');
+        });
+      }
+    }
+
+    function toggleGoGlobal() {
+      const isChecked = document.getElementById('globalToggle').checked;
+      showToast(`Go Global coverage ${isChecked ? 'ENABLED' : 'DISABLED'}`, isChecked ? 'success' : 'info');
+    }
+
+    function onRadiusChange() {
+      currentRadiusKm = parseFloat(document.getElementById('radiusSelect').value);
+      updateCircle();
+    }
+
+    async function clickGoGlobal() {
+      onRadiusChange();
+      const currentAddress = document.getElementById('vendorAddress')?.value || 'Local Sector';
+      const sectorName = currentAddress.split(',')[0] || 'Local Sector';
+
+      try {
+        const res = await fetch('/api/vendors/check-coverage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vendor_id: currentVendorId,
+            latitude: vendorLat,
+            longitude: vendorLng,
+            radius_km: currentRadiusKm,
+            sector: sectorName,
+            location_type: 'society'
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          currentZones = data.zones;
+          renderMapCheckpoints(data.zones);
+          renderActiveZonesList();
+          showToast(`Loaded ${data.total_zones} map checkpoints (${data.auto_selected_count} inside circle auto-selected).`, 'success');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    function renderMapCheckpoints(zones) {
+      // Clear existing checkpoint markers from map
+      Object.values(checkpointMarkers).forEach(m => map.removeLayer(m));
+      checkpointMarkers = {};
+
+      const latLngGroup = [];
+
+      zones.forEach(z => {
+        const zId = String(z.zone_id);
+        const isInside = z.is_inside_circle;
+        const isActive = z.is_active;
+        const lat = Number(z.latitude);
+        const lng = Number(z.longitude);
+
+        latLngGroup.push([lat, lng]);
+
+        const iconHtml = `<div class="map-checkpoint ${isActive ? 'checkpoint-active' : 'checkpoint-inactive'}" title="${z.name} - ${isActive ? 'Selected (Click to remove)' : 'Unselected (Click to add)'}">
+          ${isActive ? '✓' : ''}
+        </div>`;
+
+        const customIcon = L.divIcon({
+          html: iconHtml,
+          className: 'custom-checkpoint-pin',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13]
+        });
+
+        // Set zIndexOffset so active selected boxes float on top of inactive boxes
+        const marker = L.marker([lat, lng], { icon: customIcon, zIndexOffset: isActive ? 1000 : 100 }).addTo(map);
+
+        const popupContent = `
+          <div style="font-family: sans-serif; font-size: 13px; color: #0F172A; min-width: 180px;">
+            <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">${z.name}</div>
+            <div style="font-size: 11px; color: #64748B; margin-bottom: 8px;">
+              ${z.type.toUpperCase()} • ${z.distance_km} km away ${isInside ? '🟢 (Inside Circle)' : '🟡 (Near Circle)'}
+            </div>
+            <button onclick="toggleZone('${zId}')" style="width: 100%; padding: 6px 12px; background: ${isActive ? '#EF4444' : '#10B981'}; color: white; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;">
+              ${isActive ? '❌ Remove from Store Coverage' : '➕ Add to Store Coverage'}
+            </button>
+          </div>
+        `;
+
+        marker.bindPopup(popupContent);
+        
+        // Clicking directly on marker toggles area selection
+        marker.on('click', () => {
+          marker.openPopup();
+        });
+
+        checkpointMarkers[zId] = marker;
+      });
+
+      // Fit map viewport to encompass ALL checkpoint markers & radius circle so zero boxes disappear
+      if (latLngGroup.length > 0) {
+        map.invalidateSize();
+        const bounds = L.latLngBounds(latLngGroup);
+        if (circleLayer) bounds.extend(circleLayer.getBounds());
+        map.fitBounds(bounds, { padding: [50, 50] });
+      }
+    }
+
+    function toggleZone(zoneId) {
+      const target = currentZones.find(z => String(z.zone_id) === String(zoneId));
+      if (target) {
+        target.is_active = !target.is_active;
+        renderMapCheckpoints(currentZones);
+        renderActiveZonesList();
+        showToast(`Area "${target.name}" ${target.is_active ? 'ADDED to' : 'REMOVED from'} vendor store coverage!`, target.is_active ? 'success' : 'info');
+      }
+    }
+
+    function selectAllInside() {
+      currentZones.forEach(z => {
+        if (z.is_inside_circle) z.is_active = true;
+      });
+      renderMapCheckpoints(currentZones);
+      renderActiveZonesList();
+      showToast('🟢 Selected all areas inside coverage circle', 'success');
+    }
+
+    function clearAllOutside() {
+      currentZones.forEach(z => {
+        if (!z.is_inside_circle) z.is_active = false;
+      });
+      renderMapCheckpoints(currentZones);
+      renderActiveZonesList();
+      showToast('⚪ Removed all areas outside coverage circle', 'info');
+    }
+
+    function clearAll() {
+      currentZones.forEach(z => z.is_active = false);
+      renderMapCheckpoints(currentZones);
+      renderActiveZonesList();
+      showToast('❌ Cleared all coverage areas', 'info');
+    }
+
+    let currentCategoryFilter = 'all';
+
+    function setZoneTypeFilter(filterType) {
+      currentCategoryFilter = filterType;
+      ['All', 'Active', 'Society', 'Sector'].forEach(t => {
+        const btn = document.getElementById(`filterTab${t}`);
+        if (btn) {
+          btn.className = `btn ${t.toLowerCase() === filterType.toLowerCase() ? 'btn-indigo' : 'btn-outline'}`;
+          btn.style.padding = '4px 10px';
+          btn.style.fontSize = '11px';
+        }
+      });
+      renderActiveZonesList();
+    }
+
+    function renderActiveZonesList() {
+      const listEl = document.getElementById('selectedZonesList');
+      const searchKeyword = (document.getElementById('searchZoneInput')?.value || '').toLowerCase().trim();
+
+      const totalActiveCount = currentZones.filter(z => z.is_active).length;
+      document.getElementById('activeCount').innerText = `(${totalActiveCount} active / ${currentZones.length} total)`;
+
+      let filtered = currentZones.filter(z => {
+        const matchesSearch = !searchKeyword || z.name.toLowerCase().includes(searchKeyword) || z.type.toLowerCase().includes(searchKeyword);
+        if (!matchesSearch) return false;
+
+        if (currentCategoryFilter === 'active') return z.is_active;
+        if (currentCategoryFilter === 'society') return z.type === 'society';
+        if (currentCategoryFilter === 'sector') return z.type === 'sector' || z.type === 'sub_area' || z.type === 'big_area';
+        return true;
+      });
+
+      listEl.innerHTML = '';
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<div style="font-size: 12px; color: var(--text-muted); padding: 8px;">No matching societies or sectors found.</div>';
+        return;
+      }
+
+      filtered.forEach(z => {
+        const chip = document.createElement('div');
+        chip.className = 'zone-chip';
+        chip.style.background = z.is_active ? 'rgba(16, 185, 129, 0.1)' : '#0F172A';
+        chip.style.borderColor = z.is_active ? '#10B981' : 'var(--border-color)';
+
+        chip.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <label class="switch" style="width: 36px; height: 20px;">
+              <input type="checkbox" ${z.is_active ? 'checked' : ''} onchange="toggleZone('${z.zone_id}')" />
+              <span class="slider" style="border-radius: 20px;"></span>
+            </label>
+            <div>
+              <span style="font-weight: 600;">${z.name}</span>
+              <span style="font-size: 11px; color: ${z.is_inside_circle ? 'var(--accent-emerald)' : 'var(--text-muted)'}; margin-left: 6px;">
+                (${z.distance_km} km away ${z.is_inside_circle ? '• Inside Circle' : ''})
+              </span>
+            </div>
+          </div>
+          <span style="font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; background: ${z.is_active ? 'rgba(16, 185, 129, 0.2)' : 'rgba(148, 163, 184, 0.1)'}; color: ${z.is_active ? '#10B981' : '#94A3B8'};">
+            ${z.is_active ? '✓ Serviceable' : 'Excluded'}
+          </span>
+        `;
+        listEl.appendChild(chip);
+      });
+    }
+
+    function filterZonesList() {
+      renderActiveZonesList();
+    }
+
+    async function saveCoverageSettings() {
+      try {
+        const isGlobal = document.getElementById('globalToggle').checked;
+        const activeZones = currentZones.filter(z => z.is_active);
+
+        const res = await fetch(`/api/vendors/${currentVendorId}/coverage`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location_type: 'area_sector',
+            is_global_coverage: isGlobal,
+            delivery_radius_km: currentRadiusKm,
+            latitude: vendorLat,
+            longitude: vendorLng,
+            selected_zones: activeZones
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          showToast(`✅ Saved ${activeZones.length} active Go Global coverage areas!`, 'success');
+          simulateResidentSearch();
+        }
+      } catch (err) {
+        showToast('Failed to save settings: ' + err.message, 'danger');
+      }
+    }
+
+    async function simulateResidentSearch() {
+      const sectorName = residentAddressName.split(',')[0] || '';
+      const logEl = document.getElementById('accessCheckLog');
+      logEl.innerHTML = `> Resident Location: "${residentAddressName}" (Lat: ${residentLat}, Lng: ${residentLng})...\n`;
+      logEl.innerHTML += `> Querying /api/vendors/search?user_lat=${residentLat}&user_lng=${residentLng}&sector=${encodeURIComponent(sectorName)}&type=${currentVendorType}...\n`;
+
+      try {
+        const res = await fetch(`/api/vendors/search?user_lat=${residentLat}&user_lng=${residentLng}&sector=${encodeURIComponent(sectorName)}&type=${currentVendorType}`);
+        const vendors = await res.json();
+
+        const grid = document.getElementById('storefrontResults');
+        grid.innerHTML = '';
+
+        if (!Array.isArray(vendors) || vendors.length === 0) {
+          grid.innerHTML = '<div style="grid-column: 1/-1; color: var(--text-muted); font-size: 13px; padding: 12px; background: #0F172A; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">🛑 No vendors service this resident location. Storefront access is restricted for residents in this area.</div>';
+          logEl.innerHTML += `> 🛑 Access Result: 0 vendors accessible for resident at (${residentLat}, ${residentLng}). Access Restricted.\n`;
+          return;
+        }
+
+        vendors.forEach(v => {
+          const card = document.createElement('div');
+          card.className = 'store-card';
+          card.innerHTML = `
+            <div class="store-badge badge-success">${v.coverage_badge || 'Servicable'}</div>
+            <div style="font-weight: 700; font-size: 15px; margin-top: 8px;">${v.store_name}</div>
+            <div style="font-size: 12px; color: var(--text-muted);">${v.vendor_name} • ${v.vendor_type.toUpperCase()}</div>
+            <div style="font-size: 12px; color: var(--accent-emerald);">Distance: ${v.distance_km !== null ? v.distance_km + ' km' : 'Direct Match'}</div>
+            <button class="btn btn-indigo" style="padding: 6px 12px; font-size: 12px; margin-top: 6px;" onclick="testDirectStoreAccess(${v.vendor_id}, '${residentLat}', '${residentLng}')">
+              Test Storefront Access
+            </button>
+          `;
+          grid.appendChild(card);
+        });
+
+        logEl.innerHTML += `> ✅ Access Granted: Found ${vendors.length} serviceable vendor store for resident!\n`;
+
+      } catch (err) {
+        logEl.innerHTML += `> ❌ Error: ${err.message}\n`;
+      }
+    }
+
+    async function testDirectStoreAccess(vendorId, rLat, rLng) {
+      const logEl = document.getElementById('accessCheckLog');
+      logEl.innerHTML += `> Testing direct store access GET /api/vendors/${vendorId}?user_lat=${rLat}&user_lng=${rLng}...\n`;
+
+      try {
+        const res = await fetch(`/api/vendors/${vendorId}?user_lat=${rLat}&user_lng=${rLng}`);
+        const data = await res.json();
+
+        if (res.status === 200) {
+          logEl.innerHTML += `> 🟢 HTTP 200 OK: Storefront Access Granted! Store "${data.vendor.store_name}" catalog items retrieved (${data.items?.length || 0} items).\n`;
+        } else {
+          logEl.innerHTML += `> 🔴 HTTP ${res.status}: Access Denied! ${data.error}\n`;
+        }
+      } catch (err) {
+        logEl.innerHTML += `> ❌ Error checking store access: ${err.message}\n`;
+      }
+    }
+
+    function showToast(msg, type) {
+      const toast = document.getElementById('toast');
+      toast.className = `status-toast toast-${type}`;
+      toast.innerText = msg;
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 4000);
+    }
+  </script>
+</body>
+</html>

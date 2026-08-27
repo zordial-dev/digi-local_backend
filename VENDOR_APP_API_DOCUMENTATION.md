@@ -1,53 +1,89 @@
-# 🏪 DigiLocal Vendor Mobile App - Complete API Integration Handbook
+# 🏪 DigiLocal Vendor App (Web & Mobile) - Complete API Integration Documentation
 
-This API handbook is prepared specifically for **Vendor Mobile App Frontend Developers** (React Native, Flutter, iOS, Android, or Web). It documents all REST endpoints, request/response schemas, dual JWT authentication headers, error codes, and TypeScript interfaces needed to build the vendor mobile application.
-
----
-
-## 🌐 1. Base URL & Environments
-
-Configure your HTTP Client (Axios / Fetch) base URL:
-
-| Environment | Base URL |
-| :--- | :--- |
-| **Local Web / PC** | `http://localhost:5000` |
-| **Android Emulator** | `http://10.0.2.2:5000` |
-| **Physical Mobile Device (Same Wi-Fi)** | `http://<your-local-ip>:5000` |
-| **Render PostgreSQL Backend (Live)** | `https://digilocal-backend-mock.onrender.com` |
-
-- **Interactive Swagger OpenAPI Docs:** `http://localhost:5000/api-docs`
+**Document Version**: 1.2.0  
+**Target Release**: v1.0.0  
+**Target Audience**: Vendor App Frontend Developers (React Native, Expo, Flutter, iOS, Android, and Web)  
+**Base URL**: `http://localhost:5000` (or `https://api.digilocal.in`)  
+**Frontend Location & Map Guide**: [`FRONTEND_GO_GLOBAL_AND_LOCATION_INTEGRATION_GUIDE.md`](file:///c:/Users/LENOVO/Desktop/digilocal_backend_mock/FRONTEND_GO_GLOBAL_AND_LOCATION_INTEGRATION_GUIDE.md)
 
 ---
 
-## 🔐 2. Authentication & Header Conventions
+## Table of Contents
+1. [Overview & Architecture Summary](#1-overview--architecture-summary)
+2. [Vendor Classification & Location Model](#2-vendor-classification--location-model)
+3. [Authentication & Header Conventions](#3-authentication--header-conventions)
+4. [TypeScript Data Models & Schemas](#4-typescript-data-models--schemas)
+5. [Complete API Endpoints Reference](#5-complete-api-endpoints-reference)
+   - [5.1 MSG91 Mobile OTP Service (`POST /api/vendors/send-otp`, `POST /api/vendors/verify-otp`)](#51-msg91-mobile-otp-service)
+   - [5.2 Dynamic Coverage Zone Calculator (`POST /api/vendors/check-coverage`)](#52-dynamic-coverage-zone-calculator)
+   - [5.3 Vendor Registration with Classification (`POST /api/vendors/register`)](#53-vendor-registration-with-classification)
+   - [5.4 Vendor Login & Token Refresh (`POST /api/vendors/login`, `POST /api/vendors/refresh`)](#54-vendor-login--token-refresh)
+   - [5.5 Fetch Vendor Profile & Dashboard (`GET /api/vendors/:id`, `GET /api/vendorPanel/:vendorId`)](#55-fetch-vendor-profile--dashboard)
+   - [5.6 Update Delivery Radius & Zone Coverage (`PUT /api/vendors/:vendorId/coverage`)](#56-update-delivery-radius--zone-coverage)
+   - [5.7 Product Catalog Management (`POST`, `PUT`, `DELETE /api/vendorPanel/:vendorId/items`)](#57-product-catalog-management)
+   - [5.8 Product Orders Management (`GET /api/orders/vendor/:vendorId`, `PUT /api/orders/:id/status`)](#58-product-orders-management)
+   - [5.9 Service Enquiries Lead Board (`GET /api/vendors/:vendorId/enquiries`, `PUT /api/enquiries/:enquiryId`)](#59-service-enquiries-lead-board)
+   - [5.10 Push Notification Token Registration (`POST /api/vendors/push-token`)](#510-push-notification-token-registration)
+6. [Frontend UI Implementation Guidelines](#6-frontend-ui-implementation-guidelines)
+7. [Error Handling & Code Reference](#7-error-handling--code-reference)
 
-### HTTP Request Headers
-For all protected Vendor endpoints, attach the JWT `Authorization` header:
+---
 
+## 1. Overview & Architecture Summary
+
+DigiLocal connects residents with local **Product Merchants** (Grocery, Bakery, Chemist) and **Service Providers** (Electrician, AC Repair, Plumbing, Housekeeping).
+
+The Vendor App operates on two main business streams:
+- **Product Merchants**: Manage item catalog, prices, and stock inventory. Receive product orders with a simplified 3-stage flow: `Placed` → `Accepted` → `Delivered`.
+- **Service Providers**: Catalog item addition is **disabled** (`can_add_items: false`). Vendor receives lead notifications on a dedicated **Service Enquiries Board** with direct one-tap Call and WhatsApp contact CTAs and status progression: `NEW` → `CONTACTED` → `SCHEDULED` → `COMPLETED`.
+
+---
+
+## 2. Vendor Classification & Location Model
+
+### 2.1 Vendor Classification Matrix
+| Aspect | Product Merchant | Service Provider |
+| :--- | :--- | :--- |
+| `vendor_type` | `"product"` | `"service"` |
+| `can_add_items` | `true` | `false` (API blocks catalog creation with 403 Forbidden) |
+| Primary Dashboard Tab | Catalog / Menu & Orders | Service Enquiries & Leads Board |
+| Order / Enquiry Flow | `Placed` → `Accepted` → `Delivered` | `NEW` → `CONTACTED` → `SCHEDULED` → `COMPLETED` |
+| Primary Mobile CTA | Add Product Shortcut / Order Status | Accepting Enquiries Toggle & 1-Tap Call/WhatsApp |
+| Audio Alert Chime | Order Siren Chime | Service Request Alert Chime |
+
+### 2.2 Baseline Location & "Go Global" Dynamic Coverage
+- **Society Vendor** (`location_type: "society"`): Locked to baseline society (`society_id`).
+- **Area / Sector Vendor** (`location_type: "area_sector"`): Baseline covers local sector (`sector_name`).
+- **"Go Global" Expansion**: Vendors toggle `is_global_coverage: true`, choose a radius (`delivery_radius_km`: 1, 3, 5, 10, 15 km), query `POST /api/vendors/check-coverage`, and selectively toggle active `selected_zones`.
+
+---
+
+## 3. Authentication & Header Conventions
+
+> [!IMPORTANT]
+> **Universal Master OTP for Testing & Staging (`999999`)**:
+> The backend explicitly allows **`999999`** (or `123456`) as a **Universal Master OTP** bypass.
+> Mobile App and Web frontend developers can input **`999999`** during mobile login, registration, or OTP verification across all **Vendor Panels (Mobile & Web)** and **User Panels** to gain instant access without requiring live SMS delivery.
+
+All protected endpoints require the HTTP Bearer Authorization header:
 ```http
 Authorization: Bearer <accessToken>
 Content-Type: application/json
 ```
 
-### Dual Session JWT Architecture
-1. On successful `POST /api/vendors/login` or `POST /api/vendors/register`, store both `accessToken` (Short-lived) and `refreshToken` (Long-lived in SecureStore/Keychain).
-2. When receiving `HTTP 401 Unauthorized`:
-   - Call `POST /api/vendors/refresh` with `{ "refreshToken": "<stored_refresh_token>" }`.
-   - Save the new `accessToken` and retry the failed request automatically.
-
 ---
 
-## 📦 3. Data Models (TypeScript Interfaces)
+## 4. TypeScript Data Models & Schemas
 
 ```typescript
-export interface HousingSociety {
-  society_id: number;
-  society_name: string;
-  location: string;
-  pincode: string;
-  total_flats: number;
-  rwa_phone?: string;
-  image_url?: string;
+export type VendorType = 'product' | 'service';
+export type LocationType = 'society' | 'area_sector';
+
+export interface CoverageZoneItem {
+  zone_id: number | string;
+  name: string;
+  type: 'society' | 'sector' | 'sub_area';
+  is_active: boolean;
 }
 
 export interface VendorProfile {
@@ -57,242 +93,147 @@ export interface VendorProfile {
   store_name: string;
   email: string;
   phone_number: string;
-  gst_number: string;
-  opening_time: string;
-  closing_time: string;
-  logo: string;
-  description: string;
-  min_order_value?: number;
-  delivery_charge?: number;
-  status: 'PENDING' | 'ACTIVE' | 'REJECTED' | 'EXPIRED';
+  whatsapp_number?: string;
+  vendor_type: VendorType;
+  can_add_items: boolean;
+  location_type: LocationType;
+  is_global_coverage: boolean;
+  delivery_radius_km: number;
+  selected_zones: CoverageZoneItem[];
+  account_number: string;
+  ifsc_code: string;
+  bank_name: string;
+  account_holder_name: string;
+  status: 'PENDING' | 'APPROVED' | 'ACTIVE';
 }
 
-export interface ProductItem {
-  item_id: number;
+export interface ServiceEnquiryLead {
+  enquiry_id: number;
   vendor_id: number;
-  item_name: string;
+  user_id?: string;
+  user_name: string;
+  user_phone: string;
+  society_id?: number;
+  society_name?: string;
+  sector?: string;
+  service_type: string;
+  preferred_time: string;
   description: string;
-  price: number;
-  stock: number;
-  category: string;
-  unit: string; // e.g. "kg", "packet", "piece", "liter"
-  is_available: boolean | number;
-  in_stock: boolean | number;
-  image_url: string;
+  issue_photos: string[];
+  status: 'NEW' | 'CONTACTED' | 'SCHEDULED' | 'COMPLETED' | 'CANCELLED';
+  created_at: string;
+  direct_actions: {
+    whatsapp_link: string;
+    call_link: string;
+  };
 }
 
-export interface OrderItem {
-  item_id?: number;
-  item_name: string;
-  quantity: number;
-  price: number;
-}
-
-export interface VendorOrder {
+export interface ProductOrder {
   order_id: string;
-  user_id: string;
+  vendor_id: number;
   customer_name: string;
   phone: string;
   delivery_address: string;
   total_amount: number;
-  status: 'PENDING' | 'ACCEPTED' | 'CONFIRMED' | 'OUT_FOR_DELIVERY' | 'DELIVERED' | 'CANCELLED';
+  status: 'PLACED' | 'ACCEPTED' | 'DELIVERED';
   created_at: string;
-  items: OrderItem[];
+  items: Array<{
+    item_name: string;
+    quantity: number;
+    price: number;
+  }>;
 }
 ```
 
 ---
 
-## 🚀 4. API Endpoints Reference
+## 5. Complete API Endpoints Reference
 
----
+### 5.1 MSG91 Mobile OTP Service
 
-### 🏛️ 4.1 Onboarding: Fetch & Add Housing Societies
-
-#### 1. List Housing Societies
-- **Endpoint:** `GET /api/societies`
-- **Auth:** Public
-- **Description:** Populates the society selection dropdown during vendor registration.
-- **Response `200 OK`:**
-```json
-[
-  {
-    "society_id": 1,
-    "society_name": "Omaxe Greenwood Residency",
-    "location": "Sector Greenwood, Omega II, Greater Noida",
-    "pincode": "201310",
-    "total_flats": 850,
-    "vendor_count": 2,
-    "image_url": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800"
-  }
-]
-```
-
-#### 2. Onboard New Housing Society
-- **Endpoint:** `POST /api/societies`
-- **Auth:** Public
-- **Request Body:**
+#### Trigger Mobile OTP (`POST /api/vendors/send-otp`)
 ```json
 {
-  "society_name": "Godrej Woods Community",
-  "location": "Sector 43, Noida",
-  "pincode": "201301",
-  "total_flats": 450,
-  "rwa_phone": "9876543210"
+  "mobile": "9876543210",
+  "purpose": "register"
 }
 ```
-- **Response `201 Created`:**
+**Response (200 OK):**
 ```json
 {
-  "message": "Society onboarding request created successfully",
-  "society_id": 5,
-  "society": {
-    "society_id": 5,
-    "society_name": "Godrej Woods Community",
-    "location": "Sector 43, Noida",
-    "status": "APPROVED"
-  }
+  "success": true,
+  "provider": "msg91",
+  "message": "OTP sent successfully via MSG91 SMS",
+  "target": "9876543210"
 }
 ```
-- **Error `400 Bad Request` (Duplicate Name):**
+
+#### Verify Mobile OTP (`POST /api/vendors/verify-otp`)
 ```json
 {
-  "error": "A society named \"Godrej Woods Community\" already exists."
+  "mobile": "9876543210",
+  "otp": "123456"
+}
+```
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "OTP verified successfully",
+  "valid": true
 }
 ```
 
 ---
 
-### 🔑 4.2 Vendor Registration & Login
+### 5.2 Dynamic Coverage Zone Calculator (`POST /api/vendors/check-coverage`)
 
-#### 1. Vendor Account Registration
-- **Endpoint:** `POST /api/vendors/register`
-- **Auth:** Public
-- **Request Body:**
+Calculates surrounding housing societies and commercial sectors within a given radius using Haversine distance, auto-selecting zones inside the circle while permitting manual toggle for nearby zones.
+
 ```json
 {
-  "society_id": 1,
-  "vendor_name": "Rajesh Sharma",
-  "email": "freshmart@gmail.com",
-  "password": "VendorPassword123",
-  "store_name": "FreshMart Grocery & Organic",
-  "phone_number": "9876543210",
-  "gst_number": "07AAACR12341Z5",
-  "payment_method": "Razorpay (UPI)",
-  "transaction_id": "RAZORPAY_TXN_991823"
+  "latitude": 28.6270,
+  "longitude": 77.3720,
+  "radius_km": 3,
+  "sector": "Sector 62",
+  "location_type": "society"
 }
 ```
-- **Response `201 Created`:**
+**Response (200 OK):**
 ```json
 {
-  "message": "Vendor registration submitted successfully",
-  "vendor_id": 1,
-  "vendor": {
-    "vendor_id": 1,
-    "store_name": "FreshMart Grocery & Organic",
-    "vendor_name": "Rajesh Sharma",
-    "email": "freshmart@gmail.com",
-    "status": "ACTIVE"
+  "success": true,
+  "vendor_location": {
+    "latitude": 28.6270,
+    "longitude": 77.3720,
+    "address": "Sector 62, Noida"
   },
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-#### 2. Vendor Account Login
-- **Endpoint:** `POST /api/vendors/login`
-- **Auth:** Public (Rate-limited against brute-force)
-- **Request Body:**
-```json
-{
-  "email": "freshmart@gmail.com",
-  "password": "VendorPassword123"
-}
-```
-- **Response `200 OK`:**
-```json
-{
-  "message": "Login successful",
-  "vendor": {
-    "vendor_id": 1,
-    "store_name": "FreshMart Grocery & Organic",
-    "vendor_name": "Rajesh Sharma",
-    "email": "freshmart@gmail.com",
-    "phone_number": "9876543210",
-    "society_id": 1,
-    "status": "ACTIVE"
-  },
-  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-#### 3. Refresh Access Token
-- **Endpoint:** `POST /api/vendors/refresh`
-- **Auth:** Public
-- **Request Body:** `{ "refreshToken": "<stored_refresh_token>" }`
-- **Response `200 OK`:** `{ "accessToken": "eyJhbGciOiJIUzI1Ni..." }`
-
----
-
-### 🔑 4.3 Password Reset (OTP Workflow)
-
-1. **Request OTP:** `POST /api/vendors/forgot-password` ➔ `{ "email": "freshmart@gmail.com" }`
-2. **Verify OTP:** `POST /api/vendors/verify-otp` ➔ `{ "email": "freshmart@gmail.com", "otp": "849201" }`
-3. **Reset Password:** `POST /api/vendors/reset-password` ➔ `{ "email": "freshmart@gmail.com", "otp": "849201", "newPassword": "NewSecretPassword123" }`
-
----
-
-### 📊 4.4 Vendor Panel Dashboard
-
-- **Endpoint:** `GET /api/vendorPanel/:vendorId`
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Description:** Fetches vendor store profile, full catalog items array, and incoming customer orders.
-- **Response `200 OK`:**
-```json
-{
-  "vendor": {
-    "vendor_id": 1,
-    "society_id": 1,
-    "vendor_name": "Rajesh Sharma",
-    "store_name": "FreshMart Grocery & Organic",
-    "email": "freshmart@gmail.com",
-    "phone_number": "9876543210",
-    "opening_time": "08:00 AM",
-    "closing_time": "10:00 PM",
-    "status": "ACTIVE"
-  },
-  "items": [
+  "radius_km": 3,
+  "location_type": "society",
+  "total_zones": 6,
+  "auto_selected_count": 3,
+  "zones": [
     {
-      "item_id": 101,
-      "vendor_id": 1,
-      "item_name": "Fresh Organic Milk (1L)",
-      "description": "Pure farm fresh whole cow milk pouch.",
-      "price": 68.00,
-      "stock": 50,
-      "category": "Dairy & Milk",
-      "unit": "1 Litre",
-      "is_available": true,
-      "in_stock": true,
-      "image_url": "https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400"
-    }
-  ],
-  "orders": [
+      "zone_id": 1,
+      "name": "Omaxe Greenwood Residency",
+      "type": "society",
+      "latitude": 28.6270,
+      "longitude": 77.3720,
+      "distance_km": 0,
+      "is_inside_circle": true,
+      "is_auto_selected": true,
+      "is_active": true
+    },
     {
-      "order_id": "ORD-9843",
-      "customer_name": "Rahul Sharma",
-      "phone": "9876543210",
-      "delivery_address": "Tower A-402",
-      "total_amount": 180.00,
-      "status": "PENDING",
-      "created_at": "2026-08-05T06:27:00.000Z",
-      "items": [
-        {
-          "item_name": "Fresh Butter 500g",
-          "quantity": 1,
-          "price": 180.00
-        }
-      ]
+      "zone_id": 2,
+      "name": "Apex Golf Avenue",
+      "type": "society",
+      "latitude": 28.6320,
+      "longitude": 77.3780,
+      "distance_km": 0.82,
+      "is_inside_circle": true,
+      "is_auto_selected": true,
+      "is_active": true
     }
   ]
 }
@@ -300,179 +241,298 @@ export interface VendorOrder {
 
 ---
 
-### 📦 4.5 Store Product Catalog Management (CRUD)
+### 5.3 Vendor Registration with Classification (`POST /api/vendors/register`)
 
-#### 1. Add Product Item
-- **Endpoint:** `POST /api/vendors/:vendorId/items` (or `/api/vendorPanel/:vendorId/items`)
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Request Body:**
 ```json
 {
-  "item_name": "Fresh Paneer 200g",
-  "description": "Soft fresh dairy cottage cheese block",
-  "price": 90.00,
-  "category": "Dairy & Milk",
-  "stock": 30,
-  "unit": "200g",
-  "is_available": true,
-  "image_url": "https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=400"
+  "vendor_name": "Ramesh Kumar",
+  "store_name": "Ramesh Electrical & AC Repair",
+  "email": "ramesh.services@gmail.com",
+  "phone_number": "9876500001",
+  "password": "VendorPassword123!",
+  "account_number": "918890450564",
+  "ifsc_code": "SBIN0001234",
+  "bank_name": "State Bank of India",
+  "account_holder_name": "Ramesh Kumar",
+  "vendor_type": "service",
+  "location_type": "area_sector",
+  "is_global_coverage": true,
+  "delivery_radius_km": 5,
+  "selected_zones": [
+    { "zone_id": 1, "name": "Greenwood Residency", "type": "society", "is_active": true }
+  ]
 }
 ```
-- **Response `201 Created`:**
+**Response (201 Created):**
 ```json
 {
-  "message": "Item added successfully",
-  "item_id": 106,
-  "item": {
-    "item_id": 106,
-    "item_name": "Fresh Paneer 200g",
-    "price": 90.00,
-    "in_stock": true
+  "token": "eyJhbGciOi...",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
+  "vendor_id": 12,
+  "vendor": {
+    "vendor_id": 12,
+    "store_name": "Ramesh Electrical & AC Repair",
+    "vendor_type": "service",
+    "can_add_items": false,
+    "location_type": "area_sector",
+    "is_global_coverage": true,
+    "delivery_radius_km": 5,
+    "status": "ACTIVE"
   }
 }
 ```
 
-#### 2. Update Product or Toggle In-Stock Status
-- **Endpoint:** `PUT /api/vendorPanel/:vendorId/items/:itemId`
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Request Body:**
-```json
-{
-  "price": 95.00,
-  "stock": 25,
-  "is_available": false
-}
-```
-- **Response `200 OK`:** `{ "message": "Item updated successfully" }`
-
-#### 3. Delete Product Item
-- **Endpoint:** `DELETE /api/vendorPanel/:vendorId/items/:itemId`
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Response `200 OK`:** `{ "message": "Item deleted successfully" }`
-
 ---
 
-### 🚚 4.6 Vendor Order Pipeline & Status Updates
+### 5.4 Vendor Login & Token Refresh
 
-#### 1. Fetch Store Orders
-- **Endpoint:** `GET /api/orders/vendor/:vendorId`
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Response `200 OK`:** Returns array of vendor orders with customer details and item lists.
-
-#### 2. Update Order Status
-- **Endpoint:** `PUT /api/orders/:id/status`
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Request Body:**
+#### Login (`POST /api/vendors/login`)
 ```json
 {
-  "status": "CONFIRMED"
+  "identifier": "9876500001",
+  "password": "VendorPassword123!"
 }
 ```
-- **Supported Status Values:**
-  - `"ACCEPTED"` or `"CONFIRMED"` (Vendor accepts order)
-  - `"OUT_FOR_DELIVERY"` (Out for delivery within society)
-  - `"DELIVERED"` (Delivery completed)
-  - `"CANCELLED"` (Declined/Cancelled)
-- **Response `200 OK`:**
+**Response (200 OK):**
 ```json
 {
-  "message": "Order status updated successfully",
-  "order_id": "ORD-9843",
-  "status": "CONFIRMED"
+  "success": true,
+  "token": "eyJhbGciOi...",
+  "accessToken": "eyJhbGciOi...",
+  "refreshToken": "eyJhbGciOi...",
+  "vendor_id": 12,
+  "store_name": "Ramesh Electrical & AC Repair"
 }
 ```
 
 ---
 
-### ⚙️ 4.7 Update Vendor Store Settings
-- **Endpoint:** `PUT /api/vendorPanel/:vendorId/settings`
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Request Body:**
+### 5.5 Fetch Vendor Profile & Dashboard (`GET /api/vendors/:id`)
+
+```bash
+curl -X GET http://localhost:5000/api/vendors/12
+```
+**Response (200 OK):**
 ```json
 {
-  "store_name": "FreshMart Grocery & Organic",
-  "phone_number": "9876543210",
-  "opening_time": "07:30 AM",
-  "closing_time": "10:30 PM",
-  "description": "Quality goods & daily essentials delivered warm to your flat."
+  "vendor_id": 12,
+  "store_name": "Ramesh Electrical & AC Repair",
+  "vendor_name": "Ramesh Kumar",
+  "phone_number": "9876500001",
+  "vendor_type": "service",
+  "can_add_items": false,
+  "location_type": "area_sector",
+  "is_global_coverage": true,
+  "delivery_radius_km": 5,
+  "selected_zones": [
+    { "zone_id": 1, "name": "Greenwood Residency", "type": "society", "is_active": true }
+  ],
+  "items": []
 }
 ```
-- **Response `200 OK`:** `{ "message": "Store settings updated successfully" }`
 
 ---
 
-### 🗑️ 4.8 Delete Vendor Store (Delete Account / Shop)
-Allows an authenticated vendor owner to permanently delete their store and associated items from the platform.
+### 5.6 Update Delivery Radius & Zone Coverage (`PUT /api/vendors/:vendorId/coverage`)
 
-- **Endpoint:** `DELETE /api/vendorPanel/:vendorId` (or `DELETE /api/vendors/:vendorId`)
-- **Auth:** Required (`Bearer <accessToken>`)
-- **Headers:**
-  ```http
-  Authorization: Bearer <vendor_jwt_access_token>
-  Content-Type: application/json
-  ```
-- **Response `200 OK`:**
-  ```json
+```http
+PUT /api/vendors/12/coverage
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+```json
+{
+  "location_type": "area_sector",
+  "is_global_coverage": true,
+  "delivery_radius_km": 3,
+  "latitude": 28.6270,
+  "longitude": 77.3720,
+  "location_address": "Sector 62, Noida, UP",
+  "selected_zones": [
+    { "zone_id": 1, "name": "Omaxe Greenwood Residency", "type": "society", "is_active": true },
+    { "zone_id": 2, "name": "Apex Golf Avenue", "type": "society", "is_active": true }
+  ]
+}
+```
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Vendor delivery coverage settings updated successfully",
+  "vendor_id": 12,
+  "location_type": "area_sector",
+  "is_global_coverage": true,
+  "delivery_radius_km": 3,
+  "latitude": 28.6270,
+  "longitude": 77.3720,
+  "location_address": "Sector 62, Noida, UP",
+  "selected_zones": [
+    { "zone_id": 1, "name": "Omaxe Greenwood Residency", "type": "society", "is_active": true },
+    { "zone_id": 2, "name": "Apex Golf Avenue", "type": "society", "is_active": true }
+  ]
+}
+```
+
+---
+
+### 5.7 Product Catalog Management
+
+#### Add Product Item (`POST /api/vendorPanel/:vendorId/items`)
+> ⚠️ **Note**: Service Providers (`vendor_type: "service"`) attempting this call receive HTTP 403 Forbidden.
+
+```json
+{
+  "item_name": "Amul Fresh Butter 500g",
+  "price": 275.00,
+  "stock": 40,
+  "category": "Dairy & Bakery",
+  "unit": "packet",
+  "is_available": true
+}
+```
+**Error Response for Service Providers (403 Forbidden):**
+```json
+{
+  "error": "Item catalog is disabled for Service Providers. Service requests are managed via the Service Enquiries panel.",
+  "can_add_items": false,
+  "vendor_type": "service"
+}
+```
+
+---
+
+### 5.8 Product Orders Management
+
+#### List Orders (`GET /api/orders/vendor/:vendorId`)
+**Response (200 OK):**
+```json
+[
   {
-    "success": true,
-    "message": "Vendor store \"FreshMart Grocery\" (ID: 1) and associated items deleted successfully.",
-    "vendor_id": 1
+    "order_id": "ORD-178772",
+    "customer_name": "Aarushi",
+    "phone": "9811223344",
+    "delivery_address": "Tower A-402, Greenwood Residency",
+    "total_amount": 450.00,
+    "status": "PLACED",
+    "created_at": "2026-08-26T11:00:00.000Z",
+    "items": [
+      { "item_name": "Amul Taaza Milk 1L", "quantity": 2, "price": 68.00 }
+    ]
   }
-  ```
-- **Error Responses:**
-  - `401 Unauthorized`: Token missing or invalid.
-  - `403 Forbidden`: Authenticated user does not own this vendor store.
-  - `404 Not Found`: Vendor store ID not found.
+]
+```
+
+#### Update Order Status (`PUT /api/orders/:id/status`)
+Flow: `PLACED` → `ACCEPTED` → `DELIVERED`
+
+```json
+{
+  "status": "ACCEPTED"
+}
+```
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Order status updated successfully",
+  "order_id": "ORD-178772",
+  "status": "ACCEPTED"
+}
+```
 
 ---
 
-## 📱 5. Production Axios API Client Snippet (TypeScript)
+### 5.9 Service Enquiries Lead Board
 
-```typescript
-import axios from 'axios';
-
-// Set Base URL to your backend server
-const BASE_URL = 'http://localhost:5000'; // Or your Render live backend URL
-
-export const vendorApiClient = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
-
-// Interceptor: Auto-attach JWT Access Token
-vendorApiClient.interceptors.request.use(async (config) => {
-  const token = await getStoredToken('accessToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-// Interceptor: Handle 401 Unauthorized via Refresh Token
-vendorApiClient.interceptors.response.use(
-  (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const refreshToken = await getStoredToken('refreshToken');
-        if (!refreshToken) throw new Error('No refresh token');
-
-        const { data } = await axios.post(`${BASE_URL}/api/vendors/refresh`, { refreshToken });
-        await setStoredToken('accessToken', data.accessToken);
-
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
-        return vendorApiClient(originalRequest);
-      } catch (err) {
-        await clearTokens();
-        // Redirect to Login Screen
-        return Promise.reject(err);
+#### List Vendor Service Enquiries (`GET /api/vendors/:vendorId/enquiries`)
+```bash
+curl -X GET http://localhost:5000/api/vendors/12/enquiries?status=NEW
+```
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "vendor_id": 12,
+  "total_enquiries": 1,
+  "enquiries": [
+    {
+      "enquiry_id": 104,
+      "user_name": "Ananya Sharma",
+      "user_phone": "9811223344",
+      "society_name": "Greenwood Residency",
+      "sector": "Sector 62",
+      "service_type": "AC Servicing & Gas Top-up",
+      "preferred_time": "2026-08-28 10:00 AM - 12:00 PM",
+      "description": "AC cooling is weak and making buzzing noise",
+      "issue_photos": ["https://example.com/ac_leakage.jpg"],
+      "status": "NEW",
+      "created_at": "2026-08-26T11:20:00.000Z",
+      "direct_actions": {
+        "whatsapp_link": "https://wa.me/919811223344?text=Hi%20Ananya...",
+        "call_link": "tel:9811223344"
       }
     }
-    return Promise.reject(error);
-  }
-);
+  ]
+}
 ```
+
+#### Update Enquiry Status (`PUT /api/enquiries/:enquiryId`)
+Allowed statuses: `NEW`, `CONTACTED`, `SCHEDULED`, `COMPLETED`, `CANCELLED`
+
+```json
+{
+  "status": "CONTACTED"
+}
+```
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "Enquiry status updated to CONTACTED",
+  "enquiry_id": 104,
+  "status": "CONTACTED"
+}
+```
+
+---
+
+### 5.10 Push Notification Token Registration (`POST /api/vendors/push-token`)
+
+Registers FCM or Expo Push Token for instant audio siren chime alerts.
+
+```json
+{
+  "vendor_id": 12,
+  "push_token": "ExponentPushToken[mock_expo_token_123456]",
+  "platform": "expo"
+}
+```
+**Response (200 OK):**
+```json
+{
+  "success": true,
+  "message": "FCM / Expo device push token registered successfully",
+  "vendor_id": 12
+}
+```
+
+---
+
+## 6. Frontend UI Implementation Guidelines
+
+1. **Service Lead Alert Siren (Mobile App)**: On socket event or FCM push for a new service enquiry, trigger full-screen overlay (`AlarmOverlay.tsx`) with audio chime and instant WhatsApp/Call buttons.
+2. **One-Tap WhatsApp CTA**: Use `enquiry.direct_actions.whatsapp_link` directly with `Linking.openURL(whatsapp_link)` on mobile or `window.open(whatsapp_link, '_blank')` on web.
+3. **Accepting Enquiries Toggle**: Display persistent availability toggle in vendor profile header.
+
+---
+
+## 7. Error Handling & Code Reference
+
+| Status Code | Message | Description |
+| :--- | :--- | :--- |
+| `400 Bad Request` | Missing parameters | Invalid JSON or missing mandatory fields |
+| `401 Unauthorized` | Invalid JWT token | Token expired or invalid signature |
+| `403 Forbidden` | Item catalog is disabled | Service vendors cannot add catalog items |
+| `404 Not Found` | Vendor/Order/Enquiry not found | Invalid entity identifier |
+| `500 Server Error` | DB query failed | Internal server error |

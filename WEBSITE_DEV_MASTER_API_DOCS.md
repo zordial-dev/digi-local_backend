@@ -1,11 +1,10 @@
 # 🌐 DigiLocal — Website Developer Master API Handbook (User Panel + Vendor Web Panel)
 
-**Document Version**: 2.1.0-MASTER  
+**Document Version**: 2.0.0-MASTER  
 **Target Release**: v1.0.0  
 **Target Audience**: Website Developers (React, Next.js, Vue, Web Apps building User & Vendor Portals)  
 **Base URL**: `http://localhost:5000/api` (Production: `https://api.digilocal.in/api`)  
-**Authentication Header**: `Authorization: Bearer <ACCESS_TOKEN>`  
-**Frontend Location & Map Guide**: [`FRONTEND_GO_GLOBAL_AND_LOCATION_INTEGRATION_GUIDE.md`](file:///c:/Users/LENOVO/Desktop/digilocal_backend_mock/FRONTEND_GO_GLOBAL_AND_LOCATION_INTEGRATION_GUIDE.md)
+**Authentication Header**: `Authorization: Bearer <ACCESS_TOKEN>`
 
 ---
 
@@ -32,7 +31,7 @@
 
 ## 1. Platform Architecture & Integration Overview
 
-The DigiLocal website contains two integrated portals built into a single responsive web-app:
+The DigiLocal website contains two integrated portals built into a single responsive web web-app:
 1. **User / Resident Web Panel**: Location selection, vendor discovery, product shopping cart, service enquiry modal with direct WhatsApp chat redirection, and dual order/enquiry tracking dashboard.
 2. **Vendor Web Panel**: Registration stepper, classification selection (Product vs Service), Go-Global dynamic coverage zone map/picker, catalog item manager (Product Vendors), and Service Enquiries Leads Board (Service Vendors).
 
@@ -165,15 +164,13 @@ curl -X GET http://localhost:5000/api/societies
 
 ---
 
-### A3. Storefront Discovery & Search (Location Matching & Access Control)
+### A3. Storefront Discovery & Search (Location Matching & Badges)
 
 #### `GET /api/vendors/search`
 
-Filters active vendors matching resident location (Society, Sector, or Geolocation Lat/Lng) and attaches dynamic `coverage_badge`. Vendors outside the resident's allowed area are automatically excluded.
+Filters active vendors matching resident location (Society or Sector) and attaches dynamic `coverage_badge`.
 
 #### Query Parameters:
-- `user_lat` / `lat`: Resident latitude coordinate (e.g. `28.6270`)
-- `user_lng` / `lng`: Resident longitude coordinate (e.g. `77.3720`)
 - `societyId` / `society_id`: Resident selected society ID (e.g. `1`)
 - `sector` / `sectorId`: Resident sector name (e.g. `"Sector 62"`)
 - `type` / `vendor_type`: `"product"` | `"service"`
@@ -182,7 +179,7 @@ Filters active vendors matching resident location (Society, Sector, or Geolocati
 
 #### Request Example:
 ```bash
-curl -X GET "http://localhost:5000/api/vendors/search?societyId=1&user_lat=28.6270&user_lng=77.3720&type=service"
+curl -X GET "http://localhost:5000/api/vendors/search?societyId=1&type=service"
 ```
 
 #### Response Example (200 OK):
@@ -198,11 +195,19 @@ curl -X GET "http://localhost:5000/api/vendors/search?societyId=1&user_lat=28.62
     "can_add_items": false,
     "location_type": "area_sector",
     "is_global_coverage": true,
-    "delivery_radius_km": 3,
-    "distance_km": 0.82,
-    "coverage_badge": "Extended Service (Within 3 km)",
+    "delivery_radius_km": 5,
+    "coverage_badge": "In Your Society",
     "logo": "https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=200",
     "society_name": "Greenwood Residency"
+  },
+  {
+    "vendor_id": 15,
+    "store_name": "Sharma AC Cooling",
+    "vendor_name": "Sharma Ji",
+    "vendor_type": "service",
+    "can_add_items": false,
+    "coverage_badge": "Extended Service (Within 10 km)",
+    "logo": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=200"
   }
 ]
 ```
@@ -212,36 +217,17 @@ curl -X GET "http://localhost:5000/api/vendors/search?societyId=1&user_lat=28.62
 ### A4. Product Merchant Storefront & Checkout Flow
 
 #### A4.1 Get Vendor Store Profile & Product Catalog (`GET /api/vendors/:id`)
-
-Verifies resident location if passed in query (`user_lat`, `user_lng`, `societyId`, `sector`). Returns store details if resident is within vendor's allowed serviceable area. Returns `HTTP 403 Forbidden` if resident is outside vendor's serviceable area.
-
 ```bash
-curl -X GET "http://localhost:5000/api/vendors/10?user_lat=28.6270&user_lng=77.3720&societyId=1"
+curl -X GET http://localhost:5000/api/vendors/10
 ```
-
-**Access Granted Response (200 OK):**
+**Response (200 OK):**
 ```json
 {
   "vendor_id": 10,
   "store_name": "FreshMart Grocery",
   "vendor_type": "product",
   "can_add_items": true,
-  "latitude": 28.6270,
-  "longitude": 77.3720,
-  "items": []
-}
-```
-
-**Access Restricted Response (403 Forbidden):**
-```json
-{
-  "success": false,
-  "error": "Store not available in your location area. This vendor does not serve your residential zone.",
-  "is_servicable": false,
-  "vendor_id": 10,
-  "store_name": "FreshMart Grocery"
-}
-```
+  "items": [
     {
       "item_id": 101,
       "item_name": "Amul Taaza Milk 1L",

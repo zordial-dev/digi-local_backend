@@ -1,5 +1,14 @@
 -- DigiLocal Platform Relational Database Schema (PostgreSQL & SQLite compatible)
 
+CREATE TABLE IF NOT EXISTS locations (
+    location_id BIGSERIAL PRIMARY KEY,
+    area VARCHAR(255) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    state VARCHAR(100) NOT NULL,
+    pincode VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS societies (
     society_id BIGSERIAL PRIMARY KEY,
     society_name VARCHAR(255) NOT NULL,
@@ -9,6 +18,8 @@ CREATE TABLE IF NOT EXISTS societies (
     state VARCHAR(100),
     pincode VARCHAR(20),
     location VARCHAR(255) DEFAULT '',
+    latitude DECIMAL(10,7) DEFAULT 28.6270,
+    longitude DECIMAL(10,7) DEFAULT 77.3720,
     secretary_name VARCHAR(255) DEFAULT 'Society Secretary',
     secretary_mobile VARCHAR(20) DEFAULT '9876543210',
     public_id VARCHAR(50),
@@ -88,9 +99,52 @@ CREATE TABLE IF NOT EXISTS vendors (
     logo TEXT DEFAULT 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&auto=format&fit=crop&q=80',
     avatar_url TEXT,
     description TEXT DEFAULT 'Quality goods & daily essentials delivered within society via WhatsApp.',
+    account_number VARCHAR(50),
+    bank_account_number VARCHAR(50),
+    ifsc_code VARCHAR(20),
+    ifsc VARCHAR(20),
+    bank_name VARCHAR(100),
+    account_holder_name VARCHAR(255),
+    upi_id VARCHAR(100),
+    qr_code_url TEXT,
+    upi_qr_code TEXT,
+    qr_code TEXT,
+    whatsapp_number VARCHAR(20),
+    accepted_payment_methods VARCHAR(255) DEFAULT 'COD,UPI,BANK_TRANSFER,QR_CODE',
+    payment_instructions TEXT,
+    vendor_type VARCHAR(20) DEFAULT 'product',
+    can_add_items BOOLEAN DEFAULT TRUE,
+    latitude DECIMAL(10,7) DEFAULT 28.6270,
+    longitude DECIMAL(10,7) DEFAULT 77.3720,
+    is_global_coverage BOOLEAN DEFAULT FALSE,
+    delivery_radius_km DECIMAL(5,2) DEFAULT 0.00,
+    selected_zones JSONB DEFAULT '[]',
+    location_address TEXT,
+    location VARCHAR(255),
+    city VARCHAR(100),
+    state VARCHAR(100),
+    pincode VARCHAR(20),
     status VARCHAR(20) DEFAULT 'ACTIVE',
     public_id VARCHAR(10),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS enquiries (
+    enquiry_id BIGSERIAL PRIMARY KEY,
+    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+    user_id VARCHAR(100),
+    user_name VARCHAR(255) NOT NULL,
+    user_phone VARCHAR(50) NOT NULL,
+    society_id BIGINT,
+    society_name VARCHAR(255),
+    sector VARCHAR(100),
+    service_type VARCHAR(255),
+    preferred_time VARCHAR(100),
+    description TEXT,
+    issue_photos TEXT[] DEFAULT '{}',
+    status VARCHAR(50) DEFAULT 'NEW',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS items (

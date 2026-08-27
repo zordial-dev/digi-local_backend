@@ -18,8 +18,11 @@ const {
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
  */
 
+const storefrontController = require('../../controllers/Storefront/storefrontController');
+
 // 4.1 List Vendors & Website Storefront Endpoints
 router.get('/', adminPanelController.listVendors);
+router.get('/search', storefrontController.searchVendorsLocationAware);
 router.get('/all', adminPanelController.listVendors);
 router.get('/list', adminPanelController.listVendors);
 router.get('/public', adminPanelController.listVendors);
@@ -50,6 +53,12 @@ router.delete('/:vendorId', vendorPanelController.deleteStore);
 
 // POST /api/vendors/send-otp
 router.post('/send-otp', vendorAuthController.sendVendorOtp);
+
+// POST /api/vendors/check-coverage
+router.post('/check-coverage', vendorAuthController.checkCoverage);
+
+// PUT /api/vendors/:vendorId/coverage
+router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
 
 // POST /api/vendors/check-phone, /check-vendor, /check-mobile, /check-user, /verify-phone
 router.post('/check-phone', vendorAuthController.checkVendorPhone);
@@ -100,6 +109,14 @@ router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 // Test Push Notification directly from Backend
 router.post('/test-push', vendorPanelController.testPushNotification);
 router.post('/:vendorId/test-push', vendorPanelController.testPushNotification);
+
+/*
+// 💳 Cashfree Payment Gateway Routes for Vendor Onboarding (Commented out per user directive)
+router.post('/cashfree/create-session', vendorAuthController.createCashfreeSession);
+router.post('/cashfree/session', vendorAuthController.createCashfreeSession);
+router.post('/cashfree/verify', vendorAuthController.verifyCashfreePayment);
+router.get('/cashfree/callback', vendorAuthController.verifyCashfreePayment);
+*/
 
 module.exports = router;
 

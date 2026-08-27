@@ -17,10 +17,22 @@ const otpRoutes = require('./otp');
 const cmsRoutes = require('./Cms/cmsRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
+const enquiryController = require('../controllers/Vendor/enquiryController');
 
 // ── Health & Observability Routes ───────────────────────────
 router.use('/health', healthRoutes);
 router.get('/version', (req, res) => res.redirect('/health/version'));
+
+// ── Service Vendor Enquiry Direct Routes ────────────────────
+router.post('/api/enquiries', enquiryController.createEnquiry);
+router.post('/api/vendors/enquiries', enquiryController.createEnquiry);
+router.post('/api/vendors/:vendorId/enquiries', enquiryController.createEnquiry);
+router.get('/api/vendors/:vendorId/enquiries', enquiryController.getVendorEnquiries);
+router.get('/api/user/:userId/enquiries', enquiryController.getUserEnquiries);
+router.get('/api/users/:userId/enquiries', enquiryController.getUserEnquiries);
+router.patch('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
+router.put('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
+router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 
 // ── Core Business API Routes ────────────────────────────────
 router.use('/api/otp', otpRoutes);                 // MSG91 Mobile/Web OTP Service
@@ -47,6 +59,10 @@ router.put('/api/admin/cms/pages/:slug', cmsController.updateCmsPageBySlug);
 router.put('/api/admin/cms/contacts', cmsController.updateSupportContacts);
 
 // ── Additional Admin Panel Specification Alias Routes ────────
+router.get('/api/dashboard', adminPanelController.getDashboardData);
+router.get('/api/admin/dashboard', adminPanelController.getDashboardData);
+router.get('/api/vendors/:id/payments', adminPanelController.getVendorPayments);
+
 router.all('/api/v1/auth/login', adminPanelController.login);
 router.all('/api/v1/auth/me', adminPanelController.getMe);
 router.all('/api/v1/admin/users', adminPanelController.listUsers);

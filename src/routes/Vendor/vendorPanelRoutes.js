@@ -15,8 +15,8 @@ const ALLOWED_MIME_TYPES = [
     'image/png',
     'image/webp',
     'image/gif',
-    'image/heic',    // iOS camera HEIC format
-    'image/heif',    // iOS camera HEIF format
+    'image/heic',
+    'image/heif',
     'image/bmp',
     'image/tiff',
 ];
@@ -112,10 +112,13 @@ function handleMulterError(err, req, res, next) {
     next();
 }
 
-// POST /api/vendorPanel/upload-image - Upload item image
-// Supports camera photos (JPEG/HEIC/no-extension), gallery images, URLs
-// handleMulterError MUST come after upload middleware to catch size/type errors gracefully
-router.post('/upload-image', upload.single('image'), handleMulterError, vendorPanelController.uploadImage);
+// POST /api/vendorPanel/upload-image & /upload-logo - Upload logo or item image from camera or gallery
+router.post('/upload-image', upload.any(), handleMulterError, vendorPanelController.uploadImage);
+router.post('/upload-logo', upload.any(), handleMulterError, vendorPanelController.uploadImage);
+
+// POST/PUT /api/vendorPanel/:vendorId/logo - Directly upload & set shop logo
+router.post('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
+router.put('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
 
 // GET /api/vendorPanel/:vendorId - Full vendor dashboard data
 router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
@@ -137,6 +140,9 @@ router.delete('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner,
 
 // PUT /api/vendorPanel/:vendorId/settings - Update store settings
 router.put('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
+
+// PUT /api/vendorPanel/:vendorId/coverage - Update delivery coverage settings
+router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);
 
 // POST /api/vendorPanel/:vendorId/renew - Renew vendor subscription
 router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, vendorPanelController.renewSubscription);
