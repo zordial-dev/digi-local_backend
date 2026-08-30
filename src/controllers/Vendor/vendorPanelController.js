@@ -375,8 +375,6 @@ async function updateVendorCoverage(req, res) {
         if (newLoc) {
             updateFields.push('location = ?');
             updateParams.push(newLoc);
-            updateFields.push('location_address = ?');
-            updateParams.push(newLoc);
         }
 
         if (city !== undefined) {

@@ -123,7 +123,7 @@ async function getVendorStorefront(req, res) {
         const itemsResult = await query(
             `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, created_at
              FROM items WHERE vendor_id = ? AND in_stock = TRUE ORDER BY created_at DESC`,
-            [actualVendorId]
+            [vendor.vendor_id]
         );
 
         return res.status(200).json({
