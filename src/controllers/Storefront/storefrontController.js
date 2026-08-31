@@ -268,10 +268,16 @@ async function searchVendorsLocationAware(req, res) {
  * GET /api/locations
  * Returns list of registered areas, cities, and states for location autocompletion and filtering.
  */
+/**
+ * GET /api/locations
+ * GET /api/locations/suggestions
+ * Area Autocomplete & Location Suggestions API for Vendor Registration & Frontend Search.
+ * Searches locations table by area/city/pincode and returns matching locations & suggestions list.
+ */
 async function getLocations(req, res) {
     try {
-        const { search, q, area, city, state } = req.query;
-        const kw = String(search || q || area || '').trim().toLowerCase();
+        const { search, q, query: qParam, area, term, input, city, state } = req.query;
+        const kw = String(search || q || qParam || area || term || input || '').trim().toLowerCase();
 
         let sql = `SELECT location_id, area, city, state, pincode, created_at FROM locations WHERE 1=1`;
         const params = [];
@@ -297,30 +303,61 @@ async function getLocations(req, res) {
         const locRes = await query(sql, params).catch(() => ({ rows: [] }));
         let locations = locRes.rows || [];
 
-        // If locations table is empty or sparse, also fallback/union with distinct vendor locations
-        if (locations.length === 0) {
-            let vSql = `SELECT DISTINCT location as area, city, state, pincode FROM vendors WHERE location IS NOT NULL AND location != ''`;
-            const vParams = [];
-            if (kw) {
-                vSql += ` AND (LOWER(location) LIKE ? OR LOWER(city) LIKE ? OR LOWER(state) LIKE ?)`;
-                const searchKw = `%${kw}%`;
-                vParams.push(searchKw, searchKw, searchKw);
-            }
-            vSql += ` LIMIT 50`;
-            const vRes = await query(vSql, vParams).catch(() => ({ rows: [] }));
-            locations = (vRes.rows || []).map((r, idx) => ({ location_id: idx + 1, ...r }));
+        // If locations table is sparse or empty, also include distinct areas from societies & vendors
+        if (locations.length < 5) {
+            let addSql = `
+                SELECT DISTINCT society_name as area, 'Noida' as city, 'Uttar Pradesh' as state, '201301' as pincode 
+                FROM societies 
+                WHERE LOWER(society_name) LIKE ? 
+                UNION 
+                SELECT DISTINCT area, city, state, pincode 
+                FROM vendors 
+                WHERE area IS NOT NULL AND area != '' AND LOWER(area) LIKE ?
+            `;
+            const addKw = `%${kw}%`;
+            const addRes = await query(addSql, [addKw, addKw]).catch(() => ({ rows: [] }));
+            const existingAreas = new Set(locations.map(l => (l.area || '').toLowerCase().trim()));
+
+            (addRes.rows || []).forEach(r => {
+                const cleanArea = (r.area || '').trim();
+                if (cleanArea && !existingAreas.has(cleanArea.toLowerCase())) {
+                    existingAreas.add(cleanArea.toLowerCase());
+                    locations.push({
+                        location_id: locations.length + 1,
+                        area: cleanArea,
+                        city: r.city || 'Noida',
+                        state: r.state || 'Uttar Pradesh',
+                        pincode: r.pincode || '201301'
+                    });
+                }
+            });
         }
+
+        // Extract distinct area text array for simple dropdown suggestions
+        const areaSuggestions = Array.from(
+            new Set(locations.map(l => String(l.area || '').trim()).filter(Boolean))
+        );
 
         return res.status(200).json({
             success: true,
             total: locations.length,
-            data: locations
+            query: kw,
+            suggestions: areaSuggestions,
+            areas: areaSuggestions,
+            data: locations.map(l => ({
+                location_id: Number(l.location_id || 0),
+                area: l.area || '',
+                city: l.city || '',
+                state: l.state || '',
+                pincode: l.pincode || ''
+            }))
         });
     } catch (err) {
-        console.error('Error fetching locations:', err);
-        res.status(500).json({ error: 'Failed to fetch locations' });
+        console.error('Error fetching location suggestions:', err);
+        res.status(500).json({ error: 'Failed to fetch location suggestions' });
     }
 }
+
 
 module.exports = {
     getSocietyVendorsStorefront,

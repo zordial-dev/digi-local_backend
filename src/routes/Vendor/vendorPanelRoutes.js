@@ -3,25 +3,17 @@ const router = express.Router();
 const path = require('path');
 const multer = require('multer');
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
+const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
 const { authenticateToken, requireVendorOwner } = require('../../middleware/auth');
 const { validateRequest } = require('../../middleware/validate');
 const { addItemSchema, updateSettingsSchema } = require('../../schemas/vendorSchema');
 
-// ── Multer Storage Config ────────────────────────────────────
-// Allowed MIME types (covers camera photos which may have no extension)
+// Allowed MIME types
 const ALLOWED_MIME_TYPES = [
-    'image/jpeg',
-    'image/jpg',
-    'image/png',
-    'image/webp',
-    'image/gif',
-    'image/heic',
-    'image/heif',
-    'image/bmp',
-    'image/tiff',
+    'image/jpeg', 'image/jpg', 'image/png', 'image/webp',
+    'image/gif', 'image/heic', 'image/heif', 'image/bmp', 'image/tiff',
 ];
 
-// Extension → MIME fallback map for files with known extensions
 const EXT_TO_MIME = {
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
     '.png': 'image/png', '.webp': 'image/webp',
@@ -29,7 +21,6 @@ const EXT_TO_MIME = {
     '.heif': 'image/heif', '.bmp': 'image/bmp', '.tiff': 'image/tiff',
 };
 
-// Extension to use when saving file (normalize HEIC/HEIF → .jpg for broad compatibility)
 function resolveExtension(file) {
     const mimeToExt = {
         'image/jpeg': '.jpg', 'image/jpg': '.jpg',
@@ -37,19 +28,16 @@ function resolveExtension(file) {
         'image/gif': '.gif', 'image/heic': '.heic',
         'image/heif': '.heif', 'image/bmp': '.bmp', 'image/tiff': '.tiff',
     };
-    // Prefer MIME type for extension resolution (camera photos may have no/wrong extension)
     if (file.mimetype && mimeToExt[file.mimetype.toLowerCase()]) {
         return mimeToExt[file.mimetype.toLowerCase()];
     }
     const extFromName = path.extname(file.originalname || '').toLowerCase();
-    return extFromName || '.jpg'; // fallback to .jpg if truly unknown
+    return extFromName || '.jpg';
 }
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const uploadDir = path.join(__dirname, '../../../public/uploads');
-        // Ensure uploads directory exists
-        const fs = require('fs');
         if (!fs.existsSync(uploadDir)) {
             fs.mkdirSync(uploadDir, { recursive: true });
         }
@@ -65,68 +53,46 @@ const storage = multer.diskStorage({
 const fileFilter = (req, file, cb) => {
     const mimeOk = ALLOWED_MIME_TYPES.includes((file.mimetype || '').toLowerCase());
     const ext = path.extname(file.originalname || '').toLowerCase();
-    const extOk = !ext || Object.keys(EXT_TO_MIME).includes(ext); // no-extension is OK (camera photos)
+    const extOk = !ext || Object.keys(EXT_TO_MIME).includes(ext);
 
     if (mimeOk || extOk) {
         cb(null, true);
     } else {
-        cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', `Only image files are allowed. Received: ${file.mimetype || 'unknown'}. Allowed: jpg, png, webp, gif, heic`));
+        cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', `Only image files are allowed.`));
     }
 };
 
-// 10MB limit — camera photos can be 5-8MB, 5MB was too restrictive
 const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
-/**
- * Multer error handler middleware — returns clean JSON instead of crashing the app.
- * Must be used after upload middleware on every upload route.
- */
 function handleMulterError(err, req, res, next) {
     if (err) {
         if (err instanceof multer.MulterError) {
-            if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(413).json({
-                    error: 'Image file is too large. Maximum allowed size is 10MB. Please compress or resize your photo before uploading.',
-                    code: 'FILE_TOO_LARGE'
-                });
-            }
-            if (err.code === 'LIMIT_UNEXPECTED_FILE') {
-                // Wrong field name: multer throws LIMIT_UNEXPECTED_FILE when field name != expected
-                // Invalid file type: our fileFilter also throws LIMIT_UNEXPECTED_FILE with err.field = 'image'
-                const isWrongField = err.field && err.field !== 'image';
-                return res.status(400).json({
-                    error: isWrongField
-                        ? `Wrong field name "${err.field}". Use field name "image" to upload a photo.`
-                        : (err.message || 'Invalid file type. Only image files (jpg, png, webp, gif, heic) are allowed.'),
-                    code: isWrongField ? 'WRONG_FIELD_NAME' : 'INVALID_FILE_TYPE',
-                    hint: isWrongField
-                        ? 'Use field name exactly "image" when uploading photos from camera or gallery.'
-                        : 'Supported formats: jpg, jpeg, png, webp, gif, heic'
-                });
-            }
-            return res.status(400).json({ error: `Upload error: ${err.message}`, code: err.code });
+            return res.status(400).json({ error: err.message, code: err.code });
         }
-        // Non-multer error (e.g. filesystem error)
-        return res.status(500).json({ error: 'File upload failed. Please try again.', details: err.message });
+        return res.status(500).json({ error: 'File upload failed.', details: err.message });
     }
     next();
 }
 
-// POST /api/vendorPanel/upload-image & /upload-logo - Upload logo or item image from camera or gallery
+// POST /api/vendorPanel/upload-image & /upload-logo
 router.post('/upload-image', upload.any(), handleMulterError, vendorPanelController.uploadImage);
 router.post('/upload-logo', upload.any(), handleMulterError, vendorPanelController.uploadImage);
 
-// POST/PUT /api/vendorPanel/:vendorId/logo - Directly upload & set shop logo
+// POST/PUT /api/vendorPanel/:vendorId/logo
 router.post('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
 router.put('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
+
+// Direct vendor status check
+router.get('/status', vendorAuthController.getVendorStatus);
+router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 
 // GET /api/vendorPanel/:vendorId - Full vendor dashboard data
 router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
 
-// POST /api/vendorPanel/:vendorId/items - Add item
+// POST /api/vendorPanel/:vendorId/items
 router.post('/:vendorId/items', authenticateToken, requireVendorOwner, validateRequest(addItemSchema), vendorPanelController.addItem);
 
-// PUT /api/vendorPanel/:vendorId/items/:itemId - Edit item or toggle availability
+// PUT /api/vendorPanel/:vendorId/items/:itemId
 router.put('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
 
 // Toggle Item Availability Endpoints
@@ -135,20 +101,20 @@ router.put('/items/:itemId/availability', authenticateToken, vendorPanelControll
 router.patch('/:vendorId/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
 router.put('/:vendorId/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
 
-// DELETE /api/vendorPanel/:vendorId/items/:itemId - Delete item
+// DELETE /api/vendorPanel/:vendorId/items/:itemId
 router.delete('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner, vendorPanelController.deleteItem);
 
 // PUT /api/vendorPanel/payment-details & /:vendorId/payment-details
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 
-// PUT /api/vendorPanel/:vendorId/settings - Update store settings
+// PUT /api/vendorPanel/:vendorId/settings
 router.put('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
 
-// PUT /api/vendorPanel/:vendorId/coverage - Update delivery coverage settings
+// PUT /api/vendorPanel/:vendorId/coverage
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);
 
-// POST /api/vendorPanel/:vendorId/renew - Renew vendor subscription
+// POST /api/vendorPanel/:vendorId/renew
 router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, vendorPanelController.renewSubscription);
 
 // FCM / Expo Push Device Token Endpoints
@@ -157,7 +123,7 @@ router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
-// DELETE /api/vendorPanel/:vendorId or /api/vendorPanel/:vendorId/store - Delete Vendor Store
+// DELETE /api/vendorPanel/:vendorId
 router.delete('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.deleteStore);
 router.delete('/:vendorId/store', authenticateToken, requireVendorOwner, vendorPanelController.deleteStore);
 

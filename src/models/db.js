@@ -353,6 +353,10 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS pan_number VARCHAR(50)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS area VARCHAR(255)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'android'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS hold_reason TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS hold_email_subject VARCHAR(255)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS has_resubmitted BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS resubmitted_at TIMESTAMP`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS vendor_type VARCHAR(20) DEFAULT 'product'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS can_add_items BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS location_type VARCHAR(50) DEFAULT 'society'`,
@@ -451,20 +455,11 @@ async function setupTablesPg() {
     await pgPool.query(`
       UPDATE vendors SET location_id = society_id WHERE location_id IS NULL AND society_id IS NOT NULL;
     `).catch(() => {});
-  } catch (err) {
-    console.warn('[Migration Notice] Location sync warning:', err.message);
-  }
+  } catch (_) {}
 
-  // Backfill public_id if missing
-  const socRows = await query(`SELECT society_id FROM societies WHERE public_id IS NULL`);
-  if (socRows.rows && socRows.rows.length > 0) {
-    await Promise.all(socRows.rows.map(r => query(`UPDATE societies SET public_id = ? WHERE society_id = ?`, [genPublicId(5), r.society_id])));
-  }
-
-  const venRows = await query(`SELECT vendor_id FROM vendors WHERE public_id IS NULL`);
-  if (venRows.rows && venRows.rows.length > 0) {
-    await Promise.all(venRows.rows.map(r => query(`UPDATE vendors SET public_id = ? WHERE vendor_id = ?`, [genPublicId(6), r.vendor_id])));
-  }
+  // Backfill public_id if missing (Optimized single SQL updates)
+  await pgPool.query(`UPDATE societies SET public_id = SUBSTRING(MD5(RANDOM()::text), 1, 5) WHERE public_id IS NULL`).catch(() => {});
+  await pgPool.query(`UPDATE vendors SET public_id = SUBSTRING(MD5(RANDOM()::text), 1, 6) WHERE public_id IS NULL`).catch(() => {});
 }
 
 /**

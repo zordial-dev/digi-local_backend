@@ -3,6 +3,7 @@ const router = express.Router();
 const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
 const adminPanelController = require('../../controllers/Admin/adminPanelController');
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
+const storefrontController = require('../../controllers/Storefront/storefrontController');
 const { authenticateAdminToken, requirePower } = require('../../middleware/adminAuth');
 const { loginBruteForceGuard } = require('../../middleware/security');
 const { validateRequest } = require('../../middleware/validate');
@@ -18,9 +19,7 @@ const {
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
  */
 
-const storefrontController = require('../../controllers/Storefront/storefrontController');
-
-// 4.1 List Vendors & Website Storefront Endpoints
+// 1. Static Storefront & Search Endpoints
 router.get('/', adminPanelController.listVendors);
 router.get('/search', storefrontController.searchVendorsLocationAware);
 router.get('/all', adminPanelController.listVendors);
@@ -33,94 +32,62 @@ router.get('/society/:societyId', (req, res, next) => {
   return adminPanelController.listVendors(req, res, next);
 });
 
-// 4.2 List Pending Merchant Requests
+// 2. Static Admin & Vendor Management Endpoints (Must come BEFORE /:vendorId)
 router.get('/pending', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.listPendingVendors);
-
-// 4.3 Approve Vendor Application
-router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.approveVendor);
-
-// 4.4 Reject Vendor Application
-router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);
-
-// 4.5 Update Vendor Status (Block / Unblock with Custom Reason)
-router.post('/:vendorId/status', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.updateVendorStatus);
-
-// GET /api/vendors/:id - Fetch Vendor Storefront Profile & Catalog Items
-router.get('/:id', vendorAuthController.getVendorPublicProfile);
-
-// DELETE /api/vendors/:vendorId - Delete Vendor Store
-router.delete('/:vendorId', vendorPanelController.deleteStore);
-
-// POST /api/vendors/send-otp
-router.post('/send-otp', vendorAuthController.sendVendorOtp);
-
-// POST /api/vendors/check-coverage
-router.post('/check-coverage', vendorAuthController.checkCoverage);
-
-// PUT /api/vendors/payment-details & /:vendorId/payment-details
+router.get('/on-hold', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.listOnHoldVendors);
+router.get('/hold', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.listOnHoldVendors);
+router.get('/locations/suggestions', storefrontController.getLocations);
+router.get('/locations', storefrontController.getLocations);
+router.get('/status', vendorAuthController.getVendorStatus);
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
-router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
+router.post('/resubmit', vendorAuthController.resubmitVendorRequest);
+router.put('/resubmit', vendorAuthController.resubmitVendorRequest);
 
-// PUT /api/vendors/:vendorId/coverage
-router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
-
-// POST /api/vendors/check-phone, /check-vendor, /check-mobile, /check-user, /verify-phone
+// 3. Static Auth Endpoints (Must come BEFORE /:vendorId)
+router.post('/send-otp', vendorAuthController.sendVendorOtp);
+router.post('/check-coverage', vendorAuthController.checkCoverage);
 router.post('/check-phone', vendorAuthController.checkVendorPhone);
 router.post('/check-vendor', vendorAuthController.checkVendorPhone);
 router.post('/check-mobile', vendorAuthController.checkVendorPhone);
 router.post('/check-user', vendorAuthController.checkVendorPhone);
 router.post('/verify-phone', vendorAuthController.checkVendorPhone);
 
-// POST /api/vendors/register
 router.post('/register', validateRequest(registerSchema), vendorAuthController.registerVendor);
-
-// POST /api/vendors/login
 router.post('/login', loginBruteForceGuard, validateRequest(loginSchema), vendorAuthController.loginVendor);
-
-// POST /api/vendors/user-login or /api/vendors/login-as-user
 router.post('/user-login', loginBruteForceGuard, validateRequest(loginSchema), vendorAuthController.handleUserLogin);
 router.post('/login-as-user', loginBruteForceGuard, validateRequest(loginSchema), vendorAuthController.handleUserLogin);
-
-// POST /api/vendors/user-register
 router.post('/user-register', vendorAuthController.handleUserRegisterCheck);
-
-// POST /api/vendors/refresh
 router.post('/refresh', vendorAuthController.refreshToken);
-
-// POST /api/vendors/logout
 router.post('/logout', vendorAuthController.logoutVendor);
-
-// POST /api/vendors/forgot-password
 router.post('/forgot-password', validateRequest(forgotPasswordSchema), vendorAuthController.forgotPassword);
-
-// POST /api/vendors/verify-otp
 router.post('/verify-otp', validateRequest(verifyOtpSchema), vendorAuthController.verifyVendorOtp);
-
-// POST /api/vendors/reset-password
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);
 
-// FCM / Expo Push Device Token Endpoints (/api/vendors/push-token & /api/vendors/fcm-token)
+// FCM / Push Token Static Endpoints
 router.post('/push-token', vendorPanelController.registerFcmToken);
-router.post('/:vendorId/push-token', vendorPanelController.registerFcmToken);
 router.delete('/push-token', vendorPanelController.deleteFcmToken);
-router.delete('/:vendorId/push-token', vendorPanelController.deleteFcmToken);
-
 router.post('/fcm-token', vendorPanelController.registerFcmToken);
-router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
+
+// 4. Parameterized Routes (/:vendorId and /:id)
+router.get('/status/:vendorId', vendorAuthController.getVendorStatus);
+router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
+router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
+router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
+
+router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.approveVendor);
+router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);
+router.post('/:vendorId/hold', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.holdVendor);
+router.post('/:vendorId/status', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.updateVendorStatus);
+router.post('/:vendorId/resubmit', vendorAuthController.resubmitVendorRequest);
+router.put('/:vendorId/resubmit', vendorAuthController.resubmitVendorRequest);
+
+router.post('/:vendorId/push-token', vendorPanelController.registerFcmToken);
+router.delete('/:vendorId/push-token', vendorPanelController.deleteFcmToken);
+router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
-// Test Push Notification directly from Backend
-router.post('/test-push', vendorPanelController.testPushNotification);
-router.post('/:vendorId/test-push', vendorPanelController.testPushNotification);
-
-/*
-// 💳 Cashfree Payment Gateway Routes for Vendor Onboarding (Commented out per user directive)
-router.post('/cashfree/create-session', vendorAuthController.createCashfreeSession);
-router.post('/cashfree/session', vendorAuthController.createCashfreeSession);
-router.post('/cashfree/verify', vendorAuthController.verifyCashfreePayment);
-router.get('/cashfree/callback', vendorAuthController.verifyCashfreePayment);
-*/
+router.get('/:id', vendorAuthController.getVendorPublicProfile);
+router.delete('/:vendorId', vendorPanelController.deleteStore);
 
 module.exports = router;
-

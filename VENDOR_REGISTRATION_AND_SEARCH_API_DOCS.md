@@ -270,4 +270,4 @@ Search and list active vendor shops operating within a specified location area o
 | **Registration** | `POST /api/vendors/register` | **Allowed** (`PENDING` account can log in & add items/settings) | **Hidden** (Store is not shown in user search) | Vendor row created with `status = 'PENDING'` |
 | **Bank/Payment Update** | `PUT /api/vendorPanel/payment-details` | **Allowed** | **Hidden** (while pending) | Updates bank account & UPI fields |
 | **Admin Shop Approval** | `POST /api/admin/requests/:vendorId/approve` | **Allowed** | **Visible** (Store becomes active for users) | Sets `status = 'ACTIVE'`; auto-creates/links `area` in `locations` table |
-| **Admin Shop Rejection** | `POST /api/admin/requests/:vendorId/reject` | **Blocked** (Vendor cannot log in) | **Hidden** | **Vendor row & catalog items are permanently deleted from database** |
+| **Admin Shop Rejection** | `POST /api/admin/requests/:vendorId/reject` | **Blocked** (Vendor cannot log in) | **Hidden** | **Status set to `REJECTED`. Vendor record & data retained in database.** |

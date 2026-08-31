@@ -17,5 +17,8 @@ router.get('/vendors/:vendorId', (req, res, next) => {
 
 // GET /api/locations - Fetch available locations / areas / cities
 router.get('/locations', storefrontController.getLocations);
+router.get('/locations/suggestions', storefrontController.getLocations);
+router.get('/locations/search', storefrontController.getLocations);
+router.get('/locations/autocomplete', storefrontController.getLocations);
 
 module.exports = router;

@@ -24,8 +24,16 @@ app.use(cors({
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Platform-Client', 'X-Request-ID', 'X-Idempotency-Key', 'Accept']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Platform-Client', 'X-Request-ID', 'X-Idempotency-Key', 'Accept', 'Access-Control-Request-Private-Network']
 }));
+
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    next();
+});
 
 app.use(owaspSecurityHeaders);
 app.use(express.json({ limit: '10mb' }));

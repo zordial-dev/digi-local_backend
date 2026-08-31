@@ -365,11 +365,13 @@ async function registerVendor(req, res) {
             try { selected_zones = JSON.parse(selected_zones); } catch (_) { selected_zones = []; }
         }
         const selected_zones_json = JSON.stringify(Array.isArray(selected_zones) ? selected_zones : []);
+        const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || ['UPI', 'COD']);
+        const payment_instructions = String(body.payment_instructions || body.instructions || '').trim();
 
         const vendorRes = await query(
             `INSERT INTO vendors (society_id, vendor_name, gst_number, phone_number, email, password, password_hash, store_name, category, address, location, city, state, pincode, logo, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones, status) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE') RETURNING *`,
-            [society_id, vendor_name, gst_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, address, vendorLocation, vendorCity, vendorState, vendorPincode, logo, defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones_json]
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING') RETURNING *`,
+            [society_id, vendor_name, gstin || pan_number || '', phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones_json]
         );
         const newVendorRow = vendorRes.rows[0] || {};
         const vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -387,7 +389,7 @@ async function registerVendor(req, res) {
         }
 
         const subRes = await query(
-            `INSERT INTO subscriptions (vendor_id, start_date, end_date, status) VALUES (?, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 'ACTIVE') RETURNING *`,
+            `INSERT INTO subscriptions (vendor_id, start_date, end_date, status) VALUES (?, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 'PENDING') RETURNING *`,
             [vendor_id]
         );
         const subRow = subRes.rows[0] || {};
@@ -396,7 +398,7 @@ async function registerVendor(req, res) {
         const txnId = body.transaction_id || body.transactionId || `RAZORPAY_${Date.now()}_${vendor_id}`;
         const payMethod = body.payment_method || body.paymentMethod || 'Razorpay (UPI)';
         await query(
-            `INSERT INTO payments (subscription_id, vendor_id, amount, payment_method, transaction_id, status) VALUES (?, ?, 2999.00, ?, ?, 'SUCCESS')`,
+            `INSERT INTO payments (subscription_id, vendor_id, amount, payment_method, transaction_id, status) VALUES (?, ?, 2999.00, ?, ?, 'PENDING')`,
             [subscription_id, vendor_id, payMethod, txnId]
         );
 
@@ -413,18 +415,6 @@ async function registerVendor(req, res) {
 
         const newVendor = {
             vendor_id,
-            society_id,
-            store_name,
-            vendor_name,
-            email,
-            phone_number,
-            category,
-            address,
-            city,
-            pincode,
-            account_number,
-            ifsc_code,
-            bank_name,
             account_holder_name,
             upi_id,
             qr_code_url,
@@ -474,7 +464,7 @@ async function registerVendor(req, res) {
         }
     } catch (err) {
         console.error('Error registering vendor:', err);
-        res.status(500).json({ error: 'Failed to process vendor registration' });
+        res.status(500).json({ error: 'Failed to process vendor registration', details: err.message, stack: err.stack });
     }
 }
 
@@ -832,7 +822,155 @@ async function checkCoverage(req, res) {
     });
 }
 
+
+
+async function getVendorStatus(req, res) {
+  try {
+    let vendorId = req.params.vendorId || req.params.id || req.user?.vendor_id || req.user?.id || req.query.vendorId || req.query.vendor_id;
+
+    if (!vendorId && req.headers['authorization']) {
+      try {
+        const token = req.headers['authorization'].replace('Bearer ', '').trim();
+        const { verifyJwt } = require('../../utils/auth');
+        const authConfig = require('../../config/auth');
+        const payload = verifyJwt(token, authConfig.jwt.secret);
+        if (payload) {
+          vendorId = payload.vendor_id || payload.id;
+        }
+      } catch (_) {}
+    }
+
+    if (!vendorId) {
+      return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
+    }
+
+    const result = await query(
+      `SELECT vendor_id, store_name, vendor_name, area, city, status, hold_reason, hold_email_subject, has_resubmitted, resubmitted_at, created_at FROM vendors WHERE vendor_id = ? OR public_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+      [vendorId, String(vendorId), String(vendorId)]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
+    }
+
+    const v = result.rows[0];
+    const statusLower = (v.status || 'pending').toLowerCase();
+    const isApproved = statusLower === 'active' || statusLower === 'approved' || statusLower === 'accepted';
+    const isPending = statusLower === 'pending';
+    const isRejected = statusLower === 'rejected';
+    const isOnHold = statusLower === 'hold' || statusLower === 'on_hold';
+
+    let currentStatus = 'pending';
+    if (isApproved) currentStatus = 'accepted';
+    else if (isRejected) currentStatus = 'rejected';
+    else if (isOnHold) currentStatus = 'on_hold';
+
+    let message = 'Your application request will be processed soon.';
+    let recommended_ui_text = 'Your registration request is under review by admin. Verification will be completed soon.';
+
+    if (isApproved) {
+      message = 'Store is verified and active.';
+      recommended_ui_text = 'Congratulations! Your shop application is approved and active.';
+    } else if (isRejected) {
+      message = 'Merchant application was rejected by admin.';
+      recommended_ui_text = 'Your application was rejected. Please contact support for details.';
+    } else if (isOnHold) {
+      if (v.has_resubmitted) {
+        message = 'Your updated details have been resubmitted and are currently under review.';
+        recommended_ui_text = 'Your resubmitted application is currently under review by admin.';
+      } else {
+        message = 'Your application is currently on hold. Please update your details as requested in the email/reason and resubmit.';
+        recommended_ui_text = 'Your request is on hold. Please edit your store settings and click Resubmit Request.';
+      }
+    }
+
+    return res.status(200).json({
+      vendor_id: Number(v.vendor_id),
+      status: currentStatus,
+      is_accepted: isApproved,
+      is_pending: isPending,
+      is_rejected: isRejected,
+      is_on_hold: isOnHold,
+      has_resubmitted: Boolean(v.has_resubmitted),
+      resubmitted_at: v.resubmitted_at || null,
+      hold_email_subject: v.hold_email_subject || '',
+      hold_reason: v.hold_reason || '',
+      message,
+      recommended_ui_text
+    });
+  } catch (err) {
+    console.error('Error fetching vendor status:', err);
+    return res.status(500).json({ error: 'Failed to fetch vendor status.' });
+  }
+}
+
+async function resubmitVendorRequest(req, res) {
+  try {
+    let vendorId = req.params.vendorId || req.params.id || req.user?.vendor_id || req.user?.id || req.body?.vendor_id;
+
+    if (!vendorId && req.headers['authorization']) {
+      try {
+        const token = req.headers['authorization'].replace('Bearer ', '').trim();
+        const { verifyJwt } = require('../../utils/auth');
+        const authConfig = require('../../config/auth');
+        const payload = verifyJwt(token, authConfig.jwt.secret);
+        if (payload) vendorId = payload.vendor_id || payload.id;
+      } catch (_) {}
+    }
+
+    if (!vendorId) {
+      return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required for resubmission.' });
+    }
+
+    const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [vendorId]);
+    if (!existing.rows || existing.rows.length === 0) {
+      return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
+    }
+
+    const body = req.body || {};
+    const store_name = body.store_name || body.shop_name;
+    const vendor_name = body.vendor_name || body.owner_name;
+    const phone_number = body.phone_number || body.phone;
+    const gstin = body.gstin || body.gst_number || body.pan_number;
+    const area = body.area || body.location;
+    const city = body.city;
+    const pincode = body.pincode;
+    const shop_image = body.shop_image || body.logo || body.avatar_url;
+
+    await query(`
+      UPDATE vendors SET 
+        store_name = COALESCE(?, store_name),
+        vendor_name = COALESCE(?, vendor_name),
+        phone_number = COALESCE(?, phone_number),
+        gstin = COALESCE(?, gstin),
+        area = COALESCE(?, area),
+        city = COALESCE(?, city),
+        pincode = COALESCE(?, pincode),
+        logo = COALESCE(?, logo),
+        shop_image = COALESCE(?, shop_image),
+        status = 'HOLD',
+        has_resubmitted = TRUE,
+        resubmitted_at = CURRENT_TIMESTAMP
+      WHERE vendor_id = ?
+    `, [store_name, vendor_name, phone_number, gstin, area, city, pincode, shop_image, shop_image, vendorId]);
+
+    return res.status(200).json({
+      vendor_id: Number(vendorId),
+      status: 'on_hold',
+      has_resubmitted: true,
+      resubmitted_at: new Date().toISOString(),
+      message: 'Your application update has been resubmitted successfully. It is under review in the Hold section by the Admin team.'
+    });
+  } catch (err) {
+    console.error('Error resubmitting vendor request:', err);
+    return res.status(500).json({ error: 'Failed to resubmit vendor application.' });
+  }
+}
+
+
 module.exports = {
+    getVendorStatus,
+    resubmitVendorRequest,
     getVendorPublicProfile,
     sendVendorOtp,
     checkVendorPhone,
