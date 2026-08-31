@@ -111,7 +111,7 @@ async function registerVendor(req, res) {
         const hashedPassword = await hashPassword(password);
         const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
 
-        let society_id = 1;
+        let society_id = null;
         const rawSociety = body.society_id || body.societyId || body.society || body.society_name || body.societyName;
 
         if (typeof rawSociety === 'number' && rawSociety > 0) {

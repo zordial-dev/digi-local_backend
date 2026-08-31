@@ -38,6 +38,7 @@ router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.up
 router.use('/api/otp', otpRoutes);                 // MSG91 Mobile/Web OTP Service
 router.use('/api/societies', societyRoutes);       // Society management
 router.use('/api/vendors', vendorAuthRoutes);        // Vendor auth & Admin Vendor Spec
+router.use('/api/vendor', vendorAuthRoutes);         // Singular Vendor alias
 router.use('/api/stores', vendorAuthRoutes);         // Stores alias for website storefront
 router.use('/api/users', userRoutes);               // Resident user auth & profile
 router.use('/api/orders', orderRoutes);             // Customer orders & status pipeline
