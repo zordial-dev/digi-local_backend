@@ -22,6 +22,7 @@ router.get('/societies/:id/vendors', adminPanelController.getSocietyVendors);
 
 // ── Vendors ──────────────────────────────────────────────────────────
 router.get('/vendors', adminPanelController.listVendors);
+router.get(['/vendors/hold/list', '/vendors/hold'], adminPanelController.listOnHoldVendors);
 router.post('/vendors', adminPanelController.createVendor);
 router.post('/vendors/bulk-action', adminPanelController.bulkVendorAction);
 router.get('/vendors/:id', adminPanelController.getVendorById);
