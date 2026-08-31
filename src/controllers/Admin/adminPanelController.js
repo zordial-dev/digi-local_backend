@@ -188,40 +188,29 @@ async function listSocieties(req, res) {
     const { search, status, page = 1, limit = 20 } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
-    const offset = (pageNum - 1) * limitNum;
 
-    let countSql = `SELECT COUNT(DISTINCT s.society_id) as total FROM societies s`;
+    let countSql = `SELECT COUNT(DISTINCT l.location_id) as total FROM locations l`;
     let sql = `
-      SELECT s.society_id, 
-             s.society_name, 
-             s.code,
-             s.address,
-             s.city,
-             s.state,
-             s.pincode,
-             s.location,
-             COALESCE(s.public_id, CONCAT('SOC-', s.society_id)) as public_id,
-             COALESCE(s.status, 'active') as status,
-             s.created_at,
+      SELECT l.location_id, 
+             l.area, 
+             l.city,
+             l.state,
+             l.pincode,
+             l.created_at,
              COUNT(DISTINCT v.vendor_id) as vendor_count,
              COUNT(DISTINCT u.user_id) as resident_count
-      FROM societies s
-      LEFT JOIN vendors v ON s.society_id = v.society_id
-      LEFT JOIN users u ON s.society_id = u.society_id
+      FROM locations l
+      LEFT JOIN vendors v ON (v.location_id = l.location_id OR v.society_id = l.location_id OR LOWER(TRIM(v.area)) = LOWER(TRIM(l.area)))
+      LEFT JOIN users u ON (u.society_id = l.location_id OR LOWER(TRIM(u.society_name)) = LOWER(TRIM(l.area)))
     `;
 
     const conditions = [];
     const params = [];
 
     if (search) {
-      conditions.push(`(LOWER(s.society_name) LIKE ? OR LOWER(COALESCE(s.city, '')) LIKE ? OR LOWER(COALESCE(s.code, '')) LIKE ?)`);
+      conditions.push(`(LOWER(l.area) LIKE ? OR LOWER(COALESCE(l.city, '')) LIKE ? OR LOWER(COALESCE(l.pincode, '')) LIKE ?)`);
       const q = `%${search.toLowerCase()}%`;
       params.push(q, q, q);
-    }
-
-    if (status && status !== 'all') {
-      conditions.push(`LOWER(COALESCE(s.status, 'active')) = ?`);
-      params.push(status.toLowerCase());
     }
 
     if (conditions.length > 0) {
@@ -230,38 +219,37 @@ async function listSocieties(req, res) {
       countSql += whereClause;
     }
 
-    sql += ` GROUP BY s.society_id, s.society_name, s.code, s.address, s.city, s.state, s.pincode, s.location, s.public_id, s.status, s.created_at ORDER BY s.society_id DESC`;
+    sql += ` GROUP BY l.location_id, l.area, l.city, l.state, l.pincode, l.created_at ORDER BY l.location_id DESC`;
 
     const countRes = await query(countSql, params);
     const total = parseInt(countRes.rows[0]?.total || 0, 10);
     const total_pages = Math.ceil(total / limitNum) || 1;
 
-    const startTime = performance.now();
     const result = await query(sql, params);
-    const endTime = performance.now();
-    console.log(`admin societies search query time: ${endTime - startTime}`);
-    const data = result.rows.map(soc => ({
-      id: Number(soc.society_id),
-      society_id: Number(soc.society_id),
-      name: soc.society_name,
-      society_name: soc.society_name,
-      code: soc.code || soc.public_id || `SOC-${soc.society_id}`,
-      address: soc.address || soc.location || '',
-      city: soc.city || '',
-      state: soc.state || '',
-      pincode: soc.pincode || '',
-      location: soc.location || '',
-      vendor_count: Number(soc.vendor_count || 0),
-      resident_count: Number(soc.resident_count || 0),
-      status: (soc.status || 'active').toLowerCase(),
-      created_at: soc.created_at
+    const data = result.rows.map(loc => ({
+      id: Number(loc.location_id),
+      location_id: Number(loc.location_id),
+      society_id: Number(loc.location_id),
+      area: loc.area,
+      name: loc.area,
+      society_name: loc.area,
+      code: `LOC-${loc.location_id}`,
+      address: `${loc.area}, ${loc.city}`,
+      city: loc.city || '',
+      state: loc.state || '',
+      pincode: loc.pincode || '',
+      location: `${loc.area}, ${loc.city}`,
+      vendor_count: Number(loc.vendor_count || 0),
+      resident_count: Number(loc.resident_count || 0),
+      status: 'active',
+      created_at: loc.created_at
     }));
 
     const pagination = { total, page: pageNum, limit: limitNum, total_pages };
-    return respond(res, 200, data, 'Societies list retrieved successfully.', pagination);
+    return respond(res, 200, data, 'Location areas list retrieved successfully.', pagination);
   } catch (err) {
-    console.error('Error listing societies:', err);
-    return sendStandardError(res, 500, 'Failed to fetch societies list.', 'INTERNAL_SERVER_ERROR');
+    console.error('Error listing locations:', err);
+    return sendStandardError(res, 500, 'Failed to fetch location areas list.', 'INTERNAL_SERVER_ERROR');
   }
 }
 
@@ -570,18 +558,45 @@ async function approveVendor(req, res) {
     const { vendorId, id } = req.params;
     const targetId = vendorId || id;
 
-    const existing = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ?`, [targetId]);
+    const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [targetId]);
     if (!existing.rows || existing.rows.length === 0) {
       return sendStandardError(res, 404, `Vendor ID "${targetId}" not found.`, 'RESOURCE_NOT_FOUND');
     }
 
-    await query(`UPDATE vendors SET status = 'ACTIVE' WHERE vendor_id = ?`, [targetId]);
+    const v = existing.rows[0];
+    const targetArea = String(v.area || v.society_name || v.location || 'General Sector').trim();
+    const targetCity = String(v.city || 'Noida').trim();
+    const targetState = String(v.state || 'Uttar Pradesh').trim();
+    const targetPincode = String(v.pincode || '201301').trim();
+
+    let locRes = await query(
+      `SELECT location_id FROM locations WHERE LOWER(TRIM(area)) = LOWER(?)`,
+      [targetArea]
+    );
+    let locId;
+    if (locRes.rows && locRes.rows.length > 0) {
+      locId = Number(locRes.rows[0].location_id);
+    } else {
+      const insRes = await query(
+        `INSERT INTO locations (area, city, state, pincode, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) RETURNING location_id`,
+        [targetArea, targetCity, targetState, targetPincode]
+      );
+      locId = Number(insRes.insertId || insRes.rows[0]?.location_id || 1);
+    }
+
+    await query(
+      `UPDATE vendors SET status = 'ACTIVE', location_id = ?, area = ?, society_id = COALESCE(society_id, ?) WHERE vendor_id = ?`,
+      [locId, targetArea, locId, targetId]
+    );
 
     return respond(res, 200, {
       vendor_id: Number(targetId),
+      location_id: locId,
+      area: targetArea,
       status: 'active'
     }, 'Merchant onboarding application approved and activated.');
   } catch (err) {
+    console.error('Error approving vendor:', err);
     return sendStandardError(res, 500, 'Failed to approve vendor application.', 'INTERNAL_SERVER_ERROR');
   }
 }
@@ -590,21 +605,24 @@ async function rejectVendor(req, res) {
   try {
     const { vendorId, id } = req.params;
     const targetId = vendorId || id;
-    const { reason, rejection_reason } = req.body || {};
 
     const existing = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ?`, [targetId]);
     if (!existing.rows || existing.rows.length === 0) {
       return sendStandardError(res, 404, `Vendor ID "${targetId}" not found.`, 'RESOURCE_NOT_FOUND');
     }
 
-    await query(`UPDATE vendors SET status = 'REJECTED' WHERE vendor_id = ?`, [targetId]);
+    // Delete associated catalog items and items
+    await query(`DELETE FROM items WHERE vendor_id = ?`, [targetId]).catch(() => {});
+    await query(`DELETE FROM catalog_items WHERE vendor_id = ?`, [targetId]).catch(() => {});
+    // Remove vendor record from database
+    await query(`DELETE FROM vendors WHERE vendor_id = ?`, [targetId]);
 
     return respond(res, 200, {
       vendor_id: Number(targetId),
-      status: 'rejected',
-      reason: reason || rejection_reason || 'Application criteria not met.'
-    }, 'Merchant application rejected.');
+      status: 'rejected'
+    }, 'Merchant application rejected and vendor record removed from database.');
   } catch (err) {
+    console.error('Error rejecting vendor:', err);
     return sendStandardError(res, 500, 'Failed to reject vendor application.', 'INTERNAL_SERVER_ERROR');
   }
 }

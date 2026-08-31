@@ -138,6 +138,10 @@ router.put('/:vendorId/items/:itemId/availability', authenticateToken, vendorPan
 // DELETE /api/vendorPanel/:vendorId/items/:itemId - Delete item
 router.delete('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner, vendorPanelController.deleteItem);
 
+// PUT /api/vendorPanel/payment-details & /:vendorId/payment-details
+router.put('/payment-details', vendorPanelController.updatePaymentDetails);
+router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
+
 // PUT /api/vendorPanel/:vendorId/settings - Update store settings
 router.put('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
 

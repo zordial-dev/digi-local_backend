@@ -473,7 +473,64 @@ async function updateVendorCoverage(req, res) {
     }
 }
 
+
+async function updatePaymentDetails(req, res) {
+  try {
+    const vendorId = req.params.vendorId || req.user?.vendorId || req.body.vendor_id || req.body.vendorId;
+    const body = req.body || {};
+
+    const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
+    const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
+    const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
+    const account_holder_name = String(body.account_holder_name || body.accountHolderName || '').trim();
+    const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
+    const qr_code_url = String(body.qr_code_url || body.qrCodeUrl || body.qr_code || '').trim();
+
+    if (!vendorId) {
+      return res.status(400).json({ error: 'Vendor ID is required to update payment details.' });
+    }
+
+    const existing = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ?`, [vendorId]);
+    if (!existing.rows || existing.rows.length === 0) {
+      return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
+    }
+
+    await query(
+      `UPDATE vendors SET 
+        account_number = COALESCE(NULLIF(?, ''), account_number),
+        bank_account_number = COALESCE(NULLIF(?, ''), bank_account_number),
+        ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
+        ifsc = COALESCE(NULLIF(?, ''), ifsc),
+        bank_name = COALESCE(NULLIF(?, ''), bank_name),
+        account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
+        upi_id = COALESCE(NULLIF(?, ''), upi_id),
+        qr_code_url = COALESCE(NULLIF(?, ''), qr_code_url)
+      WHERE vendor_id = ?`,
+      [account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, vendorId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Bank account and payment details updated successfully.',
+      data: {
+        vendor_id: Number(vendorId),
+        account_number,
+        ifsc_code,
+        bank_name,
+        account_holder_name,
+        upi_id,
+        qr_code_url
+      }
+    });
+  } catch (err) {
+    console.error('Error updating payment details:', err);
+    return res.status(500).json({ error: 'Failed to update payment details.', details: err.message });
+  }
+}
+
+
 module.exports = {
+  updatePaymentDetails,
     uploadImage,
     updateVendorLogo,
     getDashboard,

@@ -57,6 +57,10 @@ router.post('/send-otp', vendorAuthController.sendVendorOtp);
 // POST /api/vendors/check-coverage
 router.post('/check-coverage', vendorAuthController.checkCoverage);
 
+// PUT /api/vendors/payment-details & /:vendorId/payment-details
+router.put('/payment-details', vendorPanelController.updatePaymentDetails);
+router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
+
 // PUT /api/vendors/:vendorId/coverage
 router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
 

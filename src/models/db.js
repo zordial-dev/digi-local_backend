@@ -347,6 +347,11 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS payment_instructions TEXT`,
 
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS device_type VARCHAR(50) DEFAULT 'android'`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS location_id BIGINT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS shop_number VARCHAR(100)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS shop_image TEXT`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS pan_number VARCHAR(50)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS area VARCHAR(255)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS platform VARCHAR(50) DEFAULT 'android'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS vendor_type VARCHAR(20) DEFAULT 'product'`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS can_add_items BOOLEAN DEFAULT TRUE`,
@@ -432,6 +437,23 @@ async function setupTablesPg() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
+
+  
+  // Auto-migrate societies into locations (area, city, state, pincode, created_at)
+  try {
+    await pgPool.query(`
+      INSERT INTO locations (location_id, area, city, state, pincode, created_at)
+      SELECT society_id, society_name, COALESCE(city, 'Noida'), COALESCE(state, 'Uttar Pradesh'), COALESCE(pincode, '201301'), COALESCE(created_at, CURRENT_TIMESTAMP)
+      FROM societies
+      ON CONFLICT (location_id) DO NOTHING;
+    `).catch(() => {});
+
+    await pgPool.query(`
+      UPDATE vendors SET location_id = society_id WHERE location_id IS NULL AND society_id IS NOT NULL;
+    `).catch(() => {});
+  } catch (err) {
+    console.warn('[Migration Notice] Location sync warning:', err.message);
+  }
 
   // Backfill public_id if missing
   const socRows = await query(`SELECT society_id FROM societies WHERE public_id IS NULL`);

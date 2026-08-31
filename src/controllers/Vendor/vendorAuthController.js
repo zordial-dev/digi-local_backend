@@ -234,12 +234,12 @@ async function registerVendor(req, res) {
 
         const vendor_name = String(
             body.vendor_name || body.owner_name || body.ownerName ||
-            body.vendorName || body.name || body.owner || 'Vendor Owner'
+            body.vendorName || body.name || body.owner || ''
         ).trim();
 
         const store_name = String(
             body.store_name || body.shop_name || body.business_name ||
-            body.storeName || body.shopName || body.businessName || 'My Store'
+            body.storeName || body.shopName || body.businessName || ''
         ).trim();
 
         const email = String(
@@ -255,110 +255,57 @@ async function registerVendor(req, res) {
             body.phone || body.phoneNumber || body.mobileNumber || ''
         ).trim();
 
-        const gst_number = String(
-            body.gst_number || body.gstNumber || body.gst || ''
+        const area = String(
+            body.area || body.society_name || body.location_name || body.society || ''
         ).trim();
 
-        const category = String(
-            body.category || body.business_category || body.businessCategory || 'General'
-        ).trim();
-
-        const address = String(
-            body.address || body.shop_address || body.shopAddress || ''
-        ).trim();
-
-        const city = String(
-            body.city || ''
-        ).trim();
-
-        const pincode = String(
-            body.pincode || body.pin_code || body.pinCode || '201310'
-        ).trim();
-
-        const logo = String(
-            body.logo || body.shop_images?.[0] || body.images?.[0] ||
-            'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80'
-        );
-
-        const account_number = String(
-            body.account_number || body.bank_account_number || body.accountNumber || body.bankAccountNumber || body.accountNo || ''
-        ).trim();
-
-        const ifsc_code = String(
-            body.ifsc_code || body.ifsc || body.ifscCode || ''
-        ).trim().toUpperCase();
-
-        const bank_name = String(
-            body.bank_name || body.bankName || body.bank || ''
-        ).trim();
-
-        const account_holder_name = String(
-            body.account_holder_name || body.accountHolderName || body.account_holder || vendor_name || ''
-        ).trim();
-
-        const upi_id = String(
-            body.upi_id || body.upiId || body.upi || ''
-        ).trim();
-
-        const qr_code_url = String(
-            body.qr_code_url || body.qr_code || body.upi_qr_code || body.qrCodeUrl || body.qrCode || ''
-        ).trim();
+        const city = String(body.city || '').trim();
+        const state = String(body.state || '').trim();
+        const pincode = String(body.pincode || body.pin_code || body.pinCode || '').trim();
 
         const whatsapp_number = String(
-            body.whatsapp_number || body.whatsapp || body.merchant_whatsapp || phone_number || ''
+            body.whatsapp_number || body.whatsapp || body.merchant_whatsapp || ''
         ).trim();
 
-        const accepted_payment_methods = String(
-            body.accepted_payment_methods || body.payment_modes || body.paymentMethods || 'COD,UPI,BANK_TRANSFER,QR_CODE'
+        const shop_number = String(
+            body.shop_number || body.shopNumber || body.shop_no || ''
         ).trim();
 
-        const payment_instructions = String(
-            body.payment_instructions || body.instructions || ''
+        const shop_image = String(
+            body.shop_image || body.logo || body.shop_images?.[0] || body.images?.[0] || body.shopImage || ''
         ).trim();
 
-        if (!account_number) {
-            return res.status(400).json({ error: 'Bank account_number is a mandatory field for vendor registration' });
+        // Mandatory Validations
+        if (!vendor_name) return res.status(400).json({ error: 'Vendor / owner_name is required for registration.' });
+        if (!store_name) return res.status(400).json({ error: 'Store / shop_name is required for registration.' });
+        if (!email) return res.status(400).json({ error: 'Email address is required for registration.' });
+        if (!phone_number) return res.status(400).json({ error: 'Phone number is required for registration.' });
+        if (!password) return res.status(400).json({ error: 'Password is a mandatory field for vendor registration.' });
+        if (!area) return res.status(400).json({ error: 'Area / location is a mandatory field for vendor registration.' });
+        if (!city) return res.status(400).json({ error: 'City is a mandatory field for vendor registration.' });
+        if (!state) return res.status(400).json({ error: 'State is a mandatory field for vendor registration.' });
+        if (!pincode) return res.status(400).json({ error: 'Pincode is a mandatory field for vendor registration.' });
+        if (!whatsapp_number) return res.status(400).json({ error: 'WhatsApp number is a mandatory field for vendor registration.' });
+        if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
+        if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
+
+        const gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim();
+        const pan_number = String(body.pan_number || body.pan || body.panNumber || '').trim();
+
+        if (!gstin && !pan_number) {
+            return res.status(400).json({ error: 'GSTIN or PAN number is a mandatory field for vendor registration.' });
         }
 
-        if (!ifsc_code) {
-            return res.status(400).json({ error: 'Bank ifsc_code is a mandatory field for vendor registration' });
-        }
+        // Optional Fields
+        const category = String(body.category || body.business_category || body.businessCategory || 'General').trim();
+        const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
+        const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
+        const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
+        const account_holder_name = String(body.account_holder_name || body.accountHolderName || vendor_name || '').trim();
+        const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
+        const qr_code_url = String(body.qr_code_url || body.qr_code || body.upi_qr_code || body.qrCodeUrl || '').trim();
 
-        const otp = body.otp || body.code;
-        const fbToken = body.firebase_token || body.idToken;
-
-        if (fbToken) {
-            console.log('🏪 [VENDOR REGISTER] Authenticating via Firebase Phone Token...');
-            const fbResult = await verifyFirebaseToken(fbToken);
-            const rawPhone = fbResult.phone_number || '';
-            const verifiedPhone = normalizePhone(rawPhone);
-            if (!verifiedPhone) {
-                return res.status(400).json({ error: 'Firebase token does not contain a verified phone number' });
-            }
-            const inputPhone = normalizePhone(phone_number);
-            if (inputPhone && verifiedPhone !== inputPhone) {
-                return res.status(400).json({ error: 'Verified phone number does not match provided phone number' });
-            }
-            // If phone_number wasn't provided but token has it, use the verified one
-            if (!phone_number) phone_number = verifiedPhone;
-        } else if (otp) {
-            const otpRes = verifyOTP(email || phone_number, otp);
-            if (!otpRes.valid) {
-                return res.status(400).json({ error: otpRes.reason || 'Invalid OTP code' });
-            }
-        } else if (process.env.OTP_VERIFICATION_MODE === 'strict') {
-            return res.status(400).json({ error: 'OTP verification is required for vendor registration' });
-        }
-
-        if (!email && !phone_number) {
-            return res.status(400).json({ error: 'Email address or phone number is required.' });
-        }
-
-        const existing = await query(`SELECT vendor_id FROM vendors WHERE (LOWER(email) = LOWER(?) AND email != '') OR (phone_number = ? AND phone_number != '')`, [email || '', phone_number || '']);
-        if (existing.rows.length > 0)
-            return res.status(400).json({ error: 'An account with this email address or phone number already exists.' });
-
-        const hashedPassword = password ? await hashPassword(password) : await hashPassword('VendorDefaultPass123!');
+        const hashedPassword = await hashPassword(password);
         const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
 
         let society_id = 1;
