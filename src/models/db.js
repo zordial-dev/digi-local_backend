@@ -477,66 +477,6 @@ async function seedInitialData() {
     }
   } catch (_) { }
 
-  const socCheck = await query(`SELECT society_id FROM societies WHERE society_id = 1`);
-  if (!socCheck.rows || socCheck.rows.length === 0) {
-    await query(`INSERT INTO societies (society_id, society_name, location, latitude, longitude, secretary_name, secretary_mobile, pincode) VALUES
-      (1, 'Omaxe Greenwood Residency', 'Sector 62, Noida', 28.6270, 77.3720, 'Ramesh Gupta', '9876543210', '201309'),
-      (2, 'Apex Golf Avenue', 'Sector 1, Greater Noida West', 28.6320, 77.3780, 'Suresh Sharma', '9876543211', '201306'),
-      (3, 'Cleo County', 'Sector 121, Noida', 28.6210, 77.3650, 'Anil Verma', '9876543212', '201307'),
-      (4, 'Supertech Capetown', 'Sector 74, Noida', 28.6100, 77.3850, 'Vikram Singh', '9876543213', '201301'),
-      (5, 'Gaur City 1', 'Sector 4, Greater Noida West', 28.6050, 77.4250, 'Pradeep Kumar', '9876543214', '201318')
-    `).catch(() => {});
-  }
-
-  const { hashPassword } = require('../utils/auth');
-  const pwdHash = await hashPassword('password123');
-  const vendorPwdHash = await hashPassword('vendor123');
-
-  const usrCheck = await query(`SELECT user_id FROM users WHERE user_id = ?`, ['usr_101']);
-  if (!usrCheck.rows || usrCheck.rows.length === 0) {
-    await query(`INSERT INTO users (user_id, name, email, phone, password_hash, person_type, status, society_id, society_name, flat, flags_count, joined_date, avatar) VALUES
-      ('usr_101', 'Shivin', 'lovelysethia53@gmail.com', '9764694949', '${pwdHash}', 'user_vendor', 'active', 1, 'Udb', 'Tower A-402', 0, 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')
-    `).catch(() => { });
-  }
-
-  const vCheck = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = 1`);
-  if (!vCheck.rows || vCheck.rows.length === 0) {
-    await query(`INSERT INTO vendors (vendor_id, society_id, society_name, vendor_name, store_name, owner_name, gstin, gst_number, phone_number, email, password, password_hash, opening_time, closing_time, logo, avatar_url, description, subscription_tier, status, total_orders, total_revenue, public_id) VALUES 
-      (1, 1, 'Greenwood Residency', 'Rajesh Sharma', 'Apna Store Grocery', 'Apna Store Grocery', '07AAAAA140001Z5', '07AAAAA140001Z5', '8890450564', 'apnastore@gmail.com', 'vendor123', '${vendorPwdHash}', '08:00 AM', '10:00 PM', 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400', 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400', 'Quality goods & daily essentials delivered within society via WhatsApp.', 'pro', 'active', 9525, 4170000.00, '${genPublicId(6)}')
-    `).catch(() => { });
-  }
-
-  const itemCheck = await query(`SELECT item_id FROM items WHERE item_id = 101`);
-  if (!itemCheck.rows || itemCheck.rows.length === 0) {
-    await query(`INSERT INTO items (item_id, vendor_id, item_name, description, price, stock, category, unit, is_available, in_stock, image_url) VALUES 
-      (101, 1, 'Fresh Organic Milk (1L)', 'Pure farm fresh whole cow milk pouch.', 68.00, 50, 'Dairy & Milk', '1 Litre', TRUE, TRUE, 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400'),
-      (102, 1, 'Fresh Butter 500g', 'Pure unsalted cream butter block.', 180.00, 30, 'Dairy & Milk', '500g', TRUE, TRUE, 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=400'),
-      (103, 1, 'Multigrain Bread', 'Fresh 100% multigrain brown bread loaf.', 50.00, 20, 'Bakery', '400g', TRUE, TRUE, 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400'),
-      (105, 1, 'Organic Honey (250g)', 'Raw unpasteurized forest honey.', 240.00, 15, 'Organic', '250g', TRUE, TRUE, 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?w=400')
-    `).catch((err) => console.error('Error seeding items:', err.message));
-
-    await query(`INSERT INTO catalog_items (item_id, vendor_id, item_name, price, category, description, image_url, in_stock) VALUES 
-      (101, 1, 'Fresh Organic Milk (1L)', 68.00, 'Dairy & Milk', 'Pure farm fresh whole cow milk pouch.', 'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400', TRUE),
-      (102, 1, 'Fresh Butter 500g', 180.00, 'Dairy & Milk', 'Pure unsalted cream butter block.', 'https://images.unsplash.com/photo-1589985270826-4b7bb135bc9d?w=400', TRUE),
-      (103, 1, 'Multigrain Bread', 50.00, 'Bakery', 'Fresh 100% multigrain brown bread loaf.', 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400', TRUE),
-      (105, 1, 'Organic Honey (250g)', 240.00, 'Organic', 'Raw unpasteurized forest honey.', 'https://images.unsplash.com/photo-1587049352847-4a222e784d38?w=400', TRUE)
-    `).catch((err) => console.error('Error seeding catalog_items:', err.message));
-  }
-
-  const ordCheck = await query(`SELECT order_id FROM orders WHERE order_id = ?`, ['ORD-9842']);
-  if (!ordCheck.rows || ordCheck.rows.length === 0) {
-    await query(`INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address) VALUES 
-      ('ORD-9842', 'usr_101', 1, 1, 236.00, 'DELIVERED', 'Tower A-402, Omaxe Greenwood Residency'),
-      ('ORD-9843', 'usr_101', 1, 1, 180.00, 'PENDING', 'Tower A-402')
-    `).catch((err) => console.error('Error seeding orders:', err.message));
-
-    await query(`INSERT INTO order_details (order_id, item_id, item_name, quantity, price, unit_price, item_total) VALUES 
-      ('ORD-9842', 101, 'Fresh Organic Milk (1L)', 2, 68.00, 68.00, 136.00),
-      ('ORD-9842', 103, 'Multigrain Bread', 1, 50.00, 50.00, 50.00),
-      ('ORD-9843', 102, 'Fresh Butter 500g', 1, 180.00, 180.00, 180.00)
-    `).catch((err) => console.error('Error seeding order_details:', err.message));
-  }
-
   // Ensure cms_pages table
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS cms_pages (
@@ -562,33 +502,8 @@ async function seedInitialData() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
-
-  // Seed support contacts
-  const scCheck = await query(`SELECT id FROM support_contacts WHERE id = 1`).catch(() => null);
-  if (!scCheck || !scCheck.rows || scCheck.rows.length === 0) {
-    await query(`
-      INSERT INTO support_contacts (id, phone, email, toll_free, whatsapp, address, working_hours, updated_at)
-      VALUES (1, '+91 800-562-5999', 'support@digilocal.in', '1800-123-4567', '+91 80056 25999', 'DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309', 'Monday to Saturday: 9:00 AM - 8:00 PM IST', NOW())
-    `).catch(() => {});
-  }
-
-  // Seed CMS pages
-  const cmsCheck = await query(`SELECT slug FROM cms_pages WHERE slug = 'help-support'`).catch(() => null);
-  if (!cmsCheck || !cmsCheck.rows || cmsCheck.rows.length === 0) {
-    await query(`
-      INSERT INTO cms_pages (slug, title, content, meta_description, updated_at) VALUES
-      ('help-support', 'Help & Support Center', '# DigiLocal Help & Support Center\n\nWelcome to the DigiLocal Help & Support Center. We are committed to providing seamless assistance to resident customers, society secretaries, and local vendor merchants.\n\n---\n\n## 📞 Quick Contact Information\n- **Support Hotline**: +91 800-562-5999\n- **Official Email**: support@digilocal.in\n- **Toll-Free Support**: 1800-123-4567\n- **WhatsApp Support**: +91 80056 25999\n- **Working Hours**: Monday - Saturday | 9:00 AM - 8:00 PM IST\n- **Head Office**: DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309\n\n---\n\n## 📋 Frequently Asked Questions (FAQ)\n\n### 1. How do I place an order on DigiLocal?\nYou can browse verified vendor stores inside your registered residential society, select items into your cart, and checkout using Razorpay UPI, Cards, NetBanking, or Cash on Delivery.\n\n### 2. What should I do if my order is delayed?\nYou can track live delivery status on your app dashboard or contact your society delivery rider directly using the phone number listed on your order invoice. For escalation, reach our support team at **+91 800-562-5999**.\n\n### 3. How do refunds work for cancelled orders?\nRefunds for prepaid orders are processed immediately upon order cancellation and are credited back to your original payment source within **3-5 business days** via Razorpay.\n\n### 4. How can a store owner register as a Vendor?\nLocal merchants can apply by filling out the Merchant Registration form in the Vendor App or Admin Portal. Once verified by the Society Admin or Super Admin, your store will go live.\n\n### 5. Need Urgent Help?\nEmail us directly at **support@digilocal.in** with your Order ID or Ticket Number for priority assistance.', 'Official DigiLocal Help & Support, FAQ, Order Assistance, and Customer Service Contacts.', NOW()),
-      ('about-us', 'About DigiLocal', '# About DigiLocal\n\nDigiLocal is India''s leading **Hyperlocal Enclave E-Commerce Platform**, empowering residential enclave societies, gated communities, and local neighborhood merchants.\n\n---\n\n## 🚀 Our Mission\nOur mission is to bridge the gap between residential society families and trusted local store owners. By digitizing neighborhood stores, we deliver fresh groceries, daily essentials, artisan goods, and doorstep services with lightning-fast local delivery.\n\n---\n\n## 🌟 Why DigiLocal?\n- **Verified Society Stores**: All vendor merchants are vetted and approved for your gated enclave.\n- **Zero Delivery Delays**: Local neighborhood delivery within minutes directly to your flat.\n- **Direct Merchant Connect**: Chat or call store owners directly for custom requests.\n- **Secure Payments**: Powered by bank-grade Razorpay payment security and transparent order tracking.\n\n---\n\n## 🏢 Contact & Corporate Info\n- **Corporate Email**: support@digilocal.in\n- **Customer Helpline**: +91 800-562-5999\n- **Corporate Address**: DigiLocal Tech Hub, Sector 62, Noida, UP - 201309', 'Learn about DigiLocal, India premier hyperlocal enclave e-commerce and residential merchant ecosystem.', NOW()),
-      ('privacy-policy', 'Privacy Policy', '# DigiLocal Privacy Policy\n\n**Effective Date**: August 14, 2026 | **Version**: 3.2.0\n\nDigiLocal ("we", "our", or "us") respects your privacy and is dedicated to protecting your personal data. This Privacy Policy governs your use of the DigiLocal mobile applications, website, and admin platforms.\n\n---\n\n## 1. Information We Collect\n- **Account Data**: Name, email address, mobile phone number, residential society name, and flat/tower details.\n- **Transaction Data**: Order history, payment reference IDs, delivery addresses, and invoice summaries.\n- **Technical Data**: Device IP address, app operating system, and secure session tokens.\n\n---\n\n## 2. How We Use Your Data\n- To process and fulfill your daily local orders.\n- To communicate order updates, delivery notifications, and support responses.\n- To verify society residency and prevent fraudulent account creation.\n\n---\n\n## 3. Data Protection & Security\nWe enforce **256-bit SSL/TLS encryption** across all API traffic. Payment card and UPI details are securely handled by PCI-DSS compliant payment gateways (Razorpay). We **never** sell your personal information to third parties.\n\n---\n\n## 4. User Rights & Account Deletion\nYou reserve the right to request permanent deletion of your DigiLocal account and personal data at any time via App Settings or by emailing **support@digilocal.in**.\n\n---\n\n## 5. Contact Privacy Officer\nFor any privacy inquiries or data access requests, please contact our Data Protection Officer at:\n- **Email**: support@digilocal.in\n- **Phone**: +91 800-562-5999', 'DigiLocal Privacy Policy detailing data protection, encryption, user consent, and security standards.', NOW()),
-      ('terms-conditions', 'Terms & Conditions', '# DigiLocal Terms & Conditions\n\n**Effective Date**: August 14, 2026 | **Version**: 3.2.0\n\nPlease read these Terms & Conditions carefully before using the DigiLocal platform, mobile apps, or vendor services.\n\n---\n\n## 1. Acceptance of Terms\nBy creating an account on DigiLocal as a Resident User, Society Admin, or Vendor Merchant, you agree to comply with and be bound by these Terms & Conditions.\n\n---\n\n## 2. Resident Customer Terms\n- Account details provided during registration must be accurate and reflect your true society residency.\n- Payments must be completed through official platform channels (Razorpay UPI/Cards/COD).\n\n---\n\n## 3. Vendor Merchant Terms\n- Merchants must maintain accurate product pricing, stock availability, and GST compliance.\n- Orders must be fulfilled promptly in accordance with society delivery standards.\n\n---\n\n## 4. Cancellations & Dispute Resolution\n- Orders cancelled prior to merchant dispatch qualify for a 100% instant refund.\n- Any quality disputes regarding goods should be raised within **2 hours of delivery** through our Support Desk or by calling **+91 800-562-5999**.\n\n---\n\n## 5. Contact Information\nFor any legal inquiries regarding these terms:\n- **Email**: support@digilocal.in\n- **Phone**: +91 800-562-5999', 'DigiLocal Terms & Conditions of Service for residents, customers, and vendor merchants.', NOW())
-    `).catch((err) => console.error('Error seeding cms_pages:', err.message));
-  }
 }
 
-/**
- * Removes duplicate same-name shops (store_name) per society in DB tables, keeping only one vendor per shop name.
- * Reassigns items, catalog_items, orders, subscriptions, payments to the retained vendor before deleting duplicate vendors.
- */
 async function removeDuplicateVendors() {
   try {
     const res = await query(`SELECT vendor_id, society_id, store_name FROM vendors ORDER BY vendor_id ASC`);

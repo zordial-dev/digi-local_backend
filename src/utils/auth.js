@@ -154,7 +154,7 @@ function generateTokens(vendorOrUser, targetRole = null) {
   };
 
   const accessToken = signJwt(payload, authConfig.jwt.secret, 24 * 3600); // 24 Hours
-  const refreshToken = signJwt({ id: payload.id, type: 'refresh' }, authConfig.jwt.refreshTokenSecret, 7 * 86400); // 7 Days
+  const refreshToken = signJwt({ id: payload.id, type: 'refresh' }, authConfig.jwt.refreshTokenSecret, 90 * 86400); // 90 Days
 
   return { accessToken, refreshToken, expiresIn: '24h' };
 }
