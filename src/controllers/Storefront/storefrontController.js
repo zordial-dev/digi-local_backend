@@ -22,7 +22,7 @@ async function getSocietyVendorsStorefront(req, res) {
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code_url, v.upi_qr_code, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
                           v.vendor_type, v.can_add_items, v.location_type, v.is_global_coverage, v.delivery_radius_km, v.selected_zones,
-                          s.society_name 
+                          v.area, s.society_name 
                    FROM vendors v
                    LEFT JOIN societies s ON v.society_id = s.society_id
                    WHERE v.status = 'ACTIVE'`;
@@ -35,9 +35,9 @@ async function getSocietyVendorsStorefront(req, res) {
         }
 
         if (search) {
-            sql += ` AND (LOWER(v.store_name) LIKE ? OR LOWER(v.vendor_name) LIKE ? OR LOWER(v.description) LIKE ? OR LOWER(s.society_name) LIKE ?)`;
+            sql += ` AND (LOWER(v.store_name) LIKE ? OR LOWER(v.vendor_name) LIKE ? OR LOWER(v.description) LIKE ? OR LOWER(COALESCE(v.area, '')) LIKE ? OR LOWER(s.society_name) LIKE ?)`;
             const q = `%${search.toLowerCase()}%`;
-            params.push(q, q, q, q);
+            params.push(q, q, q, q, q);
         }
 
         const countSql = `SELECT COUNT(*) as total FROM (${sql}) sub`;
@@ -55,7 +55,6 @@ async function getSocietyVendorsStorefront(req, res) {
         const endTime = performance.now();
         if (search) {
             console.log(`vendors search query time: ${endTime - startTime}`);
-            console.log(`shop search query time: ${endTime - startTime}`);
         } else {
             console.log(`vendors query time: ${endTime - startTime}`);
         }
@@ -88,9 +87,7 @@ async function getSocietyVendorsStorefront(req, res) {
  */
 async function getVendorStorefront(req, res) {
     try {
-        const { calculateHaversineDistance } = require('../../utils/geoUtils');
         const { vendorId } = req.params;
-        const { user_lat, user_lng, lat, lng, user_society_id, societyId, society_id, sector, user_sector } = req.query;
 
         const startTime = performance.now();
         const vendorResult = await query(
@@ -109,21 +106,10 @@ async function getVendorStorefront(req, res) {
         const vendor = vendorResult.rows[0];
         delete vendor.password;
 
-        // Check User Location Access Restriction if user location query params are provided
-        const targetSocId = societyId || society_id || user_society_id ? String(societyId || society_id || user_society_id) : null;
-        /*
-        // [OLD LOCATION GUARD COMMENTED OUT PER USER DIRECTIVE]
-        // Old feature: Restricting storefront access based on user GPS latitude/longitude and Go Global 10km radius.
-        if (targetSocId || targetSector || (uLat !== null && uLng !== null)) {
-            let isServicable = false;
-            // ...
-        }
-        */
-
         const itemsResult = await query(
             `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, created_at
              FROM items WHERE vendor_id = ? AND in_stock = TRUE ORDER BY created_at DESC`,
-            [actualVendorId]
+            [vendor.vendor_id]
         );
 
         return res.status(200).json({
@@ -134,7 +120,8 @@ async function getVendorStorefront(req, res) {
                 society_id: Number(vendor.society_id),
                 vendor_type: vendor.vendor_type || 'product',
                 can_add_items: vendor.can_add_items !== false && (vendor.vendor_type || 'product') === 'product',
-                location: vendor.location || vendor.location_address || '',
+                area: vendor.area || vendor.location || vendor.location_address || vendor.address || '',
+                location: vendor.area || vendor.location || vendor.location_address || vendor.address || '',
                 city: vendor.city || '',
                 state: vendor.state || '',
                 pincode: vendor.pincode || '',
@@ -151,7 +138,6 @@ async function getVendorStorefront(req, res) {
 /**
  * GET /api/vendors/search
  * Area & City/State filtering vendor search endpoint.
- * (Old Go Global map radius and user GPS location distance checks are commented out per user directive).
  */
 async function searchVendorsLocationAware(req, res) {
     try {
@@ -179,7 +165,7 @@ async function searchVendorsLocationAware(req, res) {
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code_url, v.upi_qr_code, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
                           v.vendor_type, v.can_add_items, v.location_address, v.location, v.city, v.state, v.pincode,
-                          v.latitude, v.longitude,
+                          v.latitude, v.longitude, v.area,
                           s.society_name, s.location as society_location
                    FROM vendors v
                    LEFT JOIN societies s ON v.society_id = s.society_id
@@ -191,11 +177,11 @@ async function searchVendorsLocationAware(req, res) {
             params.push(targetType);
         }
 
-        // New Workflow: Area text matching (e.g. "sitapura" matches "A, sitapura" or "B, sitapura")
+        // Area text matching (e.g. "Sector 62" or "sitapura" matches v.area, v.location, etc.)
         if (targetArea) {
             const kw = `%${targetArea.toLowerCase()}%`;
-            sql += ` AND (LOWER(COALESCE(v.location, '')) LIKE ? OR LOWER(COALESCE(v.location_address, '')) LIKE ? OR LOWER(COALESCE(v.address, '')) LIKE ? OR LOWER(COALESCE(s.society_name, '')) LIKE ? OR LOWER(COALESCE(v.store_name, '')) LIKE ?)`;
-            params.push(kw, kw, kw, kw, kw);
+            sql += ` AND (LOWER(COALESCE(v.area, '')) LIKE ? OR LOWER(COALESCE(v.location, '')) LIKE ? OR LOWER(COALESCE(v.location_address, '')) LIKE ? OR LOWER(COALESCE(v.address, '')) LIKE ? OR LOWER(COALESCE(s.society_name, '')) LIKE ? OR LOWER(COALESCE(v.store_name, '')) LIKE ?)`;
+            params.push(kw, kw, kw, kw, kw, kw);
         }
 
         // City Filter
@@ -221,23 +207,18 @@ async function searchVendorsLocationAware(req, res) {
         const vendorRes = await query(sql, params);
         const vendors = vendorRes.rows || [];
 
-        /*
-        // [OLD GO GLOBAL RADIUS & USER GPS HAVERSINE DISTANCE FILTERING COMMENTED OUT PER USER DIRECTIVE]
-        // Old feature: Calculating Haversine distance from user_lat, user_lng and filtering vendors by delivery_radius_km (1-10km max).
-        // ...
-        */
-
         const formattedVendors = vendors.map(v => ({
             ...v,
             vendor_id: Number(v.vendor_id),
             society_id: Number(v.society_id),
             vendor_type: v.vendor_type || 'product',
             can_add_items: v.can_add_items !== false && (v.vendor_type || 'product') === 'product',
-            location: v.location || v.location_address || v.address || '',
+            area: v.area || v.location || v.location_address || v.address || '',
+            location: v.area || v.location || v.location_address || v.address || '',
             city: v.city || '',
             state: v.state || '',
             pincode: v.pincode || '',
-            coverage_badge: v.location ? `Location: ${v.location}` : 'Servicable Store'
+            coverage_badge: v.area ? `Area: ${v.area}` : 'Servicable Store'
         }));
 
         if (isPaginated) {
@@ -266,13 +247,10 @@ async function searchVendorsLocationAware(req, res) {
 
 /**
  * GET /api/locations
- * Returns list of registered areas, cities, and states for location autocompletion and filtering.
- */
-/**
- * GET /api/locations
  * GET /api/locations/suggestions
+ * GET /api/vendors/locations/suggestions
  * Area Autocomplete & Location Suggestions API for Vendor Registration & Frontend Search.
- * Searches locations table by area/city/pincode and returns matching locations & suggestions list.
+ * Strictly queries locations table ONLY by area/city/pincode and returns matching location suggestions.
  */
 async function getLocations(req, res) {
     try {
@@ -301,39 +279,9 @@ async function getLocations(req, res) {
         sql += ` ORDER BY area ASC LIMIT 100`;
 
         const locRes = await query(sql, params).catch(() => ({ rows: [] }));
-        let locations = locRes.rows || [];
+        const locations = locRes.rows || [];
 
-        // If locations table is sparse or empty, also include distinct areas from societies & vendors
-        if (locations.length < 5) {
-            let addSql = `
-                SELECT DISTINCT society_name as area, 'Noida' as city, 'Uttar Pradesh' as state, '201301' as pincode 
-                FROM societies 
-                WHERE LOWER(society_name) LIKE ? 
-                UNION 
-                SELECT DISTINCT area, city, state, pincode 
-                FROM vendors 
-                WHERE area IS NOT NULL AND area != '' AND LOWER(area) LIKE ?
-            `;
-            const addKw = `%${kw}%`;
-            const addRes = await query(addSql, [addKw, addKw]).catch(() => ({ rows: [] }));
-            const existingAreas = new Set(locations.map(l => (l.area || '').toLowerCase().trim()));
-
-            (addRes.rows || []).forEach(r => {
-                const cleanArea = (r.area || '').trim();
-                if (cleanArea && !existingAreas.has(cleanArea.toLowerCase())) {
-                    existingAreas.add(cleanArea.toLowerCase());
-                    locations.push({
-                        location_id: locations.length + 1,
-                        area: cleanArea,
-                        city: r.city || 'Noida',
-                        state: r.state || 'Uttar Pradesh',
-                        pincode: r.pincode || '201301'
-                    });
-                }
-            });
-        }
-
-        // Extract distinct area text array for simple dropdown suggestions
+        // Distinct area names from locations table ONLY
         const areaSuggestions = Array.from(
             new Set(locations.map(l => String(l.area || '').trim()).filter(Boolean))
         );
@@ -357,7 +305,6 @@ async function getLocations(req, res) {
         res.status(500).json({ error: 'Failed to fetch location suggestions' });
     }
 }
-
 
 module.exports = {
     getSocietyVendorsStorefront,

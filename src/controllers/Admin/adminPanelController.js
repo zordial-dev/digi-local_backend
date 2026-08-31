@@ -251,7 +251,7 @@ async function getSocietyVendors(req, res) { return respond(res, 200, [], 'Socie
 // Module 3: Vendors
 async function listVendors(req, res) {
   try {
-    const { search, status, tier, society_id, societyId, page = 1, limit } = req.query;
+    const { search, status, tier, society_id, societyId, area, location, page = 1, limit } = req.query;
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const parsedLimit = limit !== undefined ? parseInt(limit, 10) : 1000;
     const limitNum = Math.min(1000, Math.max(1, parsedLimit || 1000));
@@ -275,14 +275,20 @@ async function listVendors(req, res) {
       } else {
         conditions.push(`(LOWER(s.society_name) LIKE ? OR LOWER(s.location) LIKE ?)`);
         const q = `%${rawSocStr.toLowerCase()}%`;
-        params.push(q, q);
       }
     }
 
+    const targetArea = area || location;
+    if (targetArea) {
+      conditions.push(`(LOWER(COALESCE(v.area, '')) LIKE ? OR LOWER(COALESCE(v.location, '')) LIKE ? OR LOWER(COALESCE(s.society_name, '')) LIKE ?)`);
+      const q = `%${String(targetArea).trim().toLowerCase()}%`;
+      params.push(q, q, q);
+    }
+
     if (search) {
-      conditions.push(`(LOWER(v.store_name) LIKE ? OR LOWER(v.vendor_name) LIKE ? OR LOWER(v.email) LIKE ? OR LOWER(s.society_name) LIKE ?)`);
+      conditions.push(`(LOWER(v.store_name) LIKE ? OR LOWER(v.vendor_name) LIKE ? OR LOWER(v.email) LIKE ? OR LOWER(COALESCE(v.area, '')) LIKE ? OR LOWER(s.society_name) LIKE ?)`);
       const q = `%${search.toLowerCase()}%`;
-      params.push(q, q, q, q);
+      params.push(q, q, q, q, q);
     }
 
     if (status && status !== 'all') {

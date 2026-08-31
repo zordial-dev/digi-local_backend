@@ -151,6 +151,17 @@ async function registerVendor(req, res) {
         const vendorState = String(body.state || state || '').trim();
         const vendorPincode = String(body.pincode || pincode || '').trim();
 
+        // Ensure registered area is persisted in locations table for area suggestions
+        if (area) {
+            const locCheck = await query(`SELECT location_id FROM locations WHERE LOWER(TRIM(area)) = LOWER(TRIM(?))`, [area]).catch(() => ({ rows: [] }));
+            if (!locCheck.rows || locCheck.rows.length === 0) {
+                await query(
+                    `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
+                    [area, vendorCity || 'Noida', vendorState || 'Uttar Pradesh', vendorPincode || '201301']
+                ).catch(err => console.error('Auto location insert error:', err.message));
+            }
+        }
+
         const rawVendorType = String(body.vendor_type || body.vendorType || body.business_type || 'product').toLowerCase().trim();
         const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
         const can_add_items = vendor_type === 'product';
