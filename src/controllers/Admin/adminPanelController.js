@@ -138,84 +138,76 @@ function serializeVendorForAdmin(v) {
   };
 }
 
-// Module 1: Auth
-async function login(req, res) {
-  try {
-    const { email, password } = req.body || {};
-    if (!email || !password) {
-      return sendStandardError(res, 400, 'Email and password are required.', 'VALIDATION_ERROR');
-    }
-    const adminRes = await query('SELECT * FROM admin_users WHERE email = ?', [email]);
-    if (!adminRes.rows || adminRes.rows.length === 0) {
-      return sendStandardError(res, 401, 'Invalid credentials.', 'UNAUTHORIZED');
-    }
-    const admin = adminRes.rows[0];
-    const match = await comparePassword(password, admin.password_hash || admin.password);
-    if (!match) {
-      return sendStandardError(res, 401, 'Invalid credentials.', 'UNAUTHORIZED');
-    }
-    const tokenPayload = { id: admin.admin_id, admin_id: admin.admin_id, email: admin.email, role: 'admin', power_role: admin.power_role || 'SUPER_ADMIN' };
-    const accessToken = generateAccessToken(tokenPayload);
-    const refreshToken = generateRefreshToken(tokenPayload);
-    return respond(res, 200, {
-      access_token: accessToken,
-      refreshToken: refreshToken,
-      user: { id: admin.admin_id, email: admin.email, name: admin.name || 'Admin', power_role: admin.power_role || 'SUPER_ADMIN' }
-    }, 'Admin login successful.');
-  } catch (err) {
-    return sendStandardError(res, 500, 'Login failed.', 'INTERNAL_SERVER_ERROR');
-  }
-}
-
-async function refreshToken(req, res) {
-  return respond(res, 200, { access_token: generateAccessToken({ id: 1, role: 'admin' }) }, 'Token refreshed.');
-}
-
-async function getMe(req, res) {
-  return respond(res, 200, { id: 1, email: 'admin@digilocal.com', name: 'Super Admin', power_role: 'SUPER_ADMIN' }, 'Admin details retrieved.');
-}
-
-async function logout(req, res) {
-  return respond(res, 200, {}, 'Admin logged out.');
-}
-
-
 // Module 1: Auth (Super Admin & Sub-Admin Login)
 async function login(req, res) {
   try {
     const { email, password, admin_secret, secret } = req.body || {};
-    const configuredSecret = process.env.ADMIN_SECRET || 'admin123';
-    const inputPass = password || admin_secret || secret;
+    const inputPass = String(password || admin_secret || secret || '').trim();
+    const inputEmail = String(email || '').trim().toLowerCase();
 
-    if (!email || !inputPass) {
+    if (!inputEmail || !inputPass) {
       return sendStandardError(res, 400, 'Email and password are required.', 'MISSING_FIELDS');
     }
 
-    const isAdminEmail = email.toLowerCase().includes('admin') || email.toLowerCase() === 'admin@digilocal.com';
-    const isSecretMatch = inputPass === configuredSecret || inputPass === 'Password123!';
+    const configuredSecret = process.env.ADMIN_SECRET || 'admin123';
 
-    if (isAdminEmail && isSecretMatch) {
-      const adminUser = {
-        id: 1,
-        vendor_id: 1,
-        email: email || 'admin@digilocal.com',
-        name: 'Super Admin',
-        role: 'admin',
-        roles: ['admin', 'superadmin']
-      };
-      const tokens = generateTokens(adminUser, 'admin');
-
-      return respond(res, 200, {
-        user: adminUser,
-        access_token: tokens.accessToken,
-        accessToken: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-        refreshToken: tokens.refreshToken,
-        expiresIn: tokens.expiresIn
-      }, 'Admin authentication successful.');
+    // Super Admin static check
+    if (inputEmail === 'admin@digilocal.com') {
+      if (inputPass === configuredSecret) {
+        const adminUser = {
+          id: 1,
+          vendor_id: 1,
+          email: 'admin@digilocal.com',
+          name: 'Super Admin',
+          role: 'admin',
+          roles: ['admin', 'superadmin'],
+          powers: ['all']
+        };
+        const tokens = generateTokens(adminUser, 'admin');
+        return respond(res, 200, {
+          user: adminUser,
+          access_token: tokens.accessToken,
+          accessToken: tokens.accessToken,
+          refresh_token: tokens.refreshToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn
+        }, 'Admin authentication successful.');
+      } else {
+        return sendStandardError(res, 401, 'Invalid email or password.', 'INVALID_CREDENTIALS');
+      }
     }
 
-    return sendStandardError(res, 401, 'Invalid admin credentials.', 'INVALID_CREDENTIALS');
+    // Check sub_admins table
+    const subRes = await query('SELECT * FROM sub_admins WHERE LOWER(email) = LOWER(?)', [inputEmail]);
+    if (subRes.rows && subRes.rows.length > 0) {
+      const sub = subRes.rows[0];
+      const { comparePassword } = require('../../utils/auth');
+      const isMatch = await comparePassword(inputPass, sub.password_hash || '');
+      if (isMatch) {
+        let powersList = sub.powers;
+        if (typeof powersList === 'string') {
+          try { powersList = JSON.parse(powersList); } catch (_) { powersList = ['all']; }
+        }
+        const subUser = {
+          id: Number(sub.id),
+          email: sub.email,
+          name: sub.name,
+          role: 'sub_admin',
+          powers: Array.isArray(powersList) ? powersList : ['all']
+        };
+        const tokens = generateTokens(subUser, 'sub_admin');
+        return respond(res, 200, {
+          user: subUser,
+          access_token: tokens.accessToken,
+          accessToken: tokens.accessToken,
+          refresh_token: tokens.refreshToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn
+        }, 'Sub-Admin authentication successful.');
+      }
+    }
+
+    return sendStandardError(res, 401, 'Invalid email or password.', 'INVALID_CREDENTIALS');
   } catch (err) {
     console.error('Error logging in admin:', err);
     return sendStandardError(res, 500, 'Login failed.', 'INTERNAL_SERVER_ERROR');
@@ -223,8 +215,9 @@ async function login(req, res) {
 }
 
 async function refreshToken(req, res) {
-  const { refreshToken } = req.body || {};
-  if (!refreshToken) return sendStandardError(res, 400, 'Refresh token required.', 'MISSING_TOKEN');
+  const { refreshToken, refresh_token } = req.body || {};
+  const tokenVal = refreshToken || refresh_token;
+  if (!tokenVal) return sendStandardError(res, 400, 'Refresh token required.', 'MISSING_TOKEN');
   const adminUser = { id: 1, email: 'admin@digilocal.com', role: 'admin' };
   const tokens = generateTokens(adminUser, 'admin');
   return respond(res, 200, { access_token: tokens.accessToken, accessToken: tokens.accessToken }, 'Token refreshed.');

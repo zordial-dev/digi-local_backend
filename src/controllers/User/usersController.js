@@ -274,16 +274,20 @@ async function registerUser(req, res) {
 
     const userId = `usr_${Date.now().toString().slice(-6)}`;
     const pwdHash = password ? await hashPassword(password) : await hashPassword('UserDefaultPass123!');
-    const socId = society_id ? parseInt(society_id, 10) : 1;
+    const socId = (society_id !== undefined && society_id !== null && !isNaN(parseInt(society_id, 10))) ? parseInt(society_id, 10) : null;
+    const userArea = String(req.body.area || req.body.location || req.body.society_name || 'Sector 62').trim();
 
     await query(
-      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, flat, joined_date, avatar)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')`,
-      [userId, userName, email || `${userId}@digilocal.internal`, userPhone, pwdHash, socId, flat || 'Tower A-402']
+      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, joined_date, avatar)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')`,
+      [userId, userName, email || `${userId}@digilocal.internal`, userPhone, pwdHash, socId, userArea, flat || 'Tower A-402']
     );
 
-    const socRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [socId]);
-    const societyName = socRes.rows[0]?.society_name || 'Omaxe Greenwood Residency';
+    let societyName = userArea;
+    if (socId) {
+      const socRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [socId]).catch(() => ({ rows: [] }));
+      societyName = socRes.rows[0]?.society_name || userArea;
+    }
 
     // Dispatch welcome email asynchronously
     const { sendAccountRegistrationEmail } = require('../../templates/accountRegistrationEmail');
