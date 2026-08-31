@@ -83,39 +83,12 @@ function formatKolkataTimeOnly(inputDate) {
 }
 
 /**
- * Serializes complete vendor record with all fields and Kolkata IST timestamps for Admin Panel
+ * Serializes vendor record for Admin Panel UI with ONLY required, non-duplicate single fields.
+ * (Removed duplicates: store_name, owner_name, phone, whatsapp_number, gst_number, pan_number,
+ *  address, location, full_address, society_id, society_name, logo, avatar_url, etc.)
  */
 function serializeVendorForAdmin(v) {
-  const societyName = v.society_name || v.area || v.location || '';
-  const fullAddress = [
-    v.shop_number,
-    v.address,
-    v.area || v.society_name || v.location,
-    v.city,
-    v.state,
-    v.pincode
-  ]
-    .filter(Boolean)
-    .filter((val, idx, arr) => arr.indexOf(val) === idx)
-    .join(', ');
-
-  let parsedPaymentMethods = ['COD', 'UPI'];
-  try {
-    if (v.accepted_payment_methods) {
-      parsedPaymentMethods = typeof v.accepted_payment_methods === 'string'
-        ? JSON.parse(v.accepted_payment_methods)
-        : v.accepted_payment_methods;
-    }
-  } catch (_) {}
-
-  let parsedZones = [];
-  try {
-    if (v.selected_zones) {
-      parsedZones = typeof v.selected_zones === 'string'
-        ? JSON.parse(v.selected_zones)
-        : v.selected_zones;
-    }
-  } catch (_) {}
+  if (!v) return null;
 
   const rawCreatedAt = v.created_at || v.registered_at || new Date();
   const createdAtIST = formatKolkataISO(rawCreatedAt);
@@ -126,69 +99,31 @@ function serializeVendorForAdmin(v) {
   const resubmittedAtReadable = v.resubmitted_at ? formatKolkataReadable(v.resubmitted_at) : null;
 
   return {
-    id: Number(v.vendor_id),
     vendor_id: Number(v.vendor_id),
-    store_name: v.store_name || '',
-    shop_name: v.store_name || '',
-    owner_name: v.owner_name || v.vendor_name || '',
+    id: Number(v.vendor_id),
     vendor_name: v.vendor_name || v.owner_name || '',
+    shop_name: v.store_name || v.shop_name || '',
     email: v.email || '',
-    phone: v.phone_number || v.phone || '',
-    phone_number: v.phone_number || v.phone || '',
-    whatsapp_number: v.whatsapp_number || v.phone_number || '',
+    phone_number: v.phone_number || v.phone || v.whatsapp_number || '',
     gstin: v.gstin || v.gst_number || '',
-    gst_number: v.gst_number || v.gstin || '',
-    pan_number: v.pan_number || '',
     category: v.category || 'General',
+    vendor_type: v.vendor_type || 'product',
     shop_number: v.shop_number || '',
-    address: v.address || '',
-    area: v.area || v.location || v.society_name || '',
-    location: v.location || v.area || '',
+    area: v.area || v.location || '',
     city: v.city || '',
     state: v.state || '',
     pincode: v.pincode || '',
-    full_address: fullAddress || v.address || v.area || '',
-    society_id: v.society_id ? Number(v.society_id) : null,
-    society_name: societyName,
-    logo: v.logo || v.shop_image || v.avatar_url || '',
     shop_image: v.shop_image || v.logo || v.avatar_url || '',
-    avatar_url: v.avatar_url || v.logo || v.shop_image || '',
     description: v.description || '',
-    account_number: v.account_number || v.bank_account_number || '',
-    bank_account_number: v.bank_account_number || v.account_number || '',
-    ifsc_code: v.ifsc_code || v.ifsc || '',
-    ifsc: v.ifsc || v.ifsc_code || '',
-    bank_name: v.bank_name || '',
-    account_holder_name: v.account_holder_name || v.vendor_name || '',
-    upi_id: v.upi_id || '',
-    qr_code_url: v.qr_code_url || v.upi_qr_code || v.qr_code || '',
-    upi_qr_code: v.upi_qr_code || v.qr_code_url || '',
-    qr_code: v.qr_code || v.qr_code_url || '',
-    accepted_payment_methods: parsedPaymentMethods,
-    payment_instructions: v.payment_instructions || '',
-    vendor_type: v.vendor_type || 'product',
-    can_add_items: v.can_add_items !== false,
-    location_type: v.location_type || 'society',
-    is_global_coverage: Boolean(v.is_global_coverage),
-    delivery_radius_km: Number(v.delivery_radius_km || 0),
-    selected_zones: parsedZones,
-    status: (v.status || 'pending').toLowerCase(),
+    status: (v.status || 'PENDING').toUpperCase(),
     hold_reason: v.hold_reason || '',
     hold_email_subject: v.hold_email_subject || '',
     has_resubmitted: Boolean(v.has_resubmitted),
     resubmitted_at: resubmittedAtIST,
     resubmitted_at_readable: resubmittedAtReadable,
-    subscription_tier: (v.subscription_tier || 'pro').toLowerCase(),
-    total_orders: Number(v.total_orders || 0),
-    total_revenue: Number(v.total_revenue || 0),
     created_at: createdAtIST,
-    vendor_created_at: createdAtIST,
-    createdAt: createdAtIST,
     created_at_readable: createdAtReadable,
-    created_at_time: createdAtTimeOnly,
-    time: createdAtTimeOnly,
-    registered_at: createdAtIST,
-    timestamp_ist: createdAtIST
+    created_at_time: createdAtTimeOnly
   };
 }
 
