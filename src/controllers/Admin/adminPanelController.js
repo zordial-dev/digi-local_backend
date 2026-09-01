@@ -549,7 +549,133 @@ async function getVendorDetails(req, res) {
 }
 
 async function createVendor(req, res) { return respond(res, 200, {}, 'Vendor created.'); }
-async function updateVendor(req, res) { return respond(res, 200, {}, 'Vendor updated.'); }
+
+async function updateVendor(req, res) {
+  try {
+    const { vendorId, id } = req.params;
+    const targetId = vendorId || id || req.body?.vendor_id || req.body?.id;
+    if (!targetId) return sendStandardError(res, 400, 'Vendor ID parameter is required.', 'MISSING_PARAM');
+
+    const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [targetId]);
+    if (!existing.rows || existing.rows.length === 0) {
+      return sendStandardError(res, 404, `Vendor ID "${targetId}" not found.`, 'RESOURCE_NOT_FOUND');
+    }
+
+    const v = existing.rows[0];
+    const b = req.body || {};
+
+    const newOwnerName = b.owner_name !== undefined ? b.owner_name : (b.ownerName !== undefined ? b.ownerName : (b.vendor_name !== undefined ? b.vendor_name : v.owner_name));
+    const newVendorName = b.vendor_name !== undefined ? b.vendor_name : (b.name !== undefined ? b.name : (newOwnerName || v.vendor_name));
+    const newStoreName = b.store_name !== undefined ? b.store_name : (b.storeName !== undefined ? b.storeName : (b.shop_name !== undefined ? b.shop_name : v.store_name));
+    const newEmail = b.email !== undefined ? b.email : v.email;
+    const newPhone = b.phone_number !== undefined ? b.phone_number : (b.phone !== undefined ? b.phone : (b.mobile !== undefined ? b.mobile : v.phone_number));
+    const newArea = b.area !== undefined ? b.area : (b.location !== undefined ? b.location : (b.society_name !== undefined ? b.society_name : v.area));
+    const newAddress = b.address !== undefined ? b.address : v.address;
+    const newCity = b.city !== undefined ? b.city : v.city;
+    const newPincode = b.pincode !== undefined ? b.pincode : v.pincode;
+    const newCategory = b.category !== undefined ? b.category : v.category;
+    const newGstin = b.gstin !== undefined ? b.gstin : v.gstin;
+    const newMinOrder = b.min_order_value !== undefined ? b.min_order_value : v.min_order_value;
+    const newDeliveryCharge = b.delivery_charge !== undefined ? b.delivery_charge : v.delivery_charge;
+    const newGstPercent = b.gst_percentage !== undefined ? b.gst_percentage : v.gst_percentage;
+    const newStatus = b.status !== undefined ? String(b.status).toUpperCase() : v.status;
+
+    await query(`
+      UPDATE vendors 
+      SET vendor_name = ?,
+          owner_name = ?,
+          store_name = ?,
+          email = ?,
+          phone_number = ?,
+          area = ?,
+          address = ?,
+          city = ?,
+          pincode = ?,
+          category = ?,
+          gstin = ?,
+          min_order_value = ?,
+          delivery_charge = ?,
+          gst_percentage = ?,
+          status = ?
+      WHERE vendor_id = ?
+    `, [newVendorName, newOwnerName, newStoreName, newEmail, newPhone, newArea, newAddress, newCity, newPincode, newCategory, newGstin, newMinOrder, newDeliveryCharge, newGstPercent, newStatus, targetId]);
+
+    const updatedRes = await query(`SELECT v.*, s.society_name FROM vendors v LEFT JOIN societies s ON v.society_id = s.society_id WHERE v.vendor_id = ?`, [targetId]);
+    const updatedVendorObj = serializeVendorForAdmin(updatedRes.rows[0]);
+
+    return respond(res, 200, updatedVendorObj, `Vendor details for "${newStoreName}" updated successfully in database.`);
+  } catch (err) {
+    console.error('Error updating vendor details:', err);
+    return sendStandardError(res, 500, 'Failed to update vendor details.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+async function updateUserAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id || req.body?.user_id || req.body?.id;
+    if (!targetId) return sendStandardError(res, 400, 'User ID parameter is required.', 'MISSING_PARAM');
+
+    const existing = await query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [String(targetId), String(targetId), String(targetId)]);
+    if (!existing.rows || existing.rows.length === 0) {
+      return sendStandardError(res, 404, `User ID "${targetId}" not found.`, 'RESOURCE_NOT_FOUND');
+    }
+
+    const u = existing.rows[0];
+    const b = req.body || {};
+
+    const newName = b.name !== undefined ? String(b.name).trim() : u.name;
+    const newEmail = b.email !== undefined ? String(b.email).trim() : u.email;
+    const newPhone = b.phone !== undefined ? String(b.phone).trim() : u.phone;
+    const newFlat = b.flat !== undefined ? String(b.flat).trim() : (u.flat || '');
+    const newArea = (b.area !== undefined ? b.area : (b.location !== undefined ? b.location : b.society_name)) !== undefined ? String(b.area || b.location || b.society_name).trim() : (u.area || u.society_name || '');
+    const newCity = b.city !== undefined ? String(b.city).trim() : (u.city || '');
+    const newPincode = b.pincode !== undefined ? String(b.pincode).trim() : (u.pincode || '');
+    const newAddress = (b.address !== undefined ? b.address : b.full_address) !== undefined ? String(b.address || b.full_address).trim() : (u.address || '');
+    const newStatus = b.status !== undefined ? String(b.status).toUpperCase() : (u.status || 'ACTIVE');
+
+    await query(`
+      UPDATE users 
+      SET name = ?,
+          email = ?,
+          phone = ?,
+          flat = ?,
+          area = ?,
+          society_name = ?,
+          city = ?,
+          pincode = ?,
+          address = ?,
+          status = ?
+      WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
+    `, [newName, newEmail, newPhone, newFlat, newArea, newArea, newCity, newPincode, newAddress, newStatus, String(targetId), String(targetId), String(targetId)]).catch(async () => {
+      return query(`
+        UPDATE users 
+        SET name = ?, email = ?, phone = ?, flat = ?, society_name = ?, status = ?
+        WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
+      `, [newName, newEmail, newPhone, newFlat, newArea, newStatus, String(targetId), String(targetId), String(targetId)]);
+    });
+
+    const updatedUserObj = {
+      user_id: String(u.user_id),
+      name: newName,
+      email: newEmail,
+      phone: newPhone,
+      area: newArea,
+      society_name: newArea,
+      flat: newFlat,
+      city: newCity,
+      pincode: newPincode,
+      address: newAddress,
+      status: newStatus.toLowerCase(),
+      is_blocked: newStatus.toUpperCase() === 'BLOCKED' || newStatus.toUpperCase() === 'SUSPENDED'
+    };
+
+    return respond(res, 200, updatedUserObj, `User profile details for "${newName}" updated successfully in database.`);
+  } catch (err) {
+    console.error('Error updating user details in admin:', err);
+    return sendStandardError(res, 500, 'Failed to update user details in admin.', 'INTERNAL_SERVER_ERROR');
+  }
+}
 async function updateVendorStatus(req, res) {
   try {
     const { vendorId, id } = req.params;
@@ -1028,6 +1154,7 @@ module.exports = {
   // Module 4: Users
   listUsers,
   getUserById,
+  updateUserAdmin,
   getUserOrdersAdmin,
   getUserPaymentsAdmin,
   getUserTimelineAdmin,

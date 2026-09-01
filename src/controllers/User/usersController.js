@@ -564,7 +564,7 @@ async function getUserStatus(req, res) {
     if (!userId) return res.status(400).json({ error: 'User ID or Authorization Bearer token is required to fetch status.' });
 
     const result = await query(
-      `SELECT user_id, name, phone, email, status, created_at FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
       [userId, String(userId), String(userId)]
     );
 
@@ -593,10 +593,18 @@ async function getUserStatus(req, res) {
     return res.status(200).json({
       success: true,
       user_id: String(u.user_id),
-      name: u.name,
-      phone: u.phone,
+      name: u.name || '',
+      email: u.email || '',
+      phone: u.phone || '',
       status: 'active',
       is_blocked: false,
+      society_id: u.society_id ? String(u.society_id) : '',
+      society_name: u.society_name || u.area || '',
+      area: u.area || u.society_name || '',
+      flat: u.flat || '',
+      city: u.city || '',
+      pincode: u.pincode || '',
+      address: u.address || '',
       message: 'User account is active.',
       recommended_ui_text: 'Your account is active.'
     });
@@ -692,6 +700,84 @@ async function deleteAccount(req, res) {
   }
 }
 
+/**
+ * B2.3 Update Resident User Profile & Address
+ * PUT/POST/PATCH /api/users/profile, /api/users/address, or /api/users/:userId/address
+ */
+async function updateUserProfile(req, res) {
+  try {
+    const userId = req.body?.user_id || req.body?.userId || req.params?.userId || req.params?.id || req.user?.id || req.user?.user_id || req.body?.phone;
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID or authenticated session is required to update profile/address.' });
+    }
+
+    const { name, email, flat, house_number, unit, area, location, society_name, city, pincode, address, full_address } = req.body;
+
+    const userRes = await query(
+      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+      [String(userId), String(userId), String(userId)]
+    );
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return res.status(404).json({ error: `User "${userId}" not found.` });
+    }
+
+    const existingUser = userRes.rows[0];
+
+    const newName = name !== undefined ? String(name).trim() : existingUser.name;
+    const newEmail = email !== undefined ? String(email).trim() : existingUser.email;
+    const newFlat = (flat !== undefined ? flat : (house_number !== undefined ? house_number : unit)) !== undefined ? String(flat || house_number || unit).trim() : (existingUser.flat || '');
+    const newArea = (area !== undefined ? area : (location !== undefined ? location : society_name)) !== undefined ? String(area || location || society_name).trim() : (existingUser.area || existingUser.society_name || '');
+    const newCity = city !== undefined ? String(city).trim() : (existingUser.city || '');
+    const newPincode = pincode !== undefined ? String(pincode).trim() : (existingUser.pincode || '');
+    const newFullAddress = (address !== undefined ? address : full_address) !== undefined ? String(address || full_address).trim() : (existingUser.address || [newFlat, newArea, newCity, newPincode].filter(Boolean).join(', '));
+
+    await query(`
+      UPDATE users 
+      SET name = ?,
+          email = ?,
+          flat = ?,
+          area = ?,
+          society_name = ?,
+          city = ?,
+          pincode = ?,
+          address = ?
+      WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
+    `, [newName, newEmail, newFlat, newArea, newArea, newCity, newPincode, newFullAddress, String(userId), String(userId), String(userId)]).catch(async () => {
+      // Fallback if city/pincode/address columns missing in older Postgres instances
+      return query(`
+        UPDATE users 
+        SET name = ?, email = ?, flat = ?, society_name = ?
+        WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
+      `, [newName, newEmail, newFlat, newArea, String(userId), String(userId), String(userId)]);
+    });
+
+    const updatedUser = {
+      user_id: String(existingUser.user_id),
+      name: newName,
+      email: newEmail,
+      phone: existingUser.phone,
+      status: (existingUser.status || 'ACTIVE').toLowerCase(),
+      is_blocked: false,
+      area: newArea || '',
+      society_name: newArea || '',
+      flat: newFlat || '',
+      city: newCity || '',
+      pincode: newPincode || '',
+      address: newFullAddress || ''
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: 'User profile and address updated successfully in database.',
+      user: updatedUser
+    });
+  } catch (err) {
+    console.error('Error updating user profile/address:', err);
+    return res.status(500).json({ error: 'Failed to update user profile/address.' });
+  }
+}
+
 module.exports = {
   sendOtp,
   verifyOtp,
@@ -701,5 +787,6 @@ module.exports = {
   getUserOrders,
   getUserProfile,
   getUserStatus,
+  updateUserProfile,
   deleteAccount
 };

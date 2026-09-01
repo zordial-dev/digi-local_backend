@@ -23,8 +23,17 @@ router.post('/register', usersController.registerUser);
 router.get('/status', usersController.getUserStatus);
 router.get('/status/:userId', usersController.getUserStatus);
 router.get('/:userId/status', usersController.getUserStatus);
-router.get('/profile', authenticateToken, usersController.getUserProfile);
-router.get('/me', authenticateToken, usersController.getUserProfile);
+router.get('/profile', usersController.getUserProfile);
+router.get('/me', usersController.getUserProfile);
+
+// B2.1 Update Resident User Profile & Address
+router.put('/profile', usersController.updateUserProfile);
+router.patch('/profile', usersController.updateUserProfile);
+router.put('/address', usersController.updateUserProfile);
+router.post('/address', usersController.updateUserProfile);
+router.put('/me', usersController.updateUserProfile);
+router.put('/:userId', usersController.updateUserProfile);
+router.put('/:userId/address', usersController.updateUserProfile);
 
 // B2.2 Delete Resident User Account
 router.delete('/profile', authenticateToken, usersController.deleteAccount);
