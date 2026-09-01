@@ -166,26 +166,15 @@ async function registerVendor(req, res) {
         const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
         const can_add_items = vendor_type === 'product';
 
-        const rawLocType = String(body.location_type || body.locationType || '').toLowerCase().trim();
-        const location_type = (rawLocType === 'area_sector' || rawLocType === 'area') ? 'area_sector' : 'society';
-
-        const is_global_coverage = Boolean(body.is_global_coverage || body.isGlobalCoverage || body.go_global || body.is_global);
-        const delivery_radius_km = Number(body.delivery_radius_km || body.deliveryRadiusKm || body.radius || (is_global_coverage ? 3 : 0));
-
-        let selected_zones = body.selected_zones || [];
-        if (typeof selected_zones === 'string') {
-            try { selected_zones = JSON.parse(selected_zones); } catch (_) { selected_zones = []; }
-        }
-        const selected_zones_json = JSON.stringify(Array.isArray(selected_zones) ? selected_zones : []);
         const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || ['UPI', 'COD']);
         const payment_instructions = String(body.payment_instructions || body.instructions || '').trim();
 
         const kolkataISTNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T');
 
         const vendorRes = await query(
-            `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones, status, created_at) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-            [society_id, vendor_name, gstin || pan_number || '', gstin || '', pan_number || '', phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, rawAddress || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, location_type, is_global_coverage, delivery_radius_km, selected_zones_json, kolkataISTNow]
+            `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
+            [society_id, vendor_name, gstin || pan_number || '', gstin || '', pan_number || '', phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, rawAddress || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
         );
         const newVendorRow = vendorRes.rows[0] || {};
         const vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -235,10 +224,6 @@ async function registerVendor(req, res) {
                 payment_instructions,
                 vendor_type,
                 can_add_items,
-                location_type,
-                is_global_coverage,
-                delivery_radius_km,
-                selected_zones: Array.isArray(selected_zones) ? selected_zones : [],
                 status: 'PENDING'
             }
         });
