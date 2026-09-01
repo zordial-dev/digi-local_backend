@@ -349,6 +349,7 @@ async function deleteStore(req, res) {
     }
 }
 
+
 /**
  * PUT /api/vendorPanel/:vendorId/coverage or /api/vendors/:vendorId/coverage
  * Updates vendor baseline location type, global coverage toggle, delivery radius, and zone selections.
@@ -360,7 +361,7 @@ async function updateVendorCoverage(req, res) {
             return res.status(400).json({ error: 'Vendor ID is required' });
         }
 
-        const { location_type, is_global_coverage, delivery_radius_km, selected_zones, latitude, longitude, location_address, address, location, area, city, state, pincode } = req.body;
+        const { location_address, address, location, area, city, state, pincode } = req.body;
 
         const vendorCheck = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`, [vendorId, String(vendorId)]);
         if (!vendorCheck.rows || vendorCheck.rows.length === 0) {
@@ -374,6 +375,8 @@ async function updateVendorCoverage(req, res) {
         const newLoc = String(location || area || location_address || address || '').trim();
         if (newLoc) {
             updateFields.push('location = ?');
+            updateParams.push(newLoc);
+            updateFields.push('area = ?');
             updateParams.push(newLoc);
             updateFields.push('location_address = ?');
             updateParams.push(newLoc);
@@ -394,82 +397,34 @@ async function updateVendorCoverage(req, res) {
             updateParams.push(String(pincode).trim());
         }
 
-        // Insert into locations table for autocomplete search
-        if (newLoc) {
-            await query(
-                `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
-                [newLoc, city || 'N/A', state || 'N/A', pincode || '000000']
-            ).catch(() => {});
+        if (updateFields.length > 0) {
+            updateParams.push(actualVendorId);
+            await query(`UPDATE vendors SET ${updateFields.join(', ')} WHERE vendor_id = ?`, updateParams);
         }
-
-        if (location_type !== undefined) {
-            const locTypeNorm = String(location_type).toLowerCase() === 'area_sector' ? 'area_sector' : 'society';
-            updateFields.push('location_type = ?');
-            updateParams.push(locTypeNorm);
-        }
-
-        if (is_global_coverage !== undefined) {
-            updateFields.push('is_global_coverage = ?');
-            updateParams.push(Boolean(is_global_coverage));
-        }
-
-        if (delivery_radius_km !== undefined) {
-            updateFields.push('delivery_radius_km = ?');
-            updateParams.push(Math.max(0, Number(delivery_radius_km) || 0));
-        }
-
-        if (latitude !== undefined) {
-            updateFields.push('latitude = ?');
-            updateParams.push(Number(latitude));
-        }
-
-        if (longitude !== undefined) {
-            updateFields.push('longitude = ?');
-            updateParams.push(Number(longitude));
-        }
-
-        if (location_address !== undefined || address !== undefined) {
-            updateFields.push('location_address = ?');
-            updateParams.push(String(location_address || address || ''));
-        }
-
-        if (selected_zones !== undefined) {
-            const zonesJson = typeof selected_zones === 'string' ? selected_zones : JSON.stringify(Array.isArray(selected_zones) ? selected_zones : []);
-            updateFields.push('selected_zones = ?');
-            updateParams.push(zonesJson);
-        }
-
-        if (updateFields.length === 0) {
-            return res.status(400).json({ error: 'No coverage fields provided to update' });
-        }
-
-        updateParams.push(actualVendorId);
-        await query(`UPDATE vendors SET ${updateFields.join(', ')} WHERE vendor_id = ?`, updateParams);
 
         const memoryCache = require('../../utils/cache');
         memoryCache.clear();
 
         const updatedVendorRes = await query(
-            `SELECT vendor_id, location_type, is_global_coverage, delivery_radius_km, selected_zones, latitude, longitude, location_address FROM vendors WHERE vendor_id = ?`,
+            `SELECT vendor_id, location, area, city, state, pincode, location_address FROM vendors WHERE vendor_id = ?`,
             [actualVendorId]
         );
-        const v = updatedVendorRes.rows[0];
+        const v = updatedVendorRes.rows[0] || {};
 
         res.status(200).json({
             success: true,
-            message: 'Vendor delivery coverage settings updated successfully',
+            message: 'Vendor location settings updated successfully',
             vendor_id: Number(v.vendor_id),
-            location_type: v.location_type,
-            is_global_coverage: Boolean(v.is_global_coverage),
-            delivery_radius_km: Number(v.delivery_radius_km || 0),
-            latitude: v.latitude !== null ? Number(v.latitude) : 28.6270,
-            longitude: v.longitude !== null ? Number(v.longitude) : 77.3720,
-            location_address: v.location_address || '',
-            selected_zones: typeof v.selected_zones === 'string' ? JSON.parse(v.selected_zones || '[]') : (v.selected_zones || [])
+            area: v.area || v.location || '',
+            location: v.location || v.area || '',
+            city: v.city || '',
+            state: v.state || '',
+            pincode: v.pincode || '',
+            location_address: v.location_address || ''
         });
     } catch (err) {
-        console.error('Error updating vendor coverage:', err);
-        res.status(500).json({ error: err.message || 'Failed to update vendor coverage settings' });
+        console.error('Error updating vendor location:', err);
+        res.status(500).json({ error: err.message || 'Failed to update vendor location settings' });
     }
 }
 

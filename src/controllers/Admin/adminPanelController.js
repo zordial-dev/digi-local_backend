@@ -765,16 +765,126 @@ async function getUserById(req, res) {
   }
 }
 
+/**
+ * Helper: Enriches order record with itemized order_details, item names, prices, quantities,
+ * store info, customer details, and full address for Admin Panel visibility.
+ */
+async function enrichOrderWithDetails(ord) {
+  if (!ord) return null;
+
+  // 1. Fetch order details / items
+  const detailsRes = await query(
+    `SELECT item_id, item_name, quantity, COALESCE(price, unit_price, 0) as price, COALESCE(item_total, price * quantity, 0) as item_total
+     FROM order_details 
+     WHERE order_id = ? OR CAST(order_id AS TEXT) = ?`,
+    [ord.order_id, String(ord.order_id)]
+  ).catch(() => ({ rows: [] }));
+
+  // 2. Fetch vendor info if missing
+  const vendorRes = await query(
+    `SELECT store_name, vendor_name, phone_number, area, category FROM vendors WHERE vendor_id = ?`,
+    [ord.vendor_id]
+  ).catch(() => ({ rows: [] }));
+
+  const vInfo = vendorRes.rows[0] || {};
+
+  // 3. Fetch user info if missing
+  const userRes = await query(
+    `SELECT name, phone, email, flat, area, city, pincode, address FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+    [ord.user_id, String(ord.user_id)]
+  ).catch(() => ({ rows: [] }));
+
+  const uInfo = userRes.rows[0] || {};
+
+  const mappedItems = (detailsRes.rows || []).map((item, idx) => ({
+    item_id: Number(item.item_id || idx + 1),
+    item_name: item.item_name || 'Catalog Item',
+    name: item.item_name || 'Catalog Item',
+    quantity: Number(item.quantity || 1),
+    unit_price: Number(item.price || 0),
+    price: Number(item.price || 0),
+    item_total: Number(item.item_total || (item.price * item.quantity) || 0)
+  }));
+
+  const calculatedSubtotal = mappedItems.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+  const totalAmount = Number(ord.total_amount || calculatedSubtotal || 0);
+  const serviceCharge = Math.max(0, totalAmount - calculatedSubtotal);
+
+  const flatVal = uInfo.flat || (ord.delivery_address ? ord.delivery_address.split(',')[0] : '');
+  const areaVal = ord.area || uInfo.area || vInfo.area || '';
+  const fullDeliveryAddress = ord.delivery_address || uInfo.address || [flatVal, areaVal].filter(Boolean).join(', ') || '';
+
+  const statusUpper = String(ord.status || 'PENDING').toUpperCase();
+
+  return {
+    order_id: String(ord.order_id),
+    id: String(ord.order_id),
+    user_id: String(ord.user_id),
+    vendor_id: Number(ord.vendor_id),
+    customer_name: ord.customer_name || uInfo.name || 'Resident Customer',
+    customer_phone: ord.customer_phone || ord.phone || uInfo.phone || '',
+    phone: ord.phone || ord.customer_phone || uInfo.phone || '',
+    store_name: ord.store_name || vInfo.store_name || 'Partner Store',
+    vendor_name: vInfo.vendor_name || 'Store Owner',
+    vendor_phone: vInfo.phone_number || '',
+    category: vInfo.category || 'General',
+    status: statusUpper,
+    payment_status: ord.payment_status || (statusUpper === 'COMPLETED' || statusUpper === 'DELIVERED' ? 'PAID' : 'PENDING'),
+    payment_method: ord.payment_method || 'COD / Online',
+    flat: flatVal,
+    area: areaVal,
+    delivery_address: fullDeliveryAddress,
+    full_address: fullDeliveryAddress,
+    subtotal: calculatedSubtotal,
+    service_charge: serviceCharge,
+    total_amount: totalAmount,
+    total: totalAmount,
+    items_count: mappedItems.length,
+    items: mappedItems,
+    products: mappedItems,
+    created_at: formatKolkataISO(ord.created_at || ord.order_timestamp || new Date()),
+    created_at_readable: formatKolkataReadable(ord.created_at || ord.order_timestamp || new Date())
+  };
+}
+
 async function getUserOrdersAdmin(req, res) {
   try {
     const { userId, id } = req.params;
     const targetId = userId || id;
-    const ordersRes = await query(
-      `SELECT * FROM orders WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY created_at DESC`,
-      [targetId, String(targetId)]
+    const cleanPhone = String(targetId).trim().replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+    const uRes = await query(
+      `SELECT user_id FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+      [targetId, String(targetId), targetId, `%${last10}`]
     ).catch(() => ({ rows: [] }));
-    return respond(res, 200, ordersRes.rows || [], 'User orders retrieved successfully.');
+
+    const matchedUserIds = Array.from(new Set([
+      targetId,
+      ...(uRes.rows || []).map(r => r.user_id)
+    ]));
+
+    const placeholders = matchedUserIds.map(() => '?').join(',');
+    const ordersRes = await query(
+      `SELECT o.*, v.store_name, s.society_name
+       FROM orders o
+       LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
+       LEFT JOIN societies s ON o.society_id = s.society_id
+       LEFT JOIN users u ON o.user_id = u.user_id
+       WHERE o.user_id IN (${placeholders}) OR u.phone = ? OR u.phone LIKE ? OR o.delivery_address LIKE ?
+       ORDER BY o.created_at DESC`,
+      [...matchedUserIds, targetId, `%${last10}`, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
+
+    const enrichedOrders = [];
+    for (const ord of (ordersRes.rows || [])) {
+      const detailedOrd = await enrichOrderWithDetails(ord);
+      if (detailedOrd) enrichedOrders.push(detailedOrd);
+    }
+
+    return respond(res, 200, enrichedOrders, 'User orders with full items details retrieved successfully.');
   } catch (err) {
+    console.error('Error fetching user orders in admin:', err);
     return sendStandardError(res, 500, 'Failed to fetch user orders.');
   }
 }
@@ -935,8 +1045,74 @@ async function cancelSubscription(req, res) { return respond(res, 200, {}, 'Subs
 async function getInvoicePreview(req, res) { return respond(res, 200, {}, 'Invoice preview.'); }
 
 // Module 6: Orders & Payments
-async function listOrdersAdmin(req, res) { return respond(res, 200, [], 'Orders list.'); }
-async function getOrderByIdAdmin(req, res) { return respond(res, 200, {}, 'Order details.'); }
+async function listOrdersAdmin(req, res) {
+  try {
+    const { page = 1, limit = 100, status, search, vendor_id } = req.query || {};
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    const offset = (pageNum - 1) * limitNum;
+
+    let sql = `SELECT o.*, v.store_name, s.society_name FROM orders o LEFT JOIN vendors v ON o.vendor_id = v.vendor_id LEFT JOIN societies s ON o.society_id = s.society_id`;
+    const conditions = [];
+    const params = [];
+
+    if (status) {
+      conditions.push(`UPPER(o.status) = UPPER(?)`);
+      params.push(String(status).trim());
+    }
+    if (vendor_id) {
+      conditions.push(`o.vendor_id = ?`);
+      params.push(vendor_id);
+    }
+    if (search) {
+      conditions.push(`(o.order_id LIKE ? OR CAST(o.user_id AS TEXT) LIKE ? OR o.customer_name LIKE ? OR o.delivery_address LIKE ? OR v.store_name LIKE ?)`);
+      const q = `%${search}%`;
+      params.push(q, q, q, q, q);
+    }
+
+    if (conditions.length > 0) {
+      sql += ` WHERE ` + conditions.join(' AND ');
+    }
+
+    sql += ` ORDER BY o.created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limitNum, offset);
+
+    const resDb = await query(sql, params).catch(() => ({ rows: [] }));
+    const enrichedOrders = [];
+    for (const ord of (resDb.rows || [])) {
+      const detailedOrd = await enrichOrderWithDetails(ord);
+      if (detailedOrd) enrichedOrders.push(detailedOrd);
+    }
+
+    return respond(res, 200, enrichedOrders, 'Admin orders list with full items details retrieved successfully.');
+  } catch (err) {
+    console.error('Error fetching admin orders list:', err);
+    return sendStandardError(res, 500, 'Failed to fetch admin orders list.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+async function getOrderByIdAdmin(req, res) {
+  try {
+    const { orderId, id } = req.params;
+    const targetId = orderId || id;
+    if (!targetId) return sendStandardError(res, 400, 'Order ID is required.');
+
+    const resDb = await query(
+      `SELECT o.*, v.store_name FROM orders o LEFT JOIN vendors v ON o.vendor_id = v.vendor_id WHERE o.order_id = ? OR CAST(o.order_id AS TEXT) = ?`,
+      [targetId, String(targetId)]
+    );
+
+    if (!resDb.rows || resDb.rows.length === 0) {
+      return sendStandardError(res, 404, `Order "${targetId}" not found.`);
+    }
+
+    const detailedOrder = await enrichOrderWithDetails(resDb.rows[0]);
+    return respond(res, 200, detailedOrder, 'Complete order details retrieved successfully.');
+  } catch (err) {
+    console.error('Error fetching order details in admin:', err);
+    return sendStandardError(res, 500, 'Failed to fetch order details.');
+  }
+}
 async function flagOrderAudit(req, res) { return respond(res, 200, {}, 'Order audit flagged.'); }
 async function getPaymentTransactions(req, res) { return respond(res, 200, [], 'Payment transactions.'); }
 async function processRefund(req, res) { return respond(res, 200, {}, 'Refund processed.'); }

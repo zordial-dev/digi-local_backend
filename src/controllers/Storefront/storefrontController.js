@@ -21,7 +21,7 @@ async function getSocietyVendorsStorefront(req, res) {
                           v.store_name, v.logo, v.description, v.status, v.account_number, v.ifsc_code,
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code_url, v.upi_qr_code, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
-                          v.vendor_type, v.can_add_items, v.location_type, v.is_global_coverage, v.delivery_radius_km, v.selected_zones,
+                          v.vendor_type, v.can_add_items,
                           v.area, s.society_name 
                    FROM vendors v
                    LEFT JOIN societies s ON v.society_id = s.society_id
@@ -29,9 +29,8 @@ async function getSocietyVendorsStorefront(req, res) {
         const params = [];
 
         if (!isAll) {
-            const socIdStr = String(societyId);
-            sql += ` AND (v.society_id = ? OR (v.is_global_coverage = TRUE AND (v.selected_zones::text LIKE ? OR v.selected_zones::text LIKE ?)))`;
-            params.push(societyId, `%"zone_id":${socIdStr}%`, `%"zone_id":"${socIdStr}"%`);
+            sql += ` AND v.society_id = ?`;
+            params.push(societyId);
         }
 
         if (search) {
