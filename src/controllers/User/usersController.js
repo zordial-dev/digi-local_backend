@@ -714,13 +714,23 @@ async function updateUserProfile(req, res) {
 
     const { name, email, flat, house_number, unit, area, location, society_name, city, pincode, address, full_address } = req.body;
 
+    const rawIdentifier = String(userId || '').trim();
+    const cleanDigits = rawIdentifier.replace(/\D/g, '');
+    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
     const userRes = await query(
-      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
-      [String(userId), String(userId), String(userId)]
+      `SELECT * FROM users 
+       WHERE user_id = ? 
+          OR CAST(user_id AS TEXT) = ? 
+          OR phone = ? 
+          OR phone = ? 
+          OR phone = ? 
+          OR phone LIKE ?`,
+      [rawIdentifier, rawIdentifier, rawIdentifier, cleanDigits, `+${cleanDigits}`, `%${last10}`]
     );
 
     if (!userRes.rows || userRes.rows.length === 0) {
-      return res.status(404).json({ error: `User "${userId}" not found.` });
+      return res.status(404).json({ error: `User profile with ID or phone "${rawIdentifier}" not found.` });
     }
 
     const existingUser = userRes.rows[0];
@@ -743,14 +753,14 @@ async function updateUserProfile(req, res) {
           city = ?,
           pincode = ?,
           address = ?
-      WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
-    `, [newName, newEmail, newFlat, newArea, newArea, newCity, newPincode, newFullAddress, String(userId), String(userId), String(userId)]).catch(async () => {
+      WHERE user_id = ? OR CAST(user_id AS TEXT) = ?
+    `, [newName, newEmail, newFlat, newArea, newArea, newCity, newPincode, newFullAddress, String(existingUser.user_id), String(existingUser.user_id)]).catch(async () => {
       // Fallback if city/pincode/address columns missing in older Postgres instances
       return query(`
         UPDATE users 
         SET name = ?, email = ?, flat = ?, society_name = ?
-        WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
-      `, [newName, newEmail, newFlat, newArea, String(userId), String(userId), String(userId)]);
+        WHERE user_id = ? OR CAST(user_id AS TEXT) = ?
+      `, [newName, newEmail, newFlat, newArea, String(existingUser.user_id), String(existingUser.user_id)]);
     });
 
     const updatedUser = {
