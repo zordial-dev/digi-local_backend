@@ -78,6 +78,7 @@ router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
 router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.approveVendor);
 router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);
 router.post('/:vendorId/hold', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.holdVendor);
+router.post('/:vendorId/block', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.blockVendor);
 router.post('/:vendorId/status', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.updateVendorStatus);
 router.post('/:vendorId/resubmit', vendorAuthController.resubmitVendorRequest);
 router.put('/:vendorId/resubmit', vendorAuthController.resubmitVendorRequest);

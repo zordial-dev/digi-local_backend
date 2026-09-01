@@ -184,7 +184,7 @@ Admin approves a vendor (from Pending or Hold status). The vendor's status chang
 *(Or: `PATCH /api/vendors/:vendorId/status` with `{ "status": "REJECTED" }`)*
 
 **Purpose:**  
-Admin rejects a vendor application. The vendor's status changes to `REJECTED`, blocking vendor portal access.
+Admin rejects a vendor application during initial onboarding review. The vendor's status changes to `REJECTED`.
 
 ### **Request Body:**
 ```json
@@ -200,13 +200,75 @@ Admin rejects a vendor application. The vendor's status changes to `REJECTED`, b
   "success": true,
   "message": "Vendor application rejected.",
   "vendor_id": 1185,
-  "status": "REJECTED"
+  "status": "rejected"
 }
 ```
 
 ---
 
-## 6. Get Vendor Detailed Profile
+## 6. Block Vendor Account
+
+### **Endpoint:** `POST /api/vendors/:vendorId/block`
+*(Or: `POST /api/admin/vendors/:vendorId/block`)*
+
+**Purpose:**  
+Admin blocks an active/registered vendor merchant due to policy violations. The vendor's status in database is updated to `BLOCKED`. The vendor is immediately hidden from customer storefront search and blocked from logging into the vendor portal.
+
+### **Request Body:**
+```json
+{
+  "reason": "Fraudulent listing / policy violation"
+}
+```
+
+### **Response Example (`200 OK`):**
+```json
+{
+  "success": true,
+  "message": "Merchant account blocked successfully by admin.",
+  "data": {
+    "vendor_id": 1185,
+    "status": "blocked",
+    "is_blocked": true,
+    "reason": "Fraudulent listing / policy violation"
+  }
+}
+```
+
+---
+
+## 7. Block Resident User Account
+
+### **Endpoint:** `POST /api/admin/users/:userId/block`
+*(Or: `POST /api/people/:userId/block`)*
+
+**Purpose:**  
+Admin bans/blocks a resident user account. The user's status in database is updated to `BLOCKED`. When the user attempts to log in, the API responds with `403 Forbidden` (`code: "USER_BLOCKED"`).
+
+### **Request Body:**
+```json
+{
+  "reason": "Repeated policy violations"
+}
+```
+
+### **Response Example (`200 OK`):**
+```json
+{
+  "success": true,
+  "message": "User account status updated to BLOCKED.",
+  "data": {
+    "user_id": "usr_102938",
+    "status": "blocked",
+    "is_blocked": true,
+    "reason": "Repeated policy violations"
+  }
+}
+```
+
+---
+
+## 8. Get Vendor Detailed Profile
 
 ### **Endpoint:** `GET /api/vendors/:vendorId`
 

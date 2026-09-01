@@ -272,14 +272,34 @@ async function getVendorStatus(req, res) {
     const isPending = statusLower === 'pending';
     const isRejected = statusLower === 'rejected';
     const isOnHold = statusLower === 'hold' || statusLower === 'on_hold';
+    const isBlocked = statusLower === 'blocked';
 
     let currentStatus = 'pending';
     if (isApproved) currentStatus = 'accepted';
+    else if (isBlocked) currentStatus = 'blocked';
     else if (isRejected) currentStatus = 'rejected';
     else if (isOnHold) currentStatus = 'on_hold';
 
     let message = 'Your application request will be processed soon.';
     let recommended_ui_text = 'Your registration request is under review by admin. Verification will be completed soon.';
+
+    if (isBlocked) {
+      return res.status(403).json({
+        success: false,
+        vendor_id: Number(v.vendor_id),
+        status: 'blocked',
+        code: 'VENDOR_BLOCKED',
+        is_blocked: true,
+        is_accepted: false,
+        is_pending: false,
+        is_rejected: false,
+        is_on_hold: false,
+        action: 'logout',
+        error: 'Vendor account has been blocked by administrator.',
+        message: 'Your vendor store account has been blocked. Please log out and contact customer support.',
+        recommended_ui_text: 'Your vendor account has been blocked by admin. Access denied.'
+      });
+    }
 
     if (isApproved) {
       message = 'Store is verified and active.';
@@ -304,6 +324,7 @@ async function getVendorStatus(req, res) {
       is_pending: isPending,
       is_rejected: isRejected,
       is_on_hold: isOnHold,
+      is_blocked: false,
       has_resubmitted: Boolean(v.has_resubmitted),
       resubmitted_at: v.resubmitted_at || null,
       hold_email_subject: v.hold_email_subject || '',
@@ -351,7 +372,60 @@ async function resubmitVendorRequest(req, res) {
 
 async function checkVendorPhone(req, res) { return res.status(200).json({ exists: false }); }
 async function getVendorPublicProfile(req, res) { return res.status(200).json({}); }
-async function loginVendor(req, res) { return res.status(200).json({ message: 'Login' }); }
+async function loginVendor(req, res) {
+  try {
+    const { email, phone, phone_number, password, identifier } = req.body || {};
+    const target = email || phone || phone_number || identifier;
+
+    if (!target) {
+      return res.status(400).json({ error: 'Email or phone number is required for vendor login.' });
+    }
+
+    const result = await query(
+      `SELECT * FROM vendors WHERE LOWER(email) = LOWER(?) OR phone_number = ? OR CAST(vendor_id AS TEXT) = ?`,
+      [String(target).trim(), String(target).trim(), String(target).trim()]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ error: 'Vendor account not found.' });
+    }
+
+    const v = result.rows[0];
+    const statusLower = (v.status || 'pending').toLowerCase();
+
+    if (statusLower === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        error: 'Your vendor account has been blocked by admin.',
+        code: 'VENDOR_BLOCKED',
+        is_blocked: true,
+        status: 'blocked',
+        message: 'Your vendor store account has been blocked. Please contact customer support for assistance.'
+      });
+    }
+
+    const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
+    const tokens = generateTokens(authUser);
+
+    return res.status(200).json({
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      vendor_id: Number(v.vendor_id),
+      status: statusLower,
+      vendor: {
+        vendor_id: Number(v.vendor_id),
+        store_name: v.store_name,
+        vendor_name: v.vendor_name,
+        email: v.email,
+        phone_number: v.phone_number,
+        status: statusLower
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Vendor login failed.' });
+  }
+}
 async function handleUserLogin(req, res) { return res.status(200).json({ message: 'User Login' }); }
 async function handleUserRegisterCheck(req, res) { return res.status(200).json({ message: 'User Register Check' }); }
 async function refreshToken(req, res) { return res.status(200).json({ accessToken: 'newToken' }); }

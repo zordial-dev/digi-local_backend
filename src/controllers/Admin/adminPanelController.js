@@ -494,6 +494,32 @@ async function rejectVendor(req, res) {
   }
 }
 
+async function blockVendor(req, res) {
+  try {
+    const { vendorId, id } = req.params;
+    const targetId = vendorId || id;
+    const { reason, block_reason, message } = req.body || {};
+
+    const existing = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ?`, [targetId]);
+    if (!existing.rows || existing.rows.length === 0) {
+      return sendStandardError(res, 404, `Vendor ID "${targetId}" not found.`, 'RESOURCE_NOT_FOUND');
+    }
+
+    const reasonText = String(reason || block_reason || message || 'Vendor store account blocked by admin due to policy violation.').trim();
+    await query(`UPDATE vendors SET status = 'BLOCKED', hold_reason = ? WHERE vendor_id = ?`, [reasonText, targetId]);
+
+    return respond(res, 200, {
+      vendor_id: Number(targetId),
+      status: 'blocked',
+      is_blocked: true,
+      reason: reasonText
+    }, 'Merchant account blocked successfully by admin.');
+  } catch (err) {
+    console.error('Error blocking vendor:', err);
+    return sendStandardError(res, 500, 'Failed to block vendor account.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
 async function getVendorById(req, res) {
   try {
     const { vendorId, id } = req.params;
@@ -524,8 +550,26 @@ async function getVendorDetails(req, res) {
 
 async function createVendor(req, res) { return respond(res, 200, {}, 'Vendor created.'); }
 async function updateVendor(req, res) { return respond(res, 200, {}, 'Vendor updated.'); }
-async function updateVendorStatus(req, res) { return respond(res, 200, {}, 'Vendor status updated.'); }
-async function deleteVendorStore(req, res) { return respond(res, 200, {}, 'Vendor store deleted.'); }
+async function updateVendorStatus(req, res) {
+  try {
+    const { vendorId, id } = req.params;
+    const targetId = vendorId || id;
+    const { status, reason } = req.body || {};
+
+    if (!targetId) return sendStandardError(res, 400, 'Vendor ID is required.');
+    const targetStatus = String(status || 'BLOCKED').toUpperCase();
+
+    await query(`UPDATE vendors SET status = ?, hold_reason = COALESCE(?, hold_reason) WHERE vendor_id = ?`, [targetStatus, reason, targetId]);
+
+    return respond(res, 200, {
+      vendor_id: Number(targetId),
+      status: targetStatus.toLowerCase(),
+      is_blocked: targetStatus === 'BLOCKED'
+    }, `Vendor account status updated to ${targetStatus}.`);
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to update vendor status.');
+  }
+}
 async function bulkVendorAction(req, res) { return respond(res, 200, {}, 'Bulk vendor action completed.'); }
 async function getVendorPayments(req, res) { return respond(res, 200, [], 'Vendor payments.'); }
 
@@ -534,8 +578,42 @@ async function listUsers(req, res) { return respond(res, 200, [], 'Users directo
 async function getUserById(req, res) { return respond(res, 200, {}, 'User profile retrieved.'); }
 async function flagUser(req, res) { return respond(res, 200, {}, 'User flagged.'); }
 async function unflagUser(req, res) { return respond(res, 200, {}, 'User unflagged.'); }
-async function updateUserStatus(req, res) { return respond(res, 200, {}, 'User status updated.'); }
-async function unblockUser(req, res) { return respond(res, 200, {}, 'User unblocked.'); }
+async function updateUserStatus(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id || req.body?.user_id || req.body?.id;
+    const { status, block_reason, reason } = req.body || {};
+
+    if (!targetId) return sendStandardError(res, 400, 'User ID is required.');
+    const targetStatus = String(status || 'BLOCKED').toUpperCase();
+    const reasonText = String(reason || block_reason || 'Blocked by admin due to policy violation.').trim();
+
+    await query(
+      `UPDATE users SET status = ? WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+      [targetStatus, targetId, String(targetId), String(targetId)]
+    );
+
+    return respond(res, 200, {
+      user_id: String(targetId),
+      status: targetStatus.toLowerCase(),
+      is_blocked: targetStatus === 'BLOCKED',
+      reason: reasonText
+    }, `User account status updated to ${targetStatus}.`);
+  } catch (err) {
+    console.error('Error updating user status:', err);
+    return sendStandardError(res, 500, 'Failed to update user status.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+async function blockUser(req, res) {
+  return updateUserStatus(req, res);
+}
+
+async function unblockUser(req, res) {
+  req.body = req.body || {};
+  req.body.status = 'ACTIVE';
+  return updateUserStatus(req, res);
+}
 async function resetUserPassword(req, res) { return respond(res, 200, {}, 'Password reset.'); }
 async function deleteUser(req, res) { return respond(res, 200, {}, 'User deleted.'); }
 async function getUserAnalytics(req, res) { return respond(res, 200, {}, 'User analytics.'); }
@@ -759,10 +837,10 @@ module.exports = {
   getVendorById,
   approveVendor,
   rejectVendor,
+  blockVendor,
   createVendor,
   updateVendor,
   updateVendorStatus,
-  deleteVendorStore,
   bulkVendorAction,
   getVendorPayments,
 
@@ -772,6 +850,7 @@ module.exports = {
   flagUser,
   unflagUser,
   updateUserStatus,
+  blockUser,
   unblockUser,
   resetUserPassword,
   deleteUser,

@@ -86,4 +86,22 @@ GET /api/vendors/105/status
   "message": "Merchant application was rejected by admin."
 }
 ```
-> 💡 **Frontend Action**: Block main dashboard access and display red rejection screen *"Merchant application was rejected by admin. Please contact support."*.
+> 💡 **Frontend Action**: Display red rejection screen *"Merchant application was rejected by admin. Please contact support."*.
+
+---
+
+### 4. When Account is Blocked by Admin (`HTTP 403 Forbidden`, `status: "blocked"`)
+```json
+{
+  "success": false,
+  "vendor_id": 105,
+  "status": "blocked",
+  "code": "VENDOR_BLOCKED",
+  "is_blocked": true,
+  "is_accepted": false,
+  "action": "logout",
+  "error": "Vendor account has been blocked by administrator.",
+  "message": "Your vendor store account has been blocked. Please log out and contact customer support."
+}
+```
+> 💡 **Frontend Action**: Call API **ONLY ONCE** on portal load. If `HTTP 403` or `is_blocked: true` is returned, immediately execute `localStorage.clear()` to purge tokens, log out the vendor, and redirect to the Login screen.

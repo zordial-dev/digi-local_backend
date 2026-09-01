@@ -88,7 +88,9 @@ Manages both **Product Merchants** and **Service Providers** with location-aware
 | `GET /admin/vendors/pending` | Yes | List pending vendor onboarding applications requiring approval |
 | `POST /admin/vendors/:vendorId/approve` | Yes | Approve merchant application & set status to `ACTIVE` |
 | `POST /admin/vendors/:vendorId/reject` | Yes | Reject merchant application with custom rejection reason |
-| `POST /admin/vendors/:vendorId/status` | Yes | Block/Unblock vendor account (`ACTIVE` / `BLOCKED`) |
+| `POST /admin/vendors/:vendorId/hold` | Yes | Put merchant application on hold with custom SMTP email notice |
+| `POST /admin/vendors/:vendorId/block` | Yes | Block vendor account & set status to `BLOCKED` in database |
+| `POST /admin/vendors/:vendorId/status` | Yes | Update vendor account status (`ACTIVE` / `BLOCKED` / `HOLD` / `REJECTED`) |
 | `GET /admin/vendors/:id` | Yes | Fetch complete vendor store profile, coverage zones, and catalog items |
 | `PUT /admin/vendors/:id/coverage` | Yes | Override vendor coverage radius (`delivery_radius_km`) and `selected_zones` |
 

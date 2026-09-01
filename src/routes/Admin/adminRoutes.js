@@ -27,13 +27,15 @@ router.post('/vendors', adminPanelController.createVendor);
 router.post('/vendors/bulk-action', adminPanelController.bulkVendorAction);
 router.get('/vendors/:id', adminPanelController.getVendorById);
 router.put('/vendors/:id', adminPanelController.updateVendor);
-router.delete('/vendors/:id', adminPanelController.deleteVendorStore);
+router.post('/vendors/:id/block', adminPanelController.blockVendor);
 router.patch('/vendors/:id/status', adminPanelController.updateVendorStatus);
 router.post('/vendors/:id/status', adminPanelController.updateVendorStatus);
 router.get('/vendors/:id/payments', adminPanelController.getVendorPayments);
 router.get('/requests', adminPanelController.listPendingVendors);
 router.post('/requests/:id/approve', adminPanelController.approveVendor);
 router.post('/requests/:id/reject', adminPanelController.rejectVendor);
+router.post('/requests/:id/hold', adminPanelController.holdVendor);
+router.post('/requests/:id/block', adminPanelController.blockVendor);
 
 // ── Users & People Directory ──────────────────────────────────────────
 router.get('/users', adminPanelController.listUsers);
@@ -41,7 +43,7 @@ router.get('/users/analytics', adminPanelController.getUserAnalytics);
 router.get('/users/:id', adminPanelController.getUserById);
 router.post('/users/:id/flag', adminPanelController.flagUser);
 router.delete('/users/:id/flag', adminPanelController.unflagUser);
-router.post('/users/:id/block', adminPanelController.updateUserStatus);
+router.post('/users/:id/block', adminPanelController.blockUser);
 router.post('/users/:id/unblock', adminPanelController.unblockUser);
 router.put('/users/:id/status', adminPanelController.updateUserStatus);
 router.patch('/users/:id/status', adminPanelController.updateUserStatus);

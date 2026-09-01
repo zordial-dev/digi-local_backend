@@ -196,6 +196,18 @@ async function loginUser(req, res) {
     }
 
     const user = userRes.rows[0];
+    const userStatusLower = String(user.status || 'active').toLowerCase();
+
+    if (userStatusLower === 'blocked' || userStatusLower === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        error: 'Your resident user account has been blocked by admin.',
+        code: 'USER_BLOCKED',
+        is_blocked: true,
+        block_reason: user.block_reason || 'Policy violation / Admin restriction',
+        message: 'Your account is blocked. Please contact customer support for assistance.'
+      });
+    }
 
     if (password && !loginOtp) {
       const matchRes = await comparePassword(password, user.password_hash || user.password);
@@ -222,6 +234,8 @@ async function loginUser(req, res) {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        status: userStatusLower,
+        is_blocked: false,
         society_id: user.society_id ? String(user.society_id) : '1',
         society_name: user.society_name || 'Omaxe Greenwood Residency',
         flat: user.flat || 'Tower A-402',
@@ -438,11 +452,25 @@ async function getUserProfile(req, res) {
     }
 
     const user = userRes.rows[0];
+    const statusLower = String(user.status || 'active').toLowerCase();
+    if (statusLower === 'blocked' || statusLower === 'suspended') {
+      return res.status(403).json({
+        success: false,
+        error: 'Your resident user account has been blocked by admin.',
+        code: 'USER_BLOCKED',
+        is_blocked: true,
+        action: 'logout',
+        message: 'Account is blocked. Please log out and contact support.'
+      });
+    }
+
     res.status(200).json({
       user_id: String(user.user_id),
       name: user.name,
       email: user.email,
       phone: user.phone,
+      status: statusLower,
+      is_blocked: false,
       society_id: user.society_id ? String(user.society_id) : '1',
       society_name: user.society_name || 'Omaxe Greenwood Residency',
       flat: user.flat || 'Tower A-402',
@@ -452,6 +480,67 @@ async function getUserProfile(req, res) {
   } catch (err) {
     console.error('Error fetching user profile:', err);
     res.status(500).json({ error: 'Failed to fetch profile' });
+  }
+}
+
+/**
+ * GET /api/users/status or /api/users/status/:userId - Check Resident User Status
+ */
+async function getUserStatus(req, res) {
+  try {
+    let userId = req.params.userId || req.params.id || req.user?.id || req.user?.user_id || req.query.userId || req.query.user_id || req.query.phone;
+
+    if (!userId && req.headers['authorization']) {
+      try {
+        const token = req.headers['authorization'].replace('Bearer ', '').trim();
+        const { verifyJwt } = require('../../utils/auth');
+        const authConfig = require('../../config/auth');
+        const payload = verifyJwt(token, authConfig.jwt.secret);
+        if (payload) userId = payload.user_id || payload.id;
+      } catch (_) {}
+    }
+
+    if (!userId) return res.status(400).json({ error: 'User ID or Authorization Bearer token is required to fetch status.' });
+
+    const result = await query(
+      `SELECT user_id, name, phone, email, status, created_at FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+      [userId, String(userId), String(userId)]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ error: `User ID "${userId}" not found.` });
+    }
+
+    const u = result.rows[0];
+    const statusLower = String(u.status || 'active').toLowerCase();
+    const isBlocked = statusLower === 'blocked' || statusLower === 'suspended';
+
+    if (isBlocked) {
+      return res.status(403).json({
+        success: false,
+        user_id: String(u.user_id),
+        status: 'blocked',
+        code: 'USER_BLOCKED',
+        is_blocked: true,
+        action: 'logout',
+        error: 'Resident user account has been blocked by administrator.',
+        message: 'Your resident user account has been blocked. Please log out and contact customer support.',
+        recommended_ui_text: 'Your user account has been blocked by admin. Access denied.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      user_id: String(u.user_id),
+      name: u.name,
+      phone: u.phone,
+      status: 'active',
+      is_blocked: false,
+      message: 'User account is active.',
+      recommended_ui_text: 'Your account is active.'
+    });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch user status.' });
   }
 }
 
@@ -519,5 +608,6 @@ module.exports = {
   registerUser,
   getUserOrders,
   getUserProfile,
+  getUserStatus,
   deleteAccount
 };
