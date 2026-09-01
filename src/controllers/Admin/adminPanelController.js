@@ -573,9 +573,173 @@ async function updateVendorStatus(req, res) {
 async function bulkVendorAction(req, res) { return respond(res, 200, {}, 'Bulk vendor action completed.'); }
 async function getVendorPayments(req, res) { return respond(res, 200, [], 'Vendor payments.'); }
 
-// Module 4: Users
-async function listUsers(req, res) { return respond(res, 200, [], 'Users directory retrieved.'); }
-async function getUserById(req, res) { return respond(res, 200, {}, 'User profile retrieved.'); }
+// Module 4: Users Directory & Sub-resources
+async function listUsers(req, res) {
+  try {
+    const result = await query(`SELECT * FROM users ORDER BY created_at DESC`).catch(() => ({ rows: [] }));
+    const users = (result.rows || []).map(u => ({
+      id: String(u.user_id),
+      user_id: String(u.user_id),
+      name: u.name || 'Resident User',
+      email: u.email || '',
+      phone: u.phone || '',
+      area: u.area || u.society_name || 'General Area',
+      flat: u.flat || '',
+      status: (u.status || 'ACTIVE').toLowerCase(),
+      is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
+      created_at: formatKolkataISO(u.created_at)
+    }));
+    return respond(res, 200, users, 'Users directory retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to retrieve users directory.');
+  }
+}
+
+async function getUserById(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const result = await query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]).catch(() => ({ rows: [] }));
+    if (!result.rows || result.rows.length === 0) {
+      return sendStandardError(res, 404, `User "${targetId}" not found.`);
+    }
+    const u = result.rows[0];
+    const userObj = {
+      id: String(u.user_id),
+      user_id: String(u.user_id),
+      name: u.name || 'Resident User',
+      email: u.email || '',
+      phone: u.phone || '',
+      area: u.area || u.society_name || 'General Area',
+      flat: u.flat || '',
+      status: (u.status || 'ACTIVE').toLowerCase(),
+      is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
+      created_at: formatKolkataISO(u.created_at)
+    };
+    return respond(res, 200, userObj, 'User profile retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to retrieve user profile.');
+  }
+}
+
+async function getUserOrdersAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const ordersRes = await query(
+      `SELECT * FROM orders WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY created_at DESC`,
+      [targetId, String(targetId)]
+    ).catch(() => ({ rows: [] }));
+    return respond(res, 200, ordersRes.rows || [], 'User orders retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch user orders.');
+  }
+}
+
+async function getUserPaymentsAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const paymentsRes = await query(
+      `SELECT * FROM payment_transactions WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY created_at DESC`,
+      [targetId, String(targetId)]
+    ).catch(() => ({ rows: [] }));
+    return respond(res, 200, paymentsRes.rows || [], 'User payment ledger retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch user payments.');
+  }
+}
+
+async function getUserTimelineAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const userRes = await query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]).catch(() => ({ rows: [] }));
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return sendStandardError(res, 404, `User "${targetId}" not found.`);
+    }
+    const u = userRes.rows[0];
+    const timeline = [
+      {
+        id: `evt_reg_${u.user_id}`,
+        type: 'REGISTRATION',
+        title: 'User Account Created',
+        description: `Resident account registered with mobile ${u.phone || 'N/A'}`,
+        timestamp: formatKolkataISO(u.created_at || new Date())
+      }
+    ];
+    if (String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED') {
+      timeline.unshift({
+        id: `evt_block_${u.user_id}`,
+        type: 'ACCOUNT_BLOCKED',
+        title: 'Account Blocked by Admin',
+        description: 'Resident user access suspended due to policy violation.',
+        timestamp: formatKolkataISO(new Date())
+      });
+    }
+    return respond(res, 200, timeline, 'User activity timeline retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch user timeline.');
+  }
+}
+
+async function getUserAddressesAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const userRes = await query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]).catch(() => ({ rows: [] }));
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return sendStandardError(res, 404, `User "${targetId}" not found.`);
+    }
+    const u = userRes.rows[0];
+    const addresses = [
+      {
+        address_id: `addr_primary_${u.user_id}`,
+        user_id: String(u.user_id),
+        type: 'Primary Residence',
+        flat: u.flat || 'Unit',
+        area: u.area || u.society_name || 'General Area',
+        city: u.city || 'City',
+        state: u.state || 'State',
+        pincode: u.pincode || '',
+        full_address: [u.flat, u.area || u.society_name, u.city, u.pincode].filter(Boolean).join(', ') || 'Default Residence Address',
+        is_default: true
+      }
+    ];
+    return respond(res, 200, addresses, 'User addresses retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch user addresses.');
+  }
+}
+
+async function getUserNotificationsAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const notifsRes = await query(
+      `SELECT * FROM user_notifications WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY created_at DESC`,
+      [targetId, String(targetId)]
+    ).catch(() => ({ rows: [] }));
+    return respond(res, 200, notifsRes.rows || [], 'User notifications retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch user notifications.');
+  }
+}
+
+async function getUserAuditLogsAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id;
+    const auditRes = await query(
+      `SELECT * FROM backend_audit_logs WHERE resource_id = ? OR CAST(resource_id AS TEXT) = ? ORDER BY timestamp DESC`,
+      [String(targetId), String(targetId)]
+    ).catch(() => ({ rows: [] }));
+    return respond(res, 200, auditRes.rows || [], 'User audit logs retrieved successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch user audit logs.');
+  }
+}
+
 async function flagUser(req, res) { return respond(res, 200, {}, 'User flagged.'); }
 async function unflagUser(req, res) { return respond(res, 200, {}, 'User unflagged.'); }
 async function updateUserStatus(req, res) {
@@ -847,6 +1011,12 @@ module.exports = {
   // Module 4: Users
   listUsers,
   getUserById,
+  getUserOrdersAdmin,
+  getUserPaymentsAdmin,
+  getUserTimelineAdmin,
+  getUserAddressesAdmin,
+  getUserNotificationsAdmin,
+  getUserAuditLogsAdmin,
   flagUser,
   unflagUser,
   updateUserStatus,
