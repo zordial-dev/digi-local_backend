@@ -810,17 +810,30 @@ async function enrichOrderWithDetails(ord) {
   const totalAmount = Number(ord.total_amount || calculatedSubtotal || 0);
   const serviceCharge = Math.max(0, totalAmount - calculatedSubtotal);
 
-  const flatVal = String(ord.flat || uInfo.flat || (ord.delivery_address ? ord.delivery_address.split(',')[0] : '') || '').trim();
-  const areaVal = String(ord.area || uInfo.area || uInfo.society_name || vInfo.area || '').trim();
+  // Exact delivery address entered at checkout for this specific order
+  const orderSpecificDeliveryAddress = String(ord.delivery_address || ord.full_address || uInfo.address || '').trim();
+
+  let flatVal = String(ord.flat || '').trim();
+  let areaVal = String(ord.area || '').trim();
+
+  if (!flatVal && orderSpecificDeliveryAddress.includes(',')) {
+    flatVal = orderSpecificDeliveryAddress.split(',')[0].trim();
+  } else if (!flatVal) {
+    flatVal = String(uInfo.flat || '').trim();
+  }
+
+  if (!areaVal && orderSpecificDeliveryAddress.includes(',')) {
+    const parts = orderSpecificDeliveryAddress.split(',');
+    areaVal = parts.slice(1).join(',').trim();
+  } else if (!areaVal) {
+    areaVal = String(uInfo.area || uInfo.society_name || vInfo.area || '').trim();
+  }
+
   const cityVal = String(ord.city || uInfo.city || vInfo.city || 'Noida').trim();
   const stateVal = String(ord.state || uInfo.state || vInfo.state || 'Uttar Pradesh').trim();
   const pincodeVal = String(ord.pincode || uInfo.pincode || vInfo.pincode || '').trim();
 
-  // Combine flat, area/address, city, state, pincode cleanly
-  const addressParts = [flatVal, areaVal, cityVal, stateVal, pincodeVal].filter(Boolean);
-  const formattedFullAddress = ord.delivery_address && ord.delivery_address.includes(cityVal) 
-    ? ord.delivery_address 
-    : (addressParts.length > 0 ? addressParts.join(', ') : ord.delivery_address || '');
+  const formattedFullAddress = orderSpecificDeliveryAddress || [flatVal, areaVal, cityVal, stateVal, pincodeVal].filter(Boolean).join(', ');
 
   const statusUpper = String(ord.status || 'PENDING').toUpperCase();
 

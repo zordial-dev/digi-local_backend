@@ -205,7 +205,7 @@ async function createOrder(req, res) {
     const vendor_id = req.body.vendor_id || req.body.vendorId;
     const society_id = req.body.society_id || req.body.societyId;
     const total_amount = req.body.total_amount || req.body.totalAmount || req.body.total;
-    const delivery_address = req.body.delivery_address || req.body.deliveryAddress || req.body.address;
+    const delivery_address = req.body.delivery_address || req.body.deliveryAddress || req.body.address || req.body.full_address || req.body.shipping_address;
     const items = req.body.items || req.body.order_items;
 
     if (!vendor_id || !items || !Array.isArray(items) || items.length === 0) {
