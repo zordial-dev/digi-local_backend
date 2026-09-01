@@ -112,6 +112,8 @@ function serializeVendorForAdmin(v) {
     vendor_id: Number(v.vendor_id),
     id: Number(v.vendor_id),
     vendor_name: v.vendor_name || v.owner_name || '',
+    owner_name: v.owner_name || v.vendor_name || '',
+    store_name: v.store_name || v.shop_name || '',
     shop_name: v.store_name || v.shop_name || '',
     email: v.email || '',
     phone_number: v.phone_number || v.phone || v.whatsapp_number || '',
