@@ -174,6 +174,11 @@ router.post('/api/admin/audit-logs', authenticateAdminToken, subAdminsController
 router.get('/api/v1/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 router.get('/api/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 
+const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
+router.post('/api/upload', vendorPanelController.uploadImage);
+router.post('/api/upload-image', vendorPanelController.uploadImage);
+router.post('/api/upload-logo', vendorPanelController.uploadImage);
+
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
 
 module.exports = router;

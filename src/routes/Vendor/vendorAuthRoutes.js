@@ -69,11 +69,32 @@ router.delete('/push-token', vendorPanelController.deleteFcmToken);
 router.post('/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
 
+const ordersController = require('../../controllers/User/ordersController');
+
 // 4. Parameterized Routes (/:vendorId and /:id)
 router.get('/status/:vendorId', vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
+router.put('/:vendorId/settings', vendorPanelController.updateSettings);
+
+// Vendor Catalog / Items Specification Routes (/api/vendors/:vendorId/items)
+router.get('/:vendorId/items', storefrontController.getVendorStorefront);
+router.post('/:vendorId/items', vendorPanelController.addItem);
+router.put('/:vendorId/items/:itemId', vendorPanelController.updateItem);
+router.delete('/:vendorId/items/:itemId', vendorPanelController.deleteItem);
+router.patch('/:vendorId/items/:itemId/availability', vendorPanelController.toggleAvailability);
+router.put('/:vendorId/items/:itemId/availability', vendorPanelController.toggleAvailability);
+
+// Vendor Orders Specification Routes (/api/vendors/:vendorId/orders)
+router.get('/:vendorId/orders', ordersController.getVendorOrders);
+router.put('/:vendorId/orders/:orderId/status', ordersController.updateOrderStatus);
+router.patch('/:vendorId/orders/:orderId/status', ordersController.updateOrderStatus);
+
+// Vendor Payments & Logo Routes
+router.get('/:vendorId/payments', adminPanelController.getVendorPayments);
+router.post('/:vendorId/logo', vendorPanelController.updateVendorLogo);
+router.put('/:vendorId/logo', vendorPanelController.updateVendorLogo);
 
 router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.approveVendor);
 router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);

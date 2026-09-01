@@ -166,10 +166,16 @@ class VendorService {
     const numId = isPureNum ? parseInt(rawIdStr, 10) : 0;
 
     const {
-      store_name, logo, description, phone_number, gst_number,
-      opening_timing, closing_timing, min_order_value, max_quantity_limit,
-      delivery_charge, gst_percentage, service_charge_percentage
+      store_name, logo, description, phone_number, gst_number, gstin, pan_number,
+      opening_time, closing_time, opening_timing, closing_timing, working_days, business_type,
+      min_order_value, max_quantity_limit, delivery_charge, gst_percentage, service_charge_percentage
     } = settings;
+
+    const finalGst = gst_number || gstin || '';
+    const finalOpening = opening_time || opening_timing || '08:00 AM';
+    const finalClosing = closing_time || closing_timing || '10:00 PM';
+    const finalWorkingDays = working_days || 'Mon – Sun';
+    const finalBusinessType = business_type || 'PRODUCT';
 
     // Check if new phone number is already taken by another vendor
     if (phone_number) {
@@ -204,9 +210,15 @@ class VendorService {
            logo = ?, 
            description = ?, 
            phone_number = COALESCE(NULLIF(?, ''), phone_number), 
-           gst_number = ?,
-           opening_timing = ?, 
-           closing_timing = ?, 
+           gst_number = COALESCE(NULLIF(?, ''), gst_number),
+           gstin = COALESCE(NULLIF(?, ''), gstin),
+           pan_number = COALESCE(NULLIF(?, ''), pan_number),
+           opening_time = COALESCE(NULLIF(?, ''), opening_time),
+           closing_time = COALESCE(NULLIF(?, ''), closing_time),
+           opening_timing = COALESCE(NULLIF(?, ''), opening_timing), 
+           closing_timing = COALESCE(NULLIF(?, ''), closing_timing), 
+           working_days = COALESCE(NULLIF(?, ''), working_days),
+           business_type = COALESCE(NULLIF(?, ''), business_type),
            min_order_value = ?, 
            max_quantity_limit = ?,
            delivery_charge = ?, 
@@ -214,9 +226,9 @@ class VendorService {
            service_charge_percentage = ?
        WHERE vendor_id = ? OR public_id = ?`,
       [
-        store_name || '', logoUrl, description || '', phone_number || '', gst_number || '',
-        opening_timing || '08:00 AM', closing_timing || '10:00 PM', min_order_value || 0,
-        max_quantity_limit || 10, delivery_charge || 0, gst_percentage || 5, service_charge_percentage || 0,
+        store_name || '', logoUrl, description || '', phone_number || '', finalGst, finalGst, pan_number || '',
+        finalOpening, finalClosing, finalOpening, finalClosing, finalWorkingDays, finalBusinessType,
+        min_order_value || 0, max_quantity_limit || 10, delivery_charge || 0, gst_percentage || 5, service_charge_percentage || 0,
         numId, rawIdStr
       ]
     );
