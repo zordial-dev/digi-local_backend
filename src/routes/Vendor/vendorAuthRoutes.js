@@ -88,7 +88,10 @@ router.delete('/:vendorId/push-token', vendorPanelController.deleteFcmToken);
 router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
-router.get('/:id', vendorAuthController.getVendorPublicProfile);
+router.get('/:id', (req, res, next) => {
+    if (req.params.id === 'categories' || req.params.id === 'search' || req.params.id === 'locations') return next();
+    return storefrontController.getVendorStorefront(req, res, next);
+});
 router.delete('/:vendorId', vendorPanelController.deleteStore);
 
 module.exports = router;

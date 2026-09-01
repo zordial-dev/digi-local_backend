@@ -47,8 +47,14 @@ router.use('/api/admin', adminRoutes);               // Admin portal
 router.use('/api/auth', authRoutes);                 // Admin Auth & Profile
 router.use('/api/sub-admins', subAdminsRoutes);      // Sub-Admins & RBAC
 router.use('/api/subscriptions', subscriptionsRoutes); // Financial Analytics & Subscriptions
-router.use('/api/config', configRoutes);             // Platform Configuration
-router.use('/api/cms', cmsRoutes);                   // Legal Pages, Help & Support & Contacts
+const storefrontController = require('../controllers/Storefront/storefrontController');
+
+// ── Categories & Platform Config Direct Endpoints ──────────
+router.get('/api/categories', storefrontController.getCategories);
+router.get('/api/vendors/categories', storefrontController.getCategories);
+router.get('/api/stores/categories', storefrontController.getCategories);
+router.get('/api/platform/config', adminPanelController.getPlatformConfig);
+router.get('/api/platform/settings', adminPanelController.getPlatformConfig);
 
 // ── CMS & Legal Content Direct Aliases ────────────────────────
 router.get('/api/help-support', cmsController.getHelpSupport);
@@ -134,9 +140,33 @@ router.put('/api/settings/system', adminPanelController.updateSettingsSection);
 router.put('/api/settings/notifications', adminPanelController.updateSettingsSection);
 router.put('/api/settings/branding', adminPanelController.updateSettingsSection);
 
-router.get('/api/subadmins', adminPanelController.listSubAdmins);
-router.post('/api/subadmins', adminPanelController.createSubAdmin);
-router.put('/api/subadmins/:id', adminPanelController.updateSubAdminPowers);
+router.get('/api/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
+router.post('/api/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
+router.put('/api/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
+
+// ── v3.0.0 Sub-Admin RBAC & Audit Ledger Endpoints ──────────
+const subAdminsController = require('../controllers/Admin/subAdminsController');
+const { requireSuperAdmin } = require('../middleware/adminAuth');
+
+router.post('/api/v1/auth/admin/login', subAdminsController.subAdminLogin);
+router.post('/api/auth/admin/login', subAdminsController.subAdminLogin);
+router.post('/api/admin/auth/login', subAdminsController.subAdminLogin);
+
+router.get('/api/v1/admin/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
+router.get('/api/v1/admin/sub-admins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
+router.post('/api/v1/admin/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
+router.post('/api/v1/admin/sub-admins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
+router.put('/api/v1/admin/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
+router.put('/api/v1/admin/sub-admins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
+router.post('/api/v1/admin/subadmins/:id/toggle-status', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.toggleSubAdminStatus);
+router.post('/api/v1/admin/sub-admins/:id/toggle-status', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.toggleSubAdminStatus);
+router.delete('/api/v1/admin/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.deleteSubAdmin);
+router.delete('/api/v1/admin/sub-admins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.deleteSubAdmin);
+
+router.post('/api/v1/admin/audit-logs', authenticateAdminToken, subAdminsController.recordAuditLog);
+router.post('/api/admin/audit-logs', authenticateAdminToken, subAdminsController.recordAuditLog);
+router.get('/api/v1/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
+router.get('/api/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
 

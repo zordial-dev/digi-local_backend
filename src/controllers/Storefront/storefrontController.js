@@ -87,51 +87,153 @@ async function getSocietyVendorsStorefront(req, res) {
  */
 async function getVendorStorefront(req, res) {
     try {
-        const { vendorId } = req.params;
+        const vendorIdParam = req.params.vendorId || req.params.id || req.query.vendorId || req.query.id;
+        if (!vendorIdParam) return res.status(400).json({ error: 'Vendor ID is required' });
 
         const startTime = performance.now();
-        const vendorResult = await query(
+        let vendorResult = await query(
             `SELECT v.*, s.society_name, s.location, s.latitude as society_latitude, s.longitude as society_longitude 
              FROM vendors v 
              LEFT JOIN societies s ON v.society_id = s.society_id 
-             WHERE (CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)) AND v.status = 'ACTIVE'`,
-            [vendorId, vendorId, vendorId]
+             WHERE (CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)) AND LOWER(COALESCE(v.status, 'active')) IN ('active', 'approved')`,
+            [String(vendorIdParam), String(vendorIdParam), String(vendorIdParam)]
         );
-        const endTime = performance.now();
-        console.log(`vendor storefront query time: ${endTime - startTime}`);
 
-        if (vendorResult.rows.length === 0)
-            return res.status(404).json({ error: 'Vendor not found' });
+        if (!vendorResult.rows || vendorResult.rows.length === 0) {
+            // Fallback query if vendor status is pending/hold/blocked or numerical lookup
+            vendorResult = await query(
+                `SELECT v.*, s.society_name, s.location 
+                 FROM vendors v 
+                 LEFT JOIN societies s ON v.society_id = s.society_id 
+                 WHERE CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)`,
+                [String(vendorIdParam), String(vendorIdParam), String(vendorIdParam)]
+            );
+        }
+
+        const endTime = performance.now();
+
+        if (!vendorResult.rows || vendorResult.rows.length === 0) {
+            return res.status(404).json({ error: `Vendor ID "${vendorIdParam}" not found.` });
+        }
 
         const vendor = vendorResult.rows[0];
         delete vendor.password;
+        delete vendor.password_hash;
 
         const itemsResult = await query(
             `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, created_at
              FROM items WHERE vendor_id = ? AND in_stock = TRUE ORDER BY created_at DESC`,
             [vendor.vendor_id]
-        );
+        ).catch(() => ({ rows: [] }));
+
+        const itemsList = (itemsResult.rows || []).map(i => ({
+            ...i,
+            item_id: Number(i.item_id),
+            vendor_id: Number(i.vendor_id),
+            price: Number(i.price || 0),
+            unit_price: Number(i.price || 0),
+            name: i.item_name,
+            in_stock: Boolean(i.in_stock)
+        }));
+
+        const cleanVendorObj = {
+            ...vendor,
+            vendor_id: Number(vendor.vendor_id),
+            id: Number(vendor.vendor_id),
+            store_name: vendor.store_name || vendor.shop_name || 'DigiLocal Partner Store',
+            vendor_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
+            owner_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
+            email: vendor.email || '',
+            phone: vendor.phone_number || vendor.phone || '',
+            phone_number: vendor.phone_number || vendor.phone || '',
+            category: vendor.category || 'General',
+            society_id: vendor.society_id ? Number(vendor.society_id) : 1,
+            society_name: vendor.society_name || 'Local Society',
+            vendor_type: vendor.vendor_type || 'product',
+            can_add_items: vendor.can_add_items !== false && (vendor.vendor_type || 'product') === 'product',
+            area: vendor.area || vendor.location || vendor.address || '',
+            location: vendor.area || vendor.location || vendor.address || '',
+            city: vendor.city || '',
+            state: vendor.state || '',
+            pincode: vendor.pincode || '',
+            shop_image: vendor.shop_image || vendor.logo || '',
+            logo: vendor.logo || vendor.shop_image || '',
+            status: String(vendor.status || 'ACTIVE').toLowerCase(),
+            is_servicable: true
+        };
 
         return res.status(200).json({
             success: true,
-            vendor: {
-                ...vendor,
-                vendor_id: Number(vendor.vendor_id),
-                society_id: Number(vendor.society_id),
-                vendor_type: vendor.vendor_type || 'product',
-                can_add_items: vendor.can_add_items !== false && (vendor.vendor_type || 'product') === 'product',
-                area: vendor.area || vendor.location || vendor.location_address || vendor.address || '',
-                location: vendor.area || vendor.location || vendor.location_address || vendor.address || '',
-                city: vendor.city || '',
-                state: vendor.state || '',
-                pincode: vendor.pincode || '',
-                is_servicable: true
+            ...cleanVendorObj,
+            vendor: cleanVendorObj,
+            data: {
+                vendor: cleanVendorObj,
+                items: itemsList
             },
-            items: itemsResult.rows || []
+            items: itemsList,
+            products: itemsList,
+            catalog: itemsList
         });
     } catch (err) {
         console.error('Error fetching vendor storefront:', err);
-        res.status(500).json({ error: 'DB query failed' });
+        return res.status(500).json({ error: 'Failed to fetch vendor details' });
+    }
+}
+
+/**
+ * GET /api/categories - Platform & Storefront Product/Service Categories
+ */
+async function getCategories(req, res) {
+    try {
+        const vendorCatResult = await query(
+            `SELECT DISTINCT category FROM vendors WHERE LOWER(COALESCE(status, 'active')) = 'active' AND category IS NOT NULL AND category != ''`
+        ).catch(() => ({ rows: [] }));
+
+        const itemCatResult = await query(
+            `SELECT DISTINCT category FROM items WHERE in_stock = TRUE AND category IS NOT NULL AND category != ''`
+        ).catch(() => ({ rows: [] }));
+
+        const defaultCategories = [
+            'Grocery & Staples',
+            'Dairy & Milk',
+            'Bakery & Sweets',
+            'Fruits & Vegetables',
+            'Beverages & Drinks',
+            'Snacks & Packaged Food',
+            'Personal Care & Hygiene',
+            'Household Essentials',
+            'Electronics & Accessories',
+            'Pharmacy & Health',
+            'Services & Repairs'
+        ];
+
+        const combinedNames = Array.from(new Set([
+            ...defaultCategories,
+            ...(vendorCatResult.rows || []).map(r => r.category),
+            ...(itemCatResult.rows || []).map(r => r.category)
+        ])).filter(Boolean);
+
+        const categoriesList = combinedNames.map((name, idx) => ({
+            id: idx + 1,
+            category_id: idx + 1,
+            name,
+            title: name,
+            category_name: name,
+            slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            icon: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=120',
+            active: true
+        }));
+
+        return res.status(200).json({
+            success: true,
+            total: categoriesList.length,
+            count: categoriesList.length,
+            data: categoriesList,
+            categories: categoriesList
+        });
+    } catch (err) {
+        console.error('Error fetching categories:', err);
+        return res.status(500).json({ error: 'Failed to fetch categories' });
     }
 }
 
@@ -310,5 +412,6 @@ module.exports = {
     getSocietyVendorsStorefront,
     getVendorStorefront,
     searchVendorsLocationAware,
-    getLocations
+    getLocations,
+    getCategories
 };

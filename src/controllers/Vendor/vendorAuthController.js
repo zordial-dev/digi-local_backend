@@ -206,6 +206,13 @@ async function registerVendor(req, res) {
             [vendor_id]
         ).catch(() => {});
 
+        // Auto-create corresponding Resident User account in users table so vendor can immediately log into User Panel as customer
+        await query(
+            `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+            [`usr_v_${vendor_id}`, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
+        ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
+
         const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor', 'user', 'customer'], isVendor: true, isUser: true };
         const tokens = generateTokens(authUser);
 
@@ -371,23 +378,29 @@ async function resubmitVendorRequest(req, res) {
 }
 
 async function checkVendorPhone(req, res) { return res.status(200).json({ exists: false }); }
-async function getVendorPublicProfile(req, res) { return res.status(200).json({}); }
+async function getVendorPublicProfile(req, res, next) {
+  const storefrontController = require('../Storefront/storefrontController');
+  return storefrontController.getVendorStorefront(req, res, next);
+}
 async function loginVendor(req, res) {
   try {
-    const { email, phone, phone_number, password, identifier } = req.body || {};
-    const target = email || phone || phone_number || identifier;
+    const { email, phone, mobile, phone_number, identifier, password, pass } = req.body || {};
+    const target = email || phone || mobile || phone_number || identifier;
+    const loginPassword = password || pass;
 
-    if (!target) {
-      return res.status(400).json({ error: 'Email or phone number is required for vendor login.' });
+    if (!target || !loginPassword) {
+      return res.status(400).json({ error: 'Identifier and password are required.' });
     }
 
+    const cleanTarget = String(target).trim();
+
     const result = await query(
-      `SELECT * FROM vendors WHERE LOWER(email) = LOWER(?) OR phone_number = ? OR CAST(vendor_id AS TEXT) = ?`,
-      [String(target).trim(), String(target).trim(), String(target).trim()]
+      `SELECT * FROM vendors WHERE LOWER(email) = LOWER(?) OR phone_number = ? OR phone_number LIKE ? OR CAST(vendor_id AS TEXT) = ?`,
+      [cleanTarget, cleanTarget, `%${cleanTarget}`, cleanTarget]
     );
 
     if (!result.rows || result.rows.length === 0) {
-      return res.status(404).json({ error: 'Vendor account not found.' });
+      return res.status(404).json({ error: 'No account found with this credential.' });
     }
 
     const v = result.rows[0];
@@ -404,10 +417,29 @@ async function loginVendor(req, res) {
       });
     }
 
+    // ⚠️ CRITICAL: Compare submitted password with stored hashed password
+    const storedHash = v.password_hash || v.password;
+    let isPasswordValid = false;
+
+    if (storedHash) {
+      const matchRes = await comparePassword(String(loginPassword), storedHash);
+      if (matchRes && matchRes.matches) {
+        isPasswordValid = true;
+      } else if (storedHash === String(loginPassword)) {
+        // Fallback for plain-text legacy passwords
+        isPasswordValid = true;
+      }
+    }
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Incorrect password. Please check your password and try again.' });
+    }
+
     const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
     const tokens = generateTokens(authUser);
 
     return res.status(200).json({
+      success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -423,7 +455,8 @@ async function loginVendor(req, res) {
       }
     });
   } catch (err) {
-    return res.status(500).json({ error: 'Vendor login failed.' });
+    console.error('Error during vendor login:', err);
+    return res.status(500).json({ error: 'Internal server error during login.' });
   }
 }
 async function handleUserLogin(req, res) { return res.status(200).json({ message: 'User Login' }); }

@@ -1,22 +1,27 @@
 const express = require('express');
 const router = express.Router();
-const adminPanelController = require('../../controllers/Admin/adminPanelController');
+const subAdminsController = require('../../controllers/Admin/subAdminsController');
 const { authenticateAdminToken, requirePower } = require('../../middleware/adminAuth');
 
 /**
- * 2. Sub-Admin Power Delegation & RBAC (/api/sub-admins)
+ * Sub-Admin Management & Power Delegation Endpoints (/api/v1/admin/subadmins)
  */
 
-// GET /api/sub-admins - List All Sub-Admin Accounts (Super Admin Only)
-router.get('/', authenticateAdminToken, requirePower('SUB_ADMINS'), adminPanelController.listSubAdmins);
+// 6.2 GET /admin/subadmins — Fetch All Sub-Admin Accounts
+router.get('/', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
 
-// POST /api/sub-admins - Create Sub-Admin Account (Super Admin Only)
-router.post('/', authenticateAdminToken, requirePower('SUB_ADMINS'), adminPanelController.createSubAdmin);
+// 6.3 POST /admin/subadmins — Create Sub-Admin Account
+router.post('/', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
 
-// PUT /api/sub-admins/:id/powers - Update Sub-Admin Delegated Powers (Super Admin Only)
-router.put('/:id/powers', authenticateAdminToken, requirePower('SUB_ADMINS'), adminPanelController.updateSubAdminPowers);
+// 6.4 PUT /admin/subadmins/:id — Update Sub-Admin Powers & Delegation Ceiling
+router.put('/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
+router.put('/:id/powers', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
 
-// DELETE /api/sub-admins/:id - Revoke Sub-Admin Account Access (Super Admin Only)
-router.delete('/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), adminPanelController.deleteSubAdmin);
+// 6.5 POST /admin/subadmins/:id/toggle-status — Toggle Account Active/Suspended Status
+router.post('/:id/toggle-status', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.toggleSubAdminStatus);
+router.patch('/:id/toggle-status', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.toggleSubAdminStatus);
+
+// 6.6 DELETE /admin/subadmins/:id — Revoke Sub-Admin Account Access
+router.delete('/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.deleteSubAdmin);
 
 module.exports = router;

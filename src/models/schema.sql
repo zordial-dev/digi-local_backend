@@ -28,16 +28,48 @@ CREATE TABLE IF NOT EXISTS societies (
 );
 
 CREATE TABLE IF NOT EXISTS sub_admins (
-    id VARCHAR(100) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    phone VARCHAR(50),
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    email VARCHAR(160) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'SUB_ADMIN',
-    assigned_society_id BIGINT,
+    role VARCHAR(50) NOT NULL DEFAULT 'sub_admin',
+    status VARCHAR(20) NOT NULL DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by VARCHAR(120) DEFAULT 'Super Admin',
+    creator_id VARCHAR(64) DEFAULT 'super-admin',
+    created_role VARCHAR(50) DEFAULT 'super_admin',
     powers TEXT[] DEFAULT '{}',
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    allowed_delegation_powers TEXT[] DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS sub_admin_powers (
+    id SERIAL PRIMARY KEY,
+    sub_admin_id VARCHAR(64) NOT NULL REFERENCES sub_admins(id) ON DELETE CASCADE,
+    power_code VARCHAR(50) NOT NULL,
+    UNIQUE(sub_admin_id, power_code)
+);
+
+CREATE TABLE IF NOT EXISTS sub_admin_allowed_delegation_powers (
+    id SERIAL PRIMARY KEY,
+    sub_admin_id VARCHAR(64) NOT NULL REFERENCES sub_admins(id) ON DELETE CASCADE,
+    allowed_power_code VARCHAR(50) NOT NULL,
+    UNIQUE(sub_admin_id, allowed_power_code)
+);
+
+CREATE TABLE IF NOT EXISTS backend_audit_logs (
+    id VARCHAR(64) PRIMARY KEY,
+    timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    timestamp_readable VARCHAR(64) NOT NULL,
+    user_email VARCHAR(160) NOT NULL,
+    user_name VARCHAR(120) NOT NULL,
+    user_role VARCHAR(32) NOT NULL,
+    module VARCHAR(50) NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
+    summary VARCHAR(255) NOT NULL,
+    details TEXT NOT NULL,
+    entity_id VARCHAR(64),
+    page_path VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS platform_config (
@@ -99,9 +131,22 @@ CREATE TABLE IF NOT EXISTS vendors (
     renewal_date TIMESTAMP DEFAULT '2026-12-31 00:00:00',
     total_orders INT DEFAULT 0,
     total_revenue DECIMAL(15,2) DEFAULT 0.00,
-    logo TEXT DEFAULT 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&auto=format&fit=crop&q=80',
-    avatar_url TEXT,
-    description TEXT DEFAULT 'Quality goods & daily essentials delivered within society via WhatsApp.',
+    category VARCHAR(100),
+    address TEXT,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    pincode VARCHAR(20),
+    area VARCHAR(255),
+    location VARCHAR(255),
+    location_address TEXT,
+    latitude DECIMAL(10,7) DEFAULT 28.6270,
+    longitude DECIMAL(10,7) DEFAULT 77.3720,
+    location_type VARCHAR(50) DEFAULT 'society',
+    is_global_coverage BOOLEAN DEFAULT FALSE,
+    delivery_radius_km DECIMAL(5,2) DEFAULT 0.00,
+    selected_zones JSONB DEFAULT '[]',
+    vendor_type VARCHAR(20) DEFAULT 'product',
+    can_add_items BOOLEAN DEFAULT TRUE,
     account_number VARCHAR(50),
     bank_account_number VARCHAR(50),
     ifsc_code VARCHAR(20),
@@ -115,57 +160,22 @@ CREATE TABLE IF NOT EXISTS vendors (
     whatsapp_number VARCHAR(20),
     accepted_payment_methods VARCHAR(255) DEFAULT 'COD,UPI,BANK_TRANSFER,QR_CODE',
     payment_instructions TEXT,
-    vendor_type VARCHAR(20) DEFAULT 'product',
-    can_add_items BOOLEAN DEFAULT TRUE,
-    latitude DECIMAL(10,7) DEFAULT 28.6270,
-    longitude DECIMAL(10,7) DEFAULT 77.3720,
-    is_global_coverage BOOLEAN DEFAULT FALSE,
-    delivery_radius_km DECIMAL(5,2) DEFAULT 0.00,
-    selected_zones JSONB DEFAULT '[]',
-    location_address TEXT,
-    location VARCHAR(255),
-    city VARCHAR(100),
-    state VARCHAR(100),
-    pincode VARCHAR(20),
-    status VARCHAR(20) DEFAULT 'ACTIVE',
-    public_id VARCHAR(10),
+    push_token TEXT,
+    fcm_token TEXT,
+    device_token TEXT,
+    device_type VARCHAR(50) DEFAULT 'android',
+    location_id BIGINT,
+    platform VARCHAR(50) DEFAULT 'android',
+    public_id VARCHAR(50),
+    status VARCHAR(20) DEFAULT 'PENDING',
+    hold_reason TEXT,
+    hold_email_subject VARCHAR(255),
+    has_resubmitted BOOLEAN DEFAULT FALSE,
+    resubmitted_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS enquiries (
-    enquiry_id BIGSERIAL PRIMARY KEY,
-    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
-    user_id VARCHAR(100),
-    user_name VARCHAR(255) NOT NULL,
-    user_phone VARCHAR(50) NOT NULL,
-    society_id BIGINT,
-    society_name VARCHAR(255),
-    sector VARCHAR(100),
-    service_type VARCHAR(255),
-    preferred_time VARCHAR(100),
-    description TEXT,
-    issue_photos TEXT[] DEFAULT '{}',
-    status VARCHAR(50) DEFAULT 'NEW',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS items (
-    item_id BIGSERIAL PRIMARY KEY,
-    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
-    item_name VARCHAR(255) NOT NULL,
-    description TEXT,
-    price DECIMAL(10,2) NOT NULL,
-    stock INT DEFAULT 100,
-    category VARCHAR(100) DEFAULT 'General',
-    unit VARCHAR(20) DEFAULT 'piece',
-    is_available BOOLEAN DEFAULT TRUE,
-    in_stock BOOLEAN DEFAULT TRUE,
-    image_url TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS catalog_items (
     item_id BIGSERIAL PRIMARY KEY,
     vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
     item_name VARCHAR(255) NOT NULL,
@@ -180,118 +190,71 @@ CREATE TABLE IF NOT EXISTS catalog_items (
 CREATE TABLE IF NOT EXISTS orders (
     order_id VARCHAR(100) PRIMARY KEY,
     user_id VARCHAR(100),
-    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
-    society_id BIGINT REFERENCES societies(society_id) ON DELETE SET NULL,
+    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE SET NULL,
+    society_id BIGINT,
     total_amount DECIMAL(10,2) NOT NULL,
     status VARCHAR(50) DEFAULT 'PENDING',
-    delivery_address TEXT NOT NULL,
-    customer_id BIGINT,
+    payment_method VARCHAR(50) DEFAULT 'COD',
+    payment_status VARCHAR(50) DEFAULT 'PENDING',
+    delivery_address TEXT,
     customer_name VARCHAR(255),
+    customer_phone VARCHAR(20),
     order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS order_details (
-    order_id VARCHAR(100) NOT NULL,
-    item_id BIGINT,
+    id BIGSERIAL PRIMARY KEY,
+    order_id VARCHAR(100) REFERENCES orders(order_id) ON DELETE CASCADE,
+    item_id BIGINT REFERENCES items(item_id) ON DELETE SET NULL,
     item_name VARCHAR(255),
-    quantity INT NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
-    unit_price DECIMAL(10,2),
-    item_total DECIMAL(10,2),
-    PRIMARY KEY (order_id, item_name)
+    quantity INT NOT NULL DEFAULT 1,
+    price DECIMAL(10,2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS enquiries (
+    enquiry_id BIGSERIAL PRIMARY KEY,
+    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+    user_id VARCHAR(100),
+    user_name VARCHAR(255),
+    user_phone VARCHAR(20),
+    society_id BIGINT,
+    society_name VARCHAR(255),
+    sector VARCHAR(100),
+    service_type VARCHAR(100),
+    preferred_time VARCHAR(100),
+    description TEXT,
+    issue_photos JSONB DEFAULT '[]',
+    status VARCHAR(50) DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS support_tickets (
+    ticket_id BIGSERIAL PRIMARY KEY,
+    user_id VARCHAR(100),
+    user_name VARCHAR(255),
+    email VARCHAR(255),
+    ticket_number VARCHAR(50),
+    subject VARCHAR(255),
+    category VARCHAR(100),
+    priority VARCHAR(20) DEFAULT 'MEDIUM',
+    status VARCHAR(50) DEFAULT 'OPEN',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
     subscription_id BIGSERIAL PRIMARY KEY,
     vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
-    plan_tier VARCHAR(50) DEFAULT 'pro',
-    billing_cycle VARCHAR(50) DEFAULT 'annual',
-    amount DECIMAL(10,2) DEFAULT 2999.00,
-    start_date DATE,
-    end_date DATE,
-    status VARCHAR(20) DEFAULT 'PENDING',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status VARCHAR(20) DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS cms_pages (
+    page_id BIGSERIAL PRIMARY KEY,
+    slug VARCHAR(100) UNIQUE NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE TABLE IF NOT EXISTS payments (
-    payment_id BIGSERIAL PRIMARY KEY,
-    subscription_id BIGINT,
-    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
-    store_name VARCHAR(255),
-    amount DECIMAL(10,2) NOT NULL,
-    payment_method VARCHAR(50) DEFAULT 'Razorpay (UPI)',
-    transaction_id VARCHAR(100) UNIQUE,
-    reason TEXT,
-    status VARCHAR(20) DEFAULT 'SUCCESS',
-    paid_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS promotions (
-    id VARCHAR(100) PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    image_url TEXT NOT NULL,
-    target_type VARCHAR(50) DEFAULT 'CATEGORY',
-    target_value VARCHAR(255),
-    placement VARCHAR(50) DEFAULT 'HERO_SLIDER',
-    display_order INT DEFAULT 1,
-    is_active BOOLEAN DEFAULT TRUE,
-    start_date TIMESTAMP,
-    end_date TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS support_tickets (
-    id VARCHAR(100) PRIMARY KEY,
-    ticket_number VARCHAR(50),
-    user_id VARCHAR(100),
-    user_name VARCHAR(255),
-    email VARCHAR(255),
-    subject VARCHAR(255) NOT NULL,
-    category VARCHAR(100) DEFAULT 'General Query',
-    status VARCHAR(50) DEFAULT 'OPEN',
-    priority VARCHAR(20) DEFAULT 'MEDIUM',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS support_messages (
-    id VARCHAR(100) PRIMARY KEY,
-    ticket_id VARCHAR(100) REFERENCES support_tickets(id) ON DELETE CASCADE,
-    sender_type VARCHAR(50) DEFAULT 'USER',
-    sender_name VARCHAR(255),
-    message TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS notifications (
-    id VARCHAR(100) PRIMARY KEY,
-    user_id VARCHAR(100),
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    type VARCHAR(50) DEFAULT 'SYSTEM',
-    is_read BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS audit_logs (
-    id VARCHAR(100) PRIMARY KEY,
-    user_id VARCHAR(100),
-    user_name VARCHAR(255),
-    user_role VARCHAR(50),
-    action VARCHAR(100) NOT NULL,
-    target_type VARCHAR(100),
-    target_id VARCHAR(100),
-    details TEXT,
-    ip_address VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-    config_key VARCHAR(100) PRIMARY KEY,
-    config_value TEXT NOT NULL
-);
-

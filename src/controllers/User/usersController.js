@@ -179,7 +179,7 @@ async function loginUser(req, res) {
     const cleanPhoneDigits = userPhone.replace(/[^0-9]/g, '');
     const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
 
-    // Database Lookup for Phone Number
+    // Database Lookup for Phone Number in users table
     let userRes = await query(
       `SELECT u.*, s.society_name 
        FROM users u 
@@ -188,14 +188,49 @@ async function loginUser(req, res) {
       [userPhone, cleanPhoneDigits, last10, `%${last10}`]
     );
 
-    if (userRes.rows.length === 0) {
+    let user = userRes.rows[0];
+
+    // Fallback: Check vendors table if mobile number not yet in users table (allows vendor to act as Resident User)
+    if (!user) {
+      const vendorUserRes = await query(
+        `SELECT v.*, s.society_name 
+         FROM vendors v 
+         LEFT JOIN societies s ON v.society_id = s.society_id 
+         WHERE v.phone_number = ? OR v.phone_number = ? OR v.phone_number = ? OR v.phone_number LIKE ?`,
+        [userPhone, cleanPhoneDigits, last10, `%${last10}`]
+      );
+
+      if (vendorUserRes.rows && vendorUserRes.rows.length > 0) {
+        const v = vendorUserRes.rows[0];
+        // Vendor acting as Resident User: customer capabilities are ACTIVE regardless of vendor store status (PENDING/REJECTED/BLOCKED/HOLD)
+        user = {
+          user_id: `usr_v_${v.vendor_id}`,
+          name: v.vendor_name || v.store_name,
+          email: v.email,
+          phone: v.phone_number,
+          password_hash: v.password_hash || v.password,
+          password: v.password,
+          society_id: v.society_id,
+          society_name: v.society_name || v.area || 'Society Hub',
+          flat: v.shop_number || 'Merchant Unit',
+          status: 'ACTIVE'
+        };
+
+        // Auto-persist in users table for seamless future user API calls
+        await query(
+          `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+          [user.user_id, user.name, user.email, user.phone, user.password_hash || user.password, user.society_id, user.society_name, user.flat]
+        ).catch(() => {});
+      }
+    }
+
+    if (!user) {
       return res.status(404).json({
         exists: false,
         error: 'No account found with this mobile number. Please register your account first.'
       });
     }
-
-    const user = userRes.rows[0];
     const userStatusLower = String(user.status || 'active').toLowerCase();
 
     if (userStatusLower === 'blocked' || userStatusLower === 'suspended') {
@@ -549,54 +584,85 @@ async function getUserStatus(req, res) {
  */
 async function deleteAccount(req, res) {
   try {
-    const target = req.params.userId || req.user?.id || req.user?.user_id || req.query.userId || req.query.phone || req.body?.user_id || req.body?.userId || req.body?.phone || req.body?.mobile;
+    const target = req.params.userId || req.params.id || req.user?.id || req.user?.user_id || req.user?.phone || req.query.userId || req.query.id || req.query.phone || req.body?.user_id || req.body?.userId || req.body?.phone || req.body?.mobile;
 
-    if (!target) {
-      return res.status(400).json({ error: 'Unauthorized: User ID or phone number is required for account deletion' });
+    let user = null;
+
+    if (target) {
+      const cleanTarget = String(target).trim();
+      const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
+      const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+      const cleanEmail = cleanTarget.toLowerCase();
+
+      const userRes = await query(
+        `SELECT user_id, name, phone, email FROM users 
+         WHERE user_id = ? 
+            OR CAST(user_id AS TEXT) = ? 
+            OR phone = ? 
+            OR phone = ? 
+            OR phone LIKE ? 
+            OR (LOWER(email) = ? AND email != '')`,
+        [cleanTarget, cleanTarget, cleanTarget, cleanPhoneDigits, `%${last10}`, cleanEmail]
+      );
+      user = userRes.rows[0];
     }
 
-    const cleanTarget = String(target).trim();
-    const cleanEmail = cleanTarget.toLowerCase();
-
-    const userRes = await query(
-      `SELECT user_id, name, phone, email FROM users 
-       WHERE user_id = ? 
-          OR CAST(user_id AS TEXT) = ? 
-          OR phone = ? 
-          OR (LOWER(email) = ? AND email != '')`,
-      [cleanTarget, cleanTarget, cleanTarget, cleanEmail]
-    );
-
-    if (userRes.rows.length === 0) {
-      return res.status(404).json({ error: 'User account not found' });
+    // Fallback: Check req.user authenticated user profile if target parameter wasn't explicitly provided
+    if (!user && req.user) {
+      const authUserId = req.user.id || req.user.user_id;
+      const authPhone = req.user.phone || req.user.phone_number;
+      if (authUserId || authPhone) {
+        const userRes = await query(
+          `SELECT user_id, name, phone, email FROM users 
+           WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+          [String(authUserId), String(authUserId), String(authPhone)]
+        );
+        user = userRes.rows[0];
+      }
     }
 
-    const user = userRes.rows[0];
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User account not found or already deleted.'
+      });
+    }
 
-    // Permanently delete user account record from database
+    const userIdStr = String(user.user_id);
+
+    // 1. Delete associated dependent records to avoid Foreign Key constraint errors
+    await query(`DELETE FROM enquiries WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [user.user_id, userIdStr]).catch(() => {});
+    await query(`DELETE FROM orders WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [user.user_id, userIdStr]).catch(() => {});
+    await query(`DELETE FROM push_tokens WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [user.user_id, userIdStr]).catch(() => {});
+
+    // 2. Permanently delete user account record from database
     await query(
       `DELETE FROM users 
        WHERE user_id = ? 
           OR CAST(user_id AS TEXT) = ? 
           OR phone = ? 
           OR (LOWER(email) = ? AND email != '')`,
-      [user.user_id, String(user.user_id), user.phone, (user.email || '').toLowerCase()]
+      [user.user_id, userIdStr, user.phone, (user.email || '').toLowerCase()]
     );
 
-    // Clear cache
+    // Clear memory cache
     const memoryCache = require('../../utils/cache');
     memoryCache.clear();
 
     logger.auth(`User account permanently deleted: ${user.name} (ID: ${user.user_id}, Phone: ${user.phone})`, { userId: user.user_id });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: `User account for "${user.name}" (ID: ${user.user_id}, Phone: ${user.phone}) deleted permanently.`,
-      user_id: String(user.user_id)
+      message: `Resident user account for "${user.name}" (ID: ${user.user_id}, Phone: ${user.phone}) deleted permanently.`,
+      user_id: userIdStr,
+      deleted_at: new Date().toISOString()
     });
   } catch (err) {
     console.error('Error deleting user account:', err);
-    res.status(500).json({ error: 'Failed to delete user account' });
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to delete user account: ' + (err.message || 'Database error')
+    });
   }
 }
 
