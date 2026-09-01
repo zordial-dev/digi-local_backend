@@ -574,8 +574,9 @@ async function getUserStatus(req, res) {
     }
 
     const u = result.rows[0];
+    const userStrikes = Number(u.strikes || 0);
     const statusLower = String(u.status || 'active').toLowerCase();
-    const isBlocked = statusLower === 'blocked' || statusLower === 'suspended';
+    const isBlocked = statusLower === 'blocked' || statusLower === 'suspended' || userStrikes >= 3;
 
     if (isBlocked) {
       return res.status(403).json({
@@ -584,9 +585,11 @@ async function getUserStatus(req, res) {
         status: 'blocked',
         code: 'USER_BLOCKED',
         is_blocked: true,
+        strikes: userStrikes,
+        max_strikes_allowed: 3,
         action: 'logout',
-        error: 'Resident user account has been blocked by administrator.',
-        message: 'Your resident user account has been blocked. Please log out and contact customer support.',
+        error: 'Resident user account has been blocked by administrator due to policy violation or 3 strikes limit.',
+        message: 'Your resident user account has been blocked due to policy violations or 3 strikes limit. Please log out and contact customer support.',
         recommended_ui_text: 'Your user account has been blocked by admin. Access denied.'
       });
     }
@@ -599,6 +602,8 @@ async function getUserStatus(req, res) {
       phone: u.phone || '',
       status: 'active',
       is_blocked: false,
+      strikes: userStrikes,
+      max_strikes_allowed: 3,
       society_id: u.society_id ? String(u.society_id) : '',
       society_name: u.society_name || u.area || '',
       area: u.area || u.society_name || '',

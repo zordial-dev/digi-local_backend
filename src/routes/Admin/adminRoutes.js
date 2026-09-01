@@ -52,6 +52,9 @@ router.get('/users/:id/notifications', adminPanelController.getUserNotifications
 router.get('/users/:id/audit-logs', adminPanelController.getUserAuditLogsAdmin);
 router.post('/users/:id/flag', adminPanelController.flagUser);
 router.delete('/users/:id/flag', adminPanelController.unflagUser);
+router.post('/users/:id/strike', adminPanelController.strikeUser);
+router.delete('/users/:id/strike', adminPanelController.unstrikeUser);
+router.post('/users/:id/unstrike', adminPanelController.unstrikeUser);
 router.post('/users/:id/block', adminPanelController.blockUser);
 router.post('/users/:id/unblock', adminPanelController.unblockUser);
 router.put('/users/:id/status', adminPanelController.updateUserStatus);

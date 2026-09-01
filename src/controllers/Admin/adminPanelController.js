@@ -1018,8 +1018,110 @@ async function getUserAuditLogsAdmin(req, res) {
   }
 }
 
-async function flagUser(req, res) { return respond(res, 200, {}, 'User flagged.'); }
-async function unflagUser(req, res) { return respond(res, 200, {}, 'User unflagged.'); }
+async function strikeUser(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id || req.body?.user_id || req.body?.id;
+    const reason = String(req.body?.reason || req.body?.strike_reason || 'Strike issued by administrator for policy violation').trim();
+
+    if (!targetId) {
+      return sendStandardError(res, 400, 'User ID is required to issue a strike.');
+    }
+
+    const cleanPhone = String(targetId).trim().replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+    const userRes = await query(
+      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+      [targetId, String(targetId), targetId, `%${last10}`]
+    );
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return sendStandardError(res, 404, `Resident user "${targetId}" not found.`);
+    }
+
+    const u = userRes.rows[0];
+    const currentStrikes = Number(u.strikes || 0);
+    const newStrikes = currentStrikes + 1;
+    const isAutoBanned = newStrikes >= 3;
+    const newStatus = isAutoBanned ? 'BLOCKED' : (u.status || 'ACTIVE');
+
+    await query(
+      `UPDATE users SET strikes = ?, status = ? WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+      [newStrikes, newStatus, String(u.user_id), String(u.user_id)]
+    );
+
+    const message = isAutoBanned
+      ? `Strike #${newStrikes} issued to user "${u.name || u.user_id}". Account has reached 3 strikes and is AUTOMATICALLY BANNED / BLOCKED!`
+      : `Strike #${newStrikes} issued to user "${u.name || u.user_id}". (${3 - newStrikes} strikes remaining before automatic ban).`;
+
+    return respond(res, 200, {
+      user_id: String(u.user_id),
+      name: u.name || '',
+      phone: u.phone || '',
+      strikes: newStrikes,
+      max_strikes_allowed: 3,
+      status: newStatus.toLowerCase(),
+      is_blocked: isAutoBanned || String(newStatus).toUpperCase() === 'BLOCKED',
+      is_auto_banned: isAutoBanned,
+      reason,
+      message
+    }, message);
+  } catch (err) {
+    console.error('Error issuing strike to user:', err);
+    return sendStandardError(res, 500, 'Failed to issue strike to user.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+async function unstrikeUser(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id || req.body?.user_id || req.body?.id;
+    const resetAll = req.body?.reset_all !== false && req.query?.reset_all !== 'false';
+
+    if (!targetId) {
+      return sendStandardError(res, 400, 'User ID is required to remove strike.');
+    }
+
+    const cleanPhone = String(targetId).trim().replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+    const userRes = await query(
+      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+      [targetId, String(targetId), targetId, `%${last10}`]
+    );
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return sendStandardError(res, 404, `Resident user "${targetId}" not found.`);
+    }
+
+    const u = userRes.rows[0];
+    const currentStrikes = Number(u.strikes || 0);
+    const newStrikes = resetAll ? 0 : Math.max(0, currentStrikes - 1);
+    const newStatus = (newStrikes < 3 && String(u.status).toUpperCase() === 'BLOCKED') ? 'ACTIVE' : u.status;
+
+    await query(
+      `UPDATE users SET strikes = ?, status = ? WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+      [newStrikes, newStatus, String(u.user_id), String(u.user_id)]
+    );
+
+    return respond(res, 200, {
+      user_id: String(u.user_id),
+      name: u.name || '',
+      phone: u.phone || '',
+      strikes: newStrikes,
+      max_strikes_allowed: 3,
+      status: newStatus.toLowerCase(),
+      is_blocked: String(newStatus).toUpperCase() === 'BLOCKED'
+    }, `User strikes count updated to ${newStrikes}.`);
+  } catch (err) {
+    console.error('Error removing strike from user:', err);
+    return sendStandardError(res, 500, 'Failed to remove strike from user.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+async function flagUser(req, res) { return strikeUser(req, res); }
+async function unflagUser(req, res) { return unstrikeUser(req, res); }
 async function updateUserStatus(req, res) {
   try {
     const { userId, id } = req.params;
@@ -1364,6 +1466,8 @@ module.exports = {
   getUserAuditLogsAdmin,
   flagUser,
   unflagUser,
+  strikeUser,
+  unstrikeUser,
   updateUserStatus,
   blockUser,
   unblockUser,
