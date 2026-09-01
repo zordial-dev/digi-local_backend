@@ -18,6 +18,8 @@ const cmsRoutes = require('./Cms/cmsRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
+const subAdminsController = require('../controllers/Admin/subAdminsController');
+const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
 
 // ── Health & Observability Routes ───────────────────────────
 router.use('/health', healthRoutes);
@@ -145,8 +147,6 @@ router.post('/api/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS')
 router.put('/api/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
 
 // ── v3.0.0 Sub-Admin RBAC & Audit Ledger Endpoints ──────────
-const subAdminsController = require('../controllers/Admin/subAdminsController');
-const { requireSuperAdmin } = require('../middleware/adminAuth');
 
 router.post('/api/v1/auth/admin/login', subAdminsController.subAdminLogin);
 router.post('/api/auth/admin/login', subAdminsController.subAdminLogin);
