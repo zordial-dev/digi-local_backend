@@ -184,8 +184,8 @@ async function loginUser(req, res) {
       `SELECT u.*, s.society_name 
        FROM users u 
        LEFT JOIN societies s ON u.society_id = s.society_id 
-       WHERE u.phone = ? OR u.phone = ? OR u.phone = ? OR u.phone LIKE ?`,
-      [userPhone, cleanPhoneDigits, last10, `%${last10}`]
+       WHERE u.phone = ? OR u.phone = ? OR u.phone = ? OR u.phone LIKE ? OR u.phone LIKE ? OR REPLACE(REPLACE(REPLACE(u.phone, '+', ''), ' ', ''), '-', '') LIKE ?`,
+      [userPhone, cleanPhoneDigits, last10, `%${last10}`, `+91${last10}`, `%${last10}`]
     );
 
     let user = userRes.rows[0];
@@ -196,8 +196,8 @@ async function loginUser(req, res) {
         `SELECT v.*, s.society_name 
          FROM vendors v 
          LEFT JOIN societies s ON v.society_id = s.society_id 
-         WHERE v.phone_number = ? OR v.phone_number = ? OR v.phone_number = ? OR v.phone_number LIKE ?`,
-        [userPhone, cleanPhoneDigits, last10, `%${last10}`]
+         WHERE v.phone_number = ? OR v.phone_number = ? OR v.phone_number = ? OR v.phone_number LIKE ? OR v.phone_number LIKE ?`,
+        [userPhone, cleanPhoneDigits, last10, `%${last10}`, `+91${last10}`]
       );
 
       if (vendorUserRes.rows && vendorUserRes.rows.length > 0) {
@@ -211,8 +211,8 @@ async function loginUser(req, res) {
           password_hash: v.password_hash || v.password,
           password: v.password,
           society_id: v.society_id,
-          society_name: v.society_name || v.area || 'Society Hub',
-          flat: v.shop_number || 'Merchant Unit',
+          society_name: v.society_name || v.area || '',
+          flat: v.shop_number || '',
           status: 'ACTIVE'
         };
 
@@ -228,7 +228,7 @@ async function loginUser(req, res) {
     if (!user) {
       return res.status(404).json({
         exists: false,
-        error: 'No account found with this mobile number. Please register your account first.'
+        error: `No user account found with mobile number ${userPhone}. Please register your account first.`
       });
     }
     const userStatusLower = String(user.status || 'active').toLowerCase();
@@ -247,7 +247,7 @@ async function loginUser(req, res) {
     if (password && !loginOtp) {
       const matchRes = await comparePassword(password, user.password_hash || user.password);
       if (!matchRes || !matchRes.matches) {
-        return res.status(401).json({ error: 'Invalid mobile number or password' });
+        return res.status(401).json({ error: 'Incorrect password. Please check your password and try again.' });
       }
     }
 

@@ -68,6 +68,21 @@ async function comparePassword(plaintextPassword, storedPassword) {
     });
   }
 
+  // Handle bcrypt hash format ($2a$, $2b$, $2y$)
+  if (storedPassword.startsWith('$2a$') || storedPassword.startsWith('$2b$') || storedPassword.startsWith('$2y$')) {
+    try {
+      const bcrypt = require('bcryptjs');
+      const matches = await bcrypt.compare(plaintextPassword, storedPassword);
+      return { matches, needsRehash: false };
+    } catch (_) {
+      try {
+        const bcrypt = require('bcrypt');
+        const matches = await bcrypt.compare(plaintextPassword, storedPassword);
+        return { matches, needsRehash: false };
+      } catch (_) {}
+    }
+  }
+
   // Legacy Plaintext Password Check (for initial seed data backward compatibility)
   const isPlaintextMatch = (storedPassword === plaintextPassword);
   return {
