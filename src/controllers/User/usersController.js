@@ -266,16 +266,18 @@ async function loginUser(req, res) {
       refreshToken: tokens.refreshToken,
       user: {
         user_id: String(user.user_id),
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
         status: userStatusLower,
         is_blocked: false,
-        society_id: user.society_id ? String(user.society_id) : '1',
-        society_name: user.society_name || 'Omaxe Greenwood Residency',
-        flat: user.flat || 'Tower A-402',
-        joined_date: user.joined_date || 'August 2026',
-        avatar: user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
+        society_id: user.society_id ? String(user.society_id) : '',
+        society_name: user.society_name || user.area || '',
+        area: user.area || user.society_name || '',
+        flat: user.flat || '',
+        city: user.city || '',
+        pincode: user.pincode || '',
+        address: user.address || ''
       }
     });
   } catch (err) {
@@ -290,7 +292,7 @@ async function loginUser(req, res) {
  */
 async function registerUser(req, res) {
   try {
-    const { name, email, phone, mobile, phone_number, mobile_number, identifier, password, society_id, flat, otp, code, otp_code } = req.body;
+    const { name, email, phone, mobile, phone_number, mobile_number, identifier, password, society_id, flat, area, location, city, pincode, address, otp, code, otp_code } = req.body;
     const inputOtp = otp || code || otp_code;
 
     let userPhone = String(phone || mobile || phone_number || mobile_number || identifier || '').trim();
@@ -324,13 +326,25 @@ async function registerUser(req, res) {
     const userId = `usr_${Date.now().toString().slice(-6)}`;
     const pwdHash = password ? await hashPassword(password) : await hashPassword('UserDefaultPass123!');
     const socId = (society_id !== undefined && society_id !== null && !isNaN(parseInt(society_id, 10))) ? parseInt(society_id, 10) : null;
-    const userArea = String(req.body.area || req.body.location || req.body.society_name || 'Sector 62').trim();
+    const userArea = String(area || location || req.body.society_name || '').trim();
+    const userFlat = String(flat || req.body.unit || req.body.house_number || '').trim();
+    const userCity = String(city || '').trim();
+    const userPincode = String(pincode || '').trim();
+    const userAddress = String(address || '').trim();
+    const userEmail = String(email || '').trim();
 
     await query(
-      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, joined_date, avatar)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'August 2026', 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200')`,
-      [userId, userName, email || `${userId}@digilocal.internal`, userPhone, pwdHash, socId, userArea, flat || 'Tower A-402']
-    );
+      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, pincode, address, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userPincode, userAddress]
+    ).catch(async () => {
+      // Fallback if city/pincode/address columns missing in Postgres schema
+      return query(
+        `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
+      );
+    });
 
     let societyName = userArea;
     if (socId) {
@@ -338,15 +352,17 @@ async function registerUser(req, res) {
       societyName = socRes.rows[0]?.society_name || userArea;
     }
 
-    // Dispatch welcome email asynchronously
-    const { sendAccountRegistrationEmail } = require('../../templates/accountRegistrationEmail');
-    sendAccountRegistrationEmail('user', {
-      name: userName,
-      email: email || `${userId}@digilocal.internal`,
-      phone: userPhone,
-      society_name: societyName,
-      flat: flat || 'Tower A-402'
-    });
+    // Dispatch welcome email asynchronously if email provided
+    if (userEmail) {
+      const { sendAccountRegistrationEmail } = require('../../templates/accountRegistrationEmail');
+      sendAccountRegistrationEmail('user', {
+        name: userName,
+        email: userEmail,
+        phone: userPhone,
+        society_name: societyName,
+        flat: userFlat
+      });
+    }
 
     const tokens = generateTokens({ id: userId, role: 'user', phone: userPhone }, 'user');
 
@@ -357,17 +373,24 @@ async function registerUser(req, res) {
     });
 
     res.status(201).json({
-
+      success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: {
-        user_id: userId,
+        user_id: String(userId),
         name: userName,
+        email: userEmail,
         phone: userPhone,
-        society_id: String(socId),
+        status: 'active',
+        is_blocked: false,
+        society_id: socId ? String(socId) : '',
         society_name: societyName,
-        flat: flat || 'Tower A-402'
+        area: userArea,
+        flat: userFlat,
+        city: userCity,
+        pincode: userPincode,
+        address: userAddress
       }
     });
   } catch (err) {
@@ -501,16 +524,19 @@ async function getUserProfile(req, res) {
 
     res.status(200).json({
       user_id: String(user.user_id),
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
+      name: user.name || '',
+      email: user.email || '',
+      phone: user.phone || '',
       status: statusLower,
       is_blocked: false,
-      society_id: user.society_id ? String(user.society_id) : '1',
-      society_name: user.society_name || 'Omaxe Greenwood Residency',
-      flat: user.flat || 'Tower A-402',
-      joined_date: user.joined_date || 'August 2026',
-      avatar: user.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200'
+      society_id: user.society_id ? String(user.society_id) : '',
+      society_name: user.society_name || user.area || '',
+      area: user.area || user.society_name || '',
+      flat: user.flat || '',
+      city: user.city || '',
+      pincode: user.pincode || '',
+      address: user.address || '',
+      created_at: user.created_at ? new Date(user.created_at).toISOString() : ''
     });
   } catch (err) {
     console.error('Error fetching user profile:', err);

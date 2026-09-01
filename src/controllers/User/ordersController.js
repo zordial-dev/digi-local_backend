@@ -271,8 +271,14 @@ async function createOrder(req, res) {
       }
     }
 
+    const orderFlat = String(req.body.flat || req.body.house_number || req.body.unit || '').trim();
+    const orderArea = String(req.body.area || req.body.location || req.body.society_name || '').trim();
+    const orderCity = String(req.body.city || '').trim();
+    const orderPincode = String(req.body.pincode || req.body.zip || '').trim();
+    const finalDeliveryAddress = String(delivery_address || [orderFlat, orderArea, orderCity, orderPincode].filter(Boolean).join(', ') || '').trim();
+
     if (!resolvedCustomerName) {
-      resolvedCustomerName = 'Raj Kumar'; // Default resident name instead of Rahul Sharma
+      resolvedCustomerName = rawCustomerName || 'Resident Customer';
     }
 
     await query(
@@ -280,32 +286,64 @@ async function createOrder(req, res) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
-        resolvedUserId || 'usr_101',
+        resolvedUserId || 'usr_anonymous',
         vendor_id,
-        society_id || 1,
+        society_id || null,
         numTotal,
         'PENDING',
-        delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
+        finalDeliveryAddress,
         createdAt,
         resolvedCustomerName
       ]
     ).catch(e => {
-        // If customer_name column does not exist, fallback gracefully
         return query(
           `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             orderId,
-            resolvedUserId || 'usr_101',
+            resolvedUserId || 'usr_anonymous',
             vendor_id,
-            society_id || 1,
+            society_id || null,
             numTotal,
             'PENDING',
-            delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
+            finalDeliveryAddress,
             createdAt
           ]
         );
     });
+
+    // ── Save last address entered by user to database ─────────────────────────────
+    if (resolvedUserId || rawPhone) {
+      const targetIdentifier = resolvedUserId || rawPhone;
+      await query(`
+        UPDATE users 
+        SET flat = COALESCE(NULLIF(?, ''), flat),
+            society_name = COALESCE(NULLIF(?, ''), society_name),
+            area = COALESCE(NULLIF(?, ''), area),
+            city = COALESCE(NULLIF(?, ''), city),
+            pincode = COALESCE(NULLIF(?, ''), pincode),
+            address = COALESCE(NULLIF(?, ''), address)
+        WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
+      `, [
+        orderFlat,
+        orderArea,
+        orderArea,
+        orderCity,
+        orderPincode,
+        finalDeliveryAddress,
+        String(targetIdentifier),
+        String(targetIdentifier),
+        String(targetIdentifier)
+      ]).catch(() => {
+        // Fallback for schemas without city/pincode/address columns
+        return query(`
+          UPDATE users 
+          SET flat = COALESCE(NULLIF(?, ''), flat),
+              society_name = COALESCE(NULLIF(?, ''), society_name)
+          WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
+        `, [orderFlat, orderArea, String(targetIdentifier), String(targetIdentifier), String(targetIdentifier)]).catch(() => {});
+      });
+    }
 
     for (const pItem of populatedItems) {
       let validItemId = Number(pItem.item_id) || 1;

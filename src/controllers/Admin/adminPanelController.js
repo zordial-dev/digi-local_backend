@@ -576,14 +576,29 @@ async function getVendorPayments(req, res) { return respond(res, 200, [], 'Vendo
 // Module 4: Users Directory & Sub-resources
 async function listUsers(req, res) {
   try {
-    const result = await query(`SELECT * FROM users ORDER BY created_at DESC`).catch(() => ({ rows: [] }));
+    const { page = 1, limit = 100, search } = req.query || {};
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+    const offset = (pageNum - 1) * limitNum;
+
+    let sql = `SELECT * FROM users`;
+    const params = [];
+    if (search) {
+      sql += ` WHERE name LIKE ? OR phone LIKE ? OR email LIKE ? OR user_id = ? OR society_name LIKE ? OR area LIKE ?`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`, `%${search}%`);
+    }
+    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limitNum, offset);
+
+    const result = await query(sql, params).catch(() => ({ rows: [] }));
+
     const users = (result.rows || []).map(u => ({
-      id: String(u.user_id),
       user_id: String(u.user_id),
-      name: u.name || 'Resident User',
+      name: u.name || '',
       email: u.email || '',
       phone: u.phone || '',
-      area: u.area || u.society_name || 'General Area',
+      area: u.area || u.society_name || '',
+      society_name: u.society_name || u.area || '',
       flat: u.flat || '',
       status: (u.status || 'ACTIVE').toLowerCase(),
       is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
@@ -605,12 +620,12 @@ async function getUserById(req, res) {
     }
     const u = result.rows[0];
     const userObj = {
-      id: String(u.user_id),
       user_id: String(u.user_id),
-      name: u.name || 'Resident User',
+      name: u.name || '',
       email: u.email || '',
       phone: u.phone || '',
-      area: u.area || u.society_name || 'General Area',
+      area: u.area || u.society_name || '',
+      society_name: u.society_name || u.area || '',
       flat: u.flat || '',
       status: (u.status || 'ACTIVE').toLowerCase(),
       is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
@@ -692,20 +707,22 @@ async function getUserAddressesAdmin(req, res) {
       return sendStandardError(res, 404, `User "${targetId}" not found.`);
     }
     const u = userRes.rows[0];
-    const addresses = [
+    const hasAddress = Boolean(u.flat || u.area || u.society_name || u.address || u.city || u.pincode);
+    const addresses = hasAddress ? [
       {
         address_id: `addr_primary_${u.user_id}`,
         user_id: String(u.user_id),
         type: 'Primary Residence',
-        flat: u.flat || 'Unit',
-        area: u.area || u.society_name || 'General Area',
-        city: u.city || 'City',
-        state: u.state || 'State',
+        flat: u.flat || '',
+        area: u.area || u.society_name || '',
+        society_name: u.society_name || u.area || '',
+        city: u.city || '',
+        state: u.state || '',
         pincode: u.pincode || '',
-        full_address: [u.flat, u.area || u.society_name, u.city, u.pincode].filter(Boolean).join(', ') || 'Default Residence Address',
+        full_address: u.address || [u.flat, u.area || u.society_name, u.city, u.pincode].filter(Boolean).join(', ') || '',
         is_default: true
       }
-    ];
+    ] : [];
     return respond(res, 200, addresses, 'User addresses retrieved successfully.');
   } catch (err) {
     return sendStandardError(res, 500, 'Failed to fetch user addresses.');
