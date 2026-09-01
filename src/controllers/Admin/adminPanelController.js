@@ -782,7 +782,7 @@ async function enrichOrderWithDetails(ord) {
 
   // 2. Fetch vendor info if missing
   const vendorRes = await query(
-    `SELECT store_name, vendor_name, phone_number, area, category FROM vendors WHERE vendor_id = ?`,
+    `SELECT store_name, vendor_name, phone_number, area, city, state, pincode, category FROM vendors WHERE vendor_id = ?`,
     [ord.vendor_id]
   ).catch(() => ({ rows: [] }));
 
@@ -790,7 +790,7 @@ async function enrichOrderWithDetails(ord) {
 
   // 3. Fetch user info if missing
   const userRes = await query(
-    `SELECT name, phone, email, flat, area, city, pincode, address FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+    `SELECT name, phone, email, flat, area, city, state, pincode, address FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
     [ord.user_id, String(ord.user_id)]
   ).catch(() => ({ rows: [] }));
 
@@ -810,15 +810,22 @@ async function enrichOrderWithDetails(ord) {
   const totalAmount = Number(ord.total_amount || calculatedSubtotal || 0);
   const serviceCharge = Math.max(0, totalAmount - calculatedSubtotal);
 
-  const flatVal = uInfo.flat || (ord.delivery_address ? ord.delivery_address.split(',')[0] : '');
-  const areaVal = ord.area || uInfo.area || vInfo.area || '';
-  const fullDeliveryAddress = ord.delivery_address || uInfo.address || [flatVal, areaVal].filter(Boolean).join(', ') || '';
+  const flatVal = String(ord.flat || uInfo.flat || (ord.delivery_address ? ord.delivery_address.split(',')[0] : '') || '').trim();
+  const areaVal = String(ord.area || uInfo.area || uInfo.society_name || vInfo.area || '').trim();
+  const cityVal = String(ord.city || uInfo.city || vInfo.city || 'Noida').trim();
+  const stateVal = String(ord.state || uInfo.state || vInfo.state || 'Uttar Pradesh').trim();
+  const pincodeVal = String(ord.pincode || uInfo.pincode || vInfo.pincode || '').trim();
+
+  // Combine flat, area/address, city, state, pincode cleanly
+  const addressParts = [flatVal, areaVal, cityVal, stateVal, pincodeVal].filter(Boolean);
+  const formattedFullAddress = ord.delivery_address && ord.delivery_address.includes(cityVal) 
+    ? ord.delivery_address 
+    : (addressParts.length > 0 ? addressParts.join(', ') : ord.delivery_address || '');
 
   const statusUpper = String(ord.status || 'PENDING').toUpperCase();
 
   return {
     order_id: String(ord.order_id),
-    id: String(ord.order_id),
     user_id: String(ord.user_id),
     vendor_id: Number(ord.vendor_id),
     customer_name: ord.customer_name || uInfo.name || 'Resident Customer',
@@ -833,8 +840,11 @@ async function enrichOrderWithDetails(ord) {
     payment_method: ord.payment_method || 'COD / Online',
     flat: flatVal,
     area: areaVal,
-    delivery_address: fullDeliveryAddress,
-    full_address: fullDeliveryAddress,
+    city: cityVal,
+    state: stateVal,
+    pincode: pincodeVal,
+    delivery_address: formattedFullAddress,
+    full_address: formattedFullAddress,
     subtotal: calculatedSubtotal,
     service_charge: serviceCharge,
     total_amount: totalAmount,

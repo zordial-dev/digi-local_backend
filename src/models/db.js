@@ -383,6 +383,7 @@ async function setupTablesPg() {
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7) DEFAULT 28.6270`,
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7) DEFAULT 77.3720`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
     `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
     `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`
   ];

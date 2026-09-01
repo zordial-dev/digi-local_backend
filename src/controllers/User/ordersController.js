@@ -1,4 +1,5 @@
 const { query } = require('../../models/db');
+const { formatISTISO, formatISTReadable, formatISTTimeOnly } = require('../../utils/time');
 
 /**
  * D1. Fetch Resident User Orders (Strictly Filtered by User ID)
@@ -89,11 +90,11 @@ async function getUserOrders(req, res) {
         status: statusUpper,
         status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
         payment_status: ord.payment_status || 'PAID',
-        payment_method: ord.payment_method || 'COD / WhatsApp',
-        date: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
-        timestamp: ord.created_at ? new Date(ord.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
-        createdAt: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
-        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        date: formatISTISO(ord.created_at),
+        timestamp: formatISTTimeOnly(ord.created_at),
+        createdAt: formatISTISO(ord.created_at),
+        created_at: formatISTISO(ord.created_at),
+        created_at_readable: formatISTReadable(ord.created_at),
         items: mappedItems
       });
     }
@@ -179,9 +180,10 @@ async function getVendorOrders(req, res) {
         total: total,
         total_amount: total, // Backward compat
         status: (ord.status || 'PENDING').toLowerCase(),
-        timestamp: ord.created_at ? new Date(ord.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }) : 'N/A',
-        createdAt: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
-        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        timestamp: formatISTTimeOnly(ord.created_at),
+        createdAt: formatISTISO(ord.created_at),
+        created_at: formatISTISO(ord.created_at),
+        created_at_readable: formatISTReadable(ord.created_at),
         items: mappedItems
       });
     }
@@ -211,7 +213,7 @@ async function createOrder(req, res) {
     }
 
     const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
-    const createdAt = new Date().toISOString();
+    const createdAt = formatISTISO();
     const populatedItems = [];
     let subtotal = 0;
 

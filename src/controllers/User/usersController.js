@@ -1,5 +1,6 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP, normalizePhone } = require('../../utils/auth');
+const { formatISTISO } = require('../../utils/time');
 const { sendOTP: sendMsg91OTP, verifyOTP: verifyMsg91OTP } = require('../../services/msg91Service');
 const logger = require('../../utils/logger');
 
@@ -536,7 +537,7 @@ async function getUserProfile(req, res) {
       city: user.city || '',
       pincode: user.pincode || '',
       address: user.address || '',
-      created_at: user.created_at ? new Date(user.created_at).toISOString() : ''
+      created_at: formatISTISO(user.created_at)
     });
   } catch (err) {
     console.error('Error fetching user profile:', err);
