@@ -155,6 +155,10 @@ router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply',
 router.post(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.createVendorTicket);
 router.get(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.getVendorTickets);
 
+const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
+router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId'], vendorPanelController.getVendorPurchases);
+
+
 
 router.get('/api/reports/telemetry', adminPanelController.getExecutiveReports);
 router.get('/api/reports/executive', adminPanelController.getExecutiveReports);

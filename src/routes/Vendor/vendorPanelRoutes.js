@@ -89,6 +89,12 @@ router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 // GET /api/vendorPanel/:vendorId - Full vendor dashboard data
 router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
 
+// GET /api/vendorPanel/:vendorId/purchases & /my-orders - Vendor B2B / B2C orders placed by vendor buying from other vendors
+router.get('/:vendorId/purchases', vendorPanelController.getVendorPurchases);
+router.get('/:vendorId/my-orders', vendorPanelController.getVendorPurchases);
+router.get('/:vendorId/orders-made', vendorPanelController.getVendorPurchases);
+
+
 // POST /api/vendorPanel/:vendorId/items
 router.post('/:vendorId/items', authenticateToken, requireVendorOwner, validateRequest(addItemSchema), vendorPanelController.addItem);
 

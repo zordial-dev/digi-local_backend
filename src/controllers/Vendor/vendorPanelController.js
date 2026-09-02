@@ -99,6 +99,27 @@ async function getDashboard(req, res) {
 }
 
 /**
+ * GET /api/vendorPanel/:vendorId/purchases & /my-orders - Vendor B2B / B2C purchases from other vendors
+ */
+async function getVendorPurchases(req, res) {
+    try {
+        const vendorId = req.params.vendorId || req.params.id;
+        const purchases = await vendorService.getVendorPurchases(vendorId);
+
+        res.status(200).json({
+            code: 200,
+            status: 'success',
+            message: 'Vendor purchases retrieved successfully.',
+            data: purchases
+        });
+    } catch (err) {
+        console.error('Error fetching vendor purchases:', err);
+        res.status(500).json({ code: 500, status: 'error', error: 'Failed to fetch vendor purchases', details: err.message });
+    }
+}
+
+
+/**
  * POST /api/vendorPanel/:vendorId/items - Add item
  */
 async function addItem(req, res) {
@@ -486,18 +507,19 @@ async function updatePaymentDetails(req, res) {
 
 module.exports = {
   updatePaymentDetails,
-    uploadImage,
-    updateVendorLogo,
-    getDashboard,
-    addItem,
-    updateItem,
-    deleteItem,
-    updateSettings,
-    renewSubscription,
-    toggleAvailability,
-    registerFcmToken,
-    deleteFcmToken,
-    testPushNotification,
-    deleteStore,
-    updateVendorCoverage
+  uploadImage,
+  updateVendorLogo,
+  getDashboard,
+  getVendorPurchases,
+  addItem,
+  updateItem,
+  deleteItem,
+  updateSettings,
+  renewSubscription,
+  toggleAvailability,
+  registerFcmToken,
+  deleteFcmToken,
+  testPushNotification,
+  deleteStore,
+  updateVendorCoverage
 };
