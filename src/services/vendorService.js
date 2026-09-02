@@ -348,41 +348,10 @@ class VendorService {
 
     const dbOrders = ordersRes.rows || [];
 
-    // If no orders found in DB, return sample mock vendor-to-vendor purchase data for seamless frontend demo
     if (dbOrders.length === 0) {
-      return [
-        {
-          order_id: 'ORD-V2V-9842',
-          buyer_vendor_id: buyerVendorId,
-          buyer_public_id: buyerPublicId,
-          buyer_store_name: buyerStoreName,
-          seller_vendor_id: '104',
-          seller_store_name: 'Aarushi Sweets',
-          seller_store_logo: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=300',
-          total_amount: 707.00,
-          status: 'delivered',
-          delivery_address: buyerVendor ? `${buyerVendor.address || 'Shop 352'}, ${buyerStoreName}, ${buyerVendor.city || 'Sheoganj'}` : 'Merchant Store Address',
-          created_at: '2026-09-02T06:32:11.000Z',
-          created_at_readable: '02 Sep 2026, 06:32 am IST',
-          items: [
-            {
-              item_id: 101,
-              item_name: 'Organic Milk Packets (Bulk)',
-              quantity: 10,
-              price: 50.00,
-              item_total: 500.00
-            },
-            {
-              item_id: 102,
-              item_name: 'Desi Ghee Box 1kg',
-              quantity: 1,
-              price: 207.00,
-              item_total: 207.00
-            }
-          ]
-        }
-      ];
+      return [];
     }
+
 
     // 3. Populate order details
     const formattedOrders = [];

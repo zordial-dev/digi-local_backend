@@ -43,99 +43,9 @@ const SLA_MAP = {
 
 // In-Memory Storage for Fallback and Fast Sync
 const memoryStore = {
-  tickets: [
-    {
-      id: 't-1788287963713',
-      ticket_number: 'TICK-9082',
-      subject: 'Missing Item & Delayed Delivery Complaint',
-      description: 'Customer reported 2 items missing from Order #ORD-9842 fulfilled by Aarushi Sweets.',
-      category: 'user_vs_vendor',
-      priority: 'high',
-      status: 'in_progress',
-      user_type: 'user',
-      source: 'mobile_app',
-      reporter_name: 'Garvit Sharma',
-      reporter_email: 'garvit@gmail.com',
-      reporter_user_id: 'usr_garvit_101',
-      entity_name: 'Greenwood Residency',
-      target_vendor: 'Aarushi Sweets',
-      order_id: 'ORD-9842',
-      order_amount: 707.00,
-      assigned_to: 'Aarushi Admin',
-      sla_minutes_remaining: 45,
-      followers: ['Garvit SubAdmin'],
-      merged_into: null,
-      merged_children: [],
-      tags: ['Refund Dispatched'],
-      created_at: '2026-09-02T01:02:11.000Z',
-      created_at_ist: '2026-09-02T06:32:11+05:30',
-      created_at_readable: '02 Sep 2026, 06:32 am IST',
-      updated_at: '2026-09-02T06:45:00+05:30'
-    },
-    {
-      id: 't-178829910011',
-      ticket_number: 'TICK-4912',
-      subject: 'Store Settlement Discrepancy',
-      description: 'Settlement amount for order #ORD-9842 reflects 10% commission deduction instead of 5% agreed rate.',
-      category: 'billing',
-      priority: 'high',
-      status: 'open',
-      user_type: 'vendor',
-      source: 'vendor_portal',
-      reporter_name: "Flower's Point",
-      reporter_email: 'aarushi20@gmail.com',
-      reporter_user_id: 'vnd_flowers_01',
-      entity_name: "Flower's Point",
-      target_vendor: "Flower's Point",
-      order_id: 'ORD-9842',
-      order_amount: 1250.00,
-      assigned_to: 'Super Admin',
-      sla_minutes_remaining: 45,
-      followers: [],
-      merged_into: null,
-      merged_children: [],
-      tags: [],
-      created_at: '2026-09-02T07:15:00.000Z',
-      created_at_ist: '2026-09-02T12:45:00+05:30',
-      created_at_readable: '02 Sep 2026, 12:45 pm IST',
-      updated_at: '2026-09-02T12:45:00+05:30'
-    }
-  ],
-  messages: [
-    {
-      id: 'm-101',
-      ticket_id: 't-1788287963713',
-      sender_name: 'Garvit Sharma',
-      sender_role: 'user',
-      sender_avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Garvit',
-      message: 'I placed order #ORD-9842 but 2 milk packets were missing when rider delivered.',
-      is_internal_note: false,
-      created_at_ist: '2026-09-02T06:32:11+05:30',
-      created_at_readable: '02 Sep 2026, 06:32 am IST'
-    },
-    {
-      id: 'm-102',
-      ticket_id: 't-1788287963713',
-      sender_name: 'Super Admin',
-      sender_role: 'admin',
-      sender_avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin',
-      message: 'Internal Note: Verified store CCTV footage with merchant Aarushi Sweets.',
-      is_internal_note: true,
-      created_at_ist: '2026-09-02T06:40:00+05:30',
-      created_at_readable: '02 Sep 2026, 06:40 am IST'
-    }
-  ],
-  attachments: [
-    {
-      id: 'att_98421',
-      ticket_id: 't-1788287963713',
-      file_name: 'damaged_delivery_photo.jpg',
-      file_size_bytes: 1420500,
-      file_url: 'https://storage.digilocal.in/support/att_98421.jpg',
-      uploaded_by: 'Garvit Sharma',
-      uploaded_at_ist: '2026-09-02T06:35:00+05:30'
-    }
-  ],
+  tickets: [],
+  messages: [],
+  attachments: [],
   sla_config: {
     urgent_sla_minutes: 15,
     high_sla_minutes: 45,
@@ -144,19 +54,10 @@ const memoryStore = {
     auto_escalate_on_breach: true,
     notify_assigned_staff: true
   },
-  tags: [
-    {
-      tag_id: 'tag_101',
-      name: 'Refund Dispatched',
-      color: '#10B981'
-    },
-    {
-      tag_id: 'tag_102',
-      name: 'Urgent Dispute',
-      color: '#EF4444'
-    }
-  ]
+  tags: []
 };
+
+
 
 /**
  * Helper to find ticket by ID or Ticket Number
