@@ -147,7 +147,11 @@ async function getVendorStorefront(req, res) {
             email: vendor.email || '',
             phone: vendor.phone_number || vendor.phone || '',
             phone_number: vendor.phone_number || vendor.phone || '',
+            gstin: String(vendor.gstin || '').trim().toUpperCase(),
+            gst_number: String(vendor.gstin || '').trim().toUpperCase(),
+            pan_number: String(vendor.pan_number || '').trim().toUpperCase(),
             category: vendor.category || 'General',
+
             society_id: vendor.society_id ? Number(vendor.society_id) : 1,
             society_name: vendor.society_name || 'Local Society',
             vendor_type: vendor.vendor_type || 'product',

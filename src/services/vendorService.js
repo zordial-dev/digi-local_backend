@@ -142,7 +142,11 @@ class VendorService {
     // Normalize vendor classification and zone coverage attributes
     vendor.shop_id = String(vendor.vendor_id);
     vendor.id = String(vendor.vendor_id);
+    vendor.gstin = String(vendor.gstin || '').trim().toUpperCase();
+    vendor.gst_number = vendor.gstin;
+    vendor.pan_number = String(vendor.pan_number || '').trim().toUpperCase();
     vendor.vendor_type = vendorType;
+
     vendor.can_add_items = vendor.can_add_items !== false && vendorType === 'product';
     vendor.location_type = vendor.location_type || 'society';
     vendor.is_global_coverage = Boolean(vendor.is_global_coverage);

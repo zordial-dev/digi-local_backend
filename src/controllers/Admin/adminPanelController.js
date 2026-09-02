@@ -116,7 +116,7 @@ function serializeVendorForAdmin(v) {
   const resubmittedAtIST = v.resubmitted_at ? formatKolkataISO(v.resubmitted_at) : null;
   const resubmittedAtReadable = v.resubmitted_at ? formatKolkataReadable(v.resubmitted_at) : null;
 
-  let gstinVal = String(v.gstin || v.gst_number || '').trim().toUpperCase();
+  let gstinVal = String(v.gstin || '').trim().toUpperCase();
   let panVal = String(v.pan_number || '').trim().toUpperCase();
 
   const rawPhone = v.phone_number || v.phone || v.whatsapp_number || '';
@@ -136,7 +136,9 @@ function serializeVendorForAdmin(v) {
     phone_number: digitsPhone,
     whatsapp_number: digitsWhatsapp,
     gstin: gstinVal,
+    gst_number: gstinVal,
     pan_number: panVal,
+
     category: v.category || 'General',
     vendor_type: v.vendor_type || 'product',
     shop_number: v.shop_number || v.shop_no || '',
