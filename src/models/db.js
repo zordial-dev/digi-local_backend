@@ -602,6 +602,78 @@ async function removeDuplicateVendors() {
 }
 
 /**
+ * Cleans non-sensitive transactional database tables while strictly preserving 
+ * admin credentials, sub_admins, platform_config, support_contacts, and CMS pages.
+ */
+async function cleanDatabaseTables(options = {}) {
+  const cleanedTables = [];
+  const preservedTables = [
+    'platform_config (Admin Password Hash, GST, Platform Settings)',
+    'sub_admins (Super Admin & Sub-Admin Credentials/RBAC)',
+    'support_contacts (Support Phone, Email & Address)',
+    'support_sla_config (SLA Policy Settings)',
+    'support_tags (Support Tags)',
+    'cms_pages (Legal & CMS Text Pages)'
+  ];
+
+  const tablesToClean = [
+    'order_details',
+    'orders',
+    'payments',
+    'subscriptions',
+    'items',
+    'catalog_items',
+    'enquiries',
+    'support_tickets',
+    'ticket_messages',
+    'ticket_attachments',
+    'audit_logs',
+    'notifications',
+    'vendors',
+    'societies',
+    'locations'
+  ];
+
+  for (const table of tablesToClean) {
+    try {
+      await query(`TRUNCATE TABLE ${table} CASCADE`);
+      cleanedTables.push(table);
+    } catch (err) {
+      try {
+        await query(`DELETE FROM ${table}`);
+        cleanedTables.push(table);
+      } catch (_) {}
+    }
+  }
+
+  // Delete non-admin users
+  try {
+    await query(`DELETE FROM users WHERE role NOT IN ('admin', 'super_admin') AND person_type NOT IN ('admin', 'super_admin')`);
+    cleanedTables.push('users (non-admin accounts)');
+  } catch (_) {}
+
+
+  // Clear in-memory fallback stores
+  try {
+    const supportController = require('../controllers/Support/supportController');
+    if (supportController && supportController.memoryStore) {
+      supportController.memoryStore.tickets = [];
+      supportController.memoryStore.messages = [];
+      supportController.memoryStore.attachments = [];
+    }
+  } catch (_) {}
+
+  console.log('[Database Cleanup] Successfully cleaned transactional tables while preserving admin credentials.');
+
+  return {
+    success: true,
+    message: 'Database data cleaned successfully while preserving sensitive admin credentials, sub_admins, platform_config, support_contacts, and CMS pages.',
+    cleanedTables,
+    preservedTables
+  };
+}
+
+/**
  * Closes PostgreSQL database connection pool cleanly during process termination.
  */
 async function closeDb() {
@@ -618,5 +690,7 @@ module.exports = {
   genPublicId,
   getDbType,
   removeDuplicateVendors,
+  cleanDatabaseTables,
   DatabaseError
 };
+

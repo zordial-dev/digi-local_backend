@@ -1463,6 +1463,29 @@ module.exports = {
   holdVendor,
   listOnHoldVendors,
 
+  resetDatabase: async function(req, res) {
+    try {
+      const { clean_vendors } = req.body || {};
+      const { cleanDatabaseTables } = require('../../models/db');
+      const result = await cleanDatabaseTables({ cleanVendors: Boolean(clean_vendors) });
+
+      return res.status(200).json({
+        code: 200,
+        status: 'success',
+        ...result
+      });
+    } catch (err) {
+      console.error('Error executing database cleanup:', err);
+      return res.status(500).json({
+        code: 500,
+        status: 'error',
+        error: 'DATABASE_CLEANUP_FAILED',
+        message: err.message
+      });
+    }
+  },
+
+
   // Module 1: Auth
   login,
   refreshToken,

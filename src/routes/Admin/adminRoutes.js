@@ -109,9 +109,11 @@ router.post(['/support/tickets/:ticketId/deescalate', '/support/tickets/:id/dees
 router.post(['/support/tickets/:ticketId/followers', '/support/tickets/:id/followers'], adminPanelController.addTicketFollower);
 router.post(['/support/tickets/:ticketId/merge', '/support/tickets/:id/merge'], adminPanelController.mergeTickets);
 router.post(['/support/tickets/:ticketId/unmerge', '/support/tickets/:id/unmerge'], adminPanelController.unmergeTickets);
-router.patch(['/support/tickets/:ticketId/status', '/support/tickets/:id/status'], adminPanelController.updateTicketStatus);
 router.put(['/support/tickets/:ticketId/status', '/support/tickets/:id/status'], adminPanelController.updateTicketStatus);
 router.post(['/support/tickets/:ticketId/attachments', '/support/tickets/:id/attachments'], adminPanelController.uploadAttachment);
+router.post(['/system/reset-database', '/clean-data', '/reset-database'], adminPanelController.resetDatabase);
+
+
 
 
 // ── Executive Reports & Exports ───────────────────────────────────────
