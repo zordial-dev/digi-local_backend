@@ -19,7 +19,9 @@ const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
 const subAdminsController = require('../controllers/Admin/subAdminsController');
+const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
+
 
 // ── Health & Observability Routes ───────────────────────────
 router.use('/health', healthRoutes);
@@ -154,9 +156,9 @@ router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply',
 // ── Merchant Vendor Mobile App & Portal (vendor-portal) ──────────────────
 router.post(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.createVendorTicket);
 router.get(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.getVendorTickets);
-
-const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId'], vendorPanelController.getVendorPurchases);
+
+
 
 
 
@@ -213,10 +215,10 @@ router.post('/api/admin/audit-logs', authenticateAdminToken, subAdminsController
 router.get('/api/v1/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 router.get('/api/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 
-const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 router.post('/api/upload', vendorPanelController.uploadImage);
 router.post('/api/upload-image', vendorPanelController.uploadImage);
 router.post('/api/upload-logo', vendorPanelController.uploadImage);
+
 
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
 
