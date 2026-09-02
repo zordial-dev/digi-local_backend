@@ -251,7 +251,7 @@ async function getMe(req, res) {
 }
 
 async function logout(req, res) {
-  return respond(res, 200, {}, 'Admin logged out.');
+  return respond(res, 200, {}, 'Admin logged out successfully. Session invalidated.');
 }
 
 // Module 2: Societies

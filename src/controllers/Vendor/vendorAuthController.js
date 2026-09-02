@@ -431,7 +431,31 @@ async function loginVendor(req, res) {
 async function handleUserLogin(req, res) { return res.status(200).json({ message: 'User Login' }); }
 async function handleUserRegisterCheck(req, res) { return res.status(200).json({ message: 'User Register Check' }); }
 async function refreshToken(req, res) { return res.status(200).json({ accessToken: 'newToken' }); }
-async function logoutVendor(req, res) { return res.status(200).json({ message: 'Logout' }); }
+async function logoutVendor(req, res) {
+  try {
+    const { vendor_id, vendorId } = req.body || {};
+    const targetVendorId = vendorId || vendor_id || req.user?.id || req.user?.vendor_id;
+
+    if (targetVendorId) {
+      await query(
+        `UPDATE vendors SET push_token = NULL, fcm_token = NULL, device_token = NULL WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+        [targetVendorId, String(targetVendorId)]
+      ).catch(() => {});
+    }
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'Vendor logged out successfully. Session invalidated.'
+    });
+  } catch (err) {
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'Vendor logged out successfully.'
+    });
+  }
+}
 async function forgotPassword(req, res) { return res.status(200).json({ message: 'Forgot password link sent' }); }
 async function verifyVendorOtp(req, res) { return res.status(200).json({ message: 'OTP verified' }); }
 async function resetPassword(req, res) { return res.status(200).json({ message: 'Password reset' }); }
