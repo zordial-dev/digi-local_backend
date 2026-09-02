@@ -75,13 +75,9 @@ async function registerVendor(req, res) {
         if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
         if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
 
-        // Store GSTIN & PAN exactly as provided (either GSTIN or PAN)
+        // Store GSTIN & PAN exactly as provided (both are optional; no fallback/dummy values)
         let gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim().toUpperCase();
         let pan_number = String(body.pan_number || body.pan || body.panNumber || '').trim().toUpperCase();
-
-        if (!gstin && !pan_number) {
-            return res.status(400).json({ error: 'Either GSTIN or PAN number is required for vendor registration.' });
-        }
 
         // Check if vendor already exists
         const cleanPhone = phone_number.replace(/\D/g, '').slice(-10);
@@ -165,15 +161,16 @@ async function registerVendor(req, res) {
                 [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, vendor_id]
             );
         } else {
-            // Insert new vendor record
+            // Insert new vendor record (gst_number takes gstin, pan_number takes pan_number; no cross-substitution)
             const vendorRes = await query(
                 `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-                [society_id, vendor_name, gstin || pan_number || '', gstin || '', pan_number || '', phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
+                [society_id, vendor_name, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
             );
             const newVendorRow = vendorRes.rows[0] || {};
             vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
         }
+
 
         if (vendorLocation) {
             await query(
