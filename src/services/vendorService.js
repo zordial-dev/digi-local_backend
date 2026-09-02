@@ -140,6 +140,8 @@ class VendorService {
     }));
 
     // Normalize vendor classification and zone coverage attributes
+    vendor.shop_id = String(vendor.vendor_id);
+    vendor.id = String(vendor.vendor_id);
     vendor.vendor_type = vendorType;
     vendor.can_add_items = vendor.can_add_items !== false && vendorType === 'product';
     vendor.location_type = vendor.location_type || 'society';
@@ -149,6 +151,7 @@ class VendorService {
     vendor.shop_number = vendor.shop_number || vendor.shop_no || '';
     vendor.shop_no = vendor.shop_number || vendor.shop_no || '';
     vendor.address = vendor.address || '';
+
 
     return {
       vendor,

@@ -138,7 +138,9 @@ async function getVendorStorefront(req, res) {
         const cleanVendorObj = {
             ...vendor,
             vendor_id: Number(vendor.vendor_id),
+            shop_id: String(vendor.vendor_id),
             id: Number(vendor.vendor_id),
+
             store_name: vendor.store_name || vendor.shop_name || 'DigiLocal Partner Store',
             vendor_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
             owner_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
