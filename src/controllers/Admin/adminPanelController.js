@@ -119,13 +119,6 @@ function serializeVendorForAdmin(v) {
   let gstinVal = String(v.gstin || v.gst_number || '').trim().toUpperCase();
   let panVal = String(v.pan_number || '').trim().toUpperCase();
 
-  if (gstinVal && gstinVal.length === 15 && !panVal) {
-    const extractedPan = gstinVal.substring(2, 12);
-    if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(extractedPan)) {
-      panVal = extractedPan;
-    }
-  }
-
   const rawPhone = v.phone_number || v.phone || v.whatsapp_number || '';
   const digitsPhone = get10DigitPhone(rawPhone);
   const rawWhatsapp = v.whatsapp_number || rawPhone;
@@ -146,7 +139,7 @@ function serializeVendorForAdmin(v) {
     pan_number: panVal,
     category: v.category || 'General',
     vendor_type: v.vendor_type || 'product',
-    shop_number: v.shop_number || '',
+    shop_number: v.shop_number || v.shop_no || '',
     area: v.area || v.location || '',
     city: v.city || '',
     state: v.state || '',

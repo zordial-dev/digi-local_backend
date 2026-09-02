@@ -75,28 +75,12 @@ async function registerVendor(req, res) {
         if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
         if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
 
-        // Smart GSTIN & PAN Detection
+        // Store GSTIN & PAN exactly as provided (either GSTIN or PAN)
         let gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim().toUpperCase();
         let pan_number = String(body.pan_number || body.pan || body.panNumber || '').trim().toUpperCase();
-        const rawTaxInput = String(body.gstin || body.gst_number || body.gstNumber || body.gst || body.pan_number || body.pan || body.panNumber || body.tax_id || '').trim().toUpperCase();
-
-        if (!gstin && rawTaxInput.length === 15) {
-            gstin = rawTaxInput;
-        }
-        if (!pan_number && rawTaxInput.length === 10) {
-            pan_number = rawTaxInput;
-        }
-
-        // Auto-extract PAN from GSTIN if 15 chars
-        if (gstin && gstin.length === 15 && !pan_number) {
-            const extractedPan = gstin.substring(2, 12);
-            if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(extractedPan)) {
-                pan_number = extractedPan;
-            }
-        }
 
         if (!gstin && !pan_number) {
-            return res.status(400).json({ error: 'GSTIN or PAN number is a mandatory field for vendor registration.' });
+            return res.status(400).json({ error: 'Either GSTIN or PAN number is required for vendor registration.' });
         }
 
         // Optional Fields
