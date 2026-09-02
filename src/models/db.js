@@ -631,7 +631,8 @@ async function cleanDatabaseTables(options = {}) {
     'notifications',
     'vendors',
     'societies',
-    'locations'
+    'locations',
+    'users'
   ];
 
   for (const table of tablesToClean) {
@@ -646,11 +647,6 @@ async function cleanDatabaseTables(options = {}) {
     }
   }
 
-  // Delete non-admin users
-  try {
-    await query(`DELETE FROM users WHERE role NOT IN ('admin', 'super_admin') AND person_type NOT IN ('admin', 'super_admin')`);
-    cleanedTables.push('users (non-admin accounts)');
-  } catch (_) {}
 
 
   // Clear in-memory fallback stores
