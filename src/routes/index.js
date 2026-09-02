@@ -111,18 +111,50 @@ router.post('/api/promotions', adminPanelController.createPromotion);
 router.put('/api/promotions/:id', adminPanelController.updatePromotion);
 router.delete('/api/promotions/:id', adminPanelController.deletePromotion);
 
-router.get('/api/support/tickets', adminPanelController.listSupportTickets);
-router.get('/api/support/tickets/:id', adminPanelController.getTicketById);
-router.get('/api/support/tickets/:id/messages', adminPanelController.getTicketMessages);
-router.post('/api/support/tickets/:id/reply', adminPanelController.replyToTicket);
-router.post('/api/support/tickets/:id/messages', adminPanelController.replyToTicket);
-router.post('/api/support/tickets/:id/escalate', adminPanelController.escalateTicket);
-router.post('/api/support/tickets/:id/deescalate', adminPanelController.deescalateTicket);
-router.post('/api/support/tickets/:id/followers', adminPanelController.addTicketFollower);
-router.post('/api/support/tickets/:id/merge', adminPanelController.mergeTickets);
-router.post('/api/support/tickets/:id/unmerge', adminPanelController.unmergeTickets);
-router.patch('/api/support/tickets/:id/status', adminPanelController.updateTicketStatus);
-router.put('/api/support/tickets/:id/status', adminPanelController.updateTicketStatus);
+const supportController = require('../controllers/Support/supportController');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+
+const uploadDir = path.join(__dirname, '../../public/uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const supportUpload = multer({
+  dest: uploadDir,
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
+// ── Admin Panel Support Desk (adminMock) ─────────────────────────────────
+router.get(['/api/admin/support/tickets', '/api/support/tickets'], supportController.listAdminTickets);
+router.get(['/api/admin/support/analytics', '/api/support/analytics'], supportController.getAnalytics);
+router.get(['/api/admin/support/sla', '/api/support/sla'], supportController.getSlaConfig);
+router.put(['/api/admin/support/sla', '/api/support/sla'], supportController.updateSlaConfig);
+router.get(['/api/admin/support/tags', '/api/support/tags'], supportController.getTags);
+router.post(['/api/admin/support/tags', '/api/support/tags'], supportController.createTag);
+router.delete(['/api/admin/support/tags/:tagId', '/api/support/tags/:tagId'], supportController.deleteTag);
+
+router.get(['/api/admin/support/tickets/:ticketId', '/api/admin/support/tickets/:id', '/api/support/tickets/:ticketId', '/api/support/tickets/:id'], supportController.getTicketById);
+router.get(['/api/admin/support/tickets/:ticketId/messages', '/api/admin/support/tickets/:id/messages', '/api/support/tickets/:ticketId/messages', '/api/support/tickets/:id/messages'], supportController.getTicketMessages);
+router.post(['/api/admin/support/tickets/:ticketId/reply', '/api/admin/support/tickets/:id/reply', '/api/support/tickets/:ticketId/reply', '/api/support/tickets/:id/reply', '/api/support/tickets/:id/messages'], supportController.replyToTicket);
+router.post(['/api/admin/support/tickets/:ticketId/escalate', '/api/support/tickets/:ticketId/escalate', '/api/support/tickets/:id/escalate'], supportController.escalateTicket);
+router.post(['/api/admin/support/tickets/:ticketId/deescalate', '/api/support/tickets/:ticketId/deescalate', '/api/support/tickets/:id/deescalate'], supportController.deescalateTicket);
+router.post(['/api/admin/support/tickets/:ticketId/followers', '/api/support/tickets/:ticketId/followers', '/api/support/tickets/:id/followers'], supportController.manageFollowers);
+router.post(['/api/admin/support/tickets/:ticketId/merge', '/api/support/tickets/:ticketId/merge', '/api/support/tickets/:id/merge'], supportController.mergeTickets);
+router.post(['/api/admin/support/tickets/:ticketId/unmerge', '/api/support/tickets/:ticketId/unmerge', '/api/support/tickets/:id/unmerge'], supportController.unmergeTickets);
+router.patch(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/tickets/:id/status', '/api/support/tickets/:ticketId/status', '/api/support/tickets/:id/status'], supportController.updateTicketStatus);
+router.put(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/tickets/:id/status', '/api/support/tickets/:ticketId/status', '/api/support/tickets/:id/status'], supportController.updateTicketStatus);
+router.post(['/api/admin/support/tickets/:ticketId/attachments', '/api/support/tickets/:ticketId/attachments', '/api/support/tickets/:id/attachments'], supportUpload.single('file'), supportController.uploadAttachment);
+
+// ── Resident User Mobile App & Website (user-app) ────────────────────────
+router.post(['/api/user/tickets', '/api/users/tickets'], supportController.createCustomerTicket);
+router.get(['/api/user/tickets', '/api/users/tickets'], supportController.getUserTickets);
+router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply', '/api/users/tickets/:ticketId/reply', '/api/users/tickets/:id/reply'], supportController.userReplyToTicket);
+
+// ── Merchant Vendor Mobile App & Portal (vendor-portal) ──────────────────
+router.post(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.createVendorTicket);
+router.get(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.getVendorTickets);
+
 
 router.get('/api/reports/telemetry', adminPanelController.getExecutiveReports);
 router.get('/api/reports/executive', adminPanelController.getExecutiveReports);

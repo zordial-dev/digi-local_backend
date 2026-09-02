@@ -45,6 +45,7 @@ router.post('/delete', authenticateToken, usersController.deleteAccount);
 router.delete('/:userId', authenticateToken, usersController.deleteAccount);
 
 const enquiryController = require('../../controllers/Vendor/enquiryController');
+const supportController = require('../../controllers/Support/supportController');
 
 // B3. Fetch Resident User Orders
 router.get('/:userId/orders', usersController.getUserOrders);
@@ -52,4 +53,10 @@ router.get('/:userId/orders', usersController.getUserOrders);
 // B4. Fetch Resident User Service Enquiries
 router.get('/:userId/enquiries', enquiryController.getUserEnquiries);
 
+// B5. Resident User Support Tickets (user-app)
+router.post('/tickets', supportController.createCustomerTicket);
+router.get('/tickets', supportController.getUserTickets);
+router.post(['/tickets/:ticketId/reply', '/tickets/:id/reply'], supportController.userReplyToTicket);
+
 module.exports = router;
+

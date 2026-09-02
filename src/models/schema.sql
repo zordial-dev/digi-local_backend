@@ -230,17 +230,75 @@ CREATE TABLE IF NOT EXISTS enquiries (
 );
 
 CREATE TABLE IF NOT EXISTS support_tickets (
-    ticket_id BIGSERIAL PRIMARY KEY,
-    user_id VARCHAR(100),
-    user_name VARCHAR(255),
-    email VARCHAR(255),
-    ticket_number VARCHAR(50),
-    subject VARCHAR(255),
-    category VARCHAR(100),
-    priority VARCHAR(20) DEFAULT 'MEDIUM',
-    status VARCHAR(50) DEFAULT 'OPEN',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id VARCHAR(64) PRIMARY KEY,
+    ticket_number VARCHAR(32) NOT NULL UNIQUE,
+    subject VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    category VARCHAR(64) NOT NULL,
+    priority VARCHAR(32) NOT NULL DEFAULT 'medium',
+    status VARCHAR(32) NOT NULL DEFAULT 'open',
+    user_type VARCHAR(32) NOT NULL DEFAULT 'user',
+    source VARCHAR(64) DEFAULT 'landing_website',
+    reporter_name VARCHAR(128) NOT NULL,
+    reporter_email VARCHAR(128) NOT NULL,
+    reporter_user_id VARCHAR(64),
+    entity_name VARCHAR(128),
+    target_vendor VARCHAR(128),
+    order_id VARCHAR(64),
+    order_amount DECIMAL(10, 2),
+    assigned_to VARCHAR(128) DEFAULT 'Super Admin',
+    sla_minutes_remaining INT DEFAULT 120,
+    followers TEXT[] DEFAULT '{}',
+    merged_into VARCHAR(64),
+    merged_children TEXT[] DEFAULT '{}',
+    tags TEXT[] DEFAULT '{}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at_ist TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at_readable VARCHAR(64),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS ticket_messages (
+    id VARCHAR(64) PRIMARY KEY,
+    ticket_id VARCHAR(64) NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    sender_name VARCHAR(128) NOT NULL,
+    sender_role VARCHAR(32) NOT NULL,
+    sender_avatar VARCHAR(255),
+    message TEXT NOT NULL,
+    is_internal_note BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at_ist TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at_readable VARCHAR(64)
+);
+
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+    id VARCHAR(64) PRIMARY KEY,
+    ticket_id VARCHAR(64) NOT NULL REFERENCES support_tickets(id) ON DELETE CASCADE,
+    file_name VARCHAR(255) NOT NULL,
+    file_size_bytes INT NOT NULL,
+    file_url VARCHAR(512) NOT NULL,
+    uploaded_by VARCHAR(128) NOT NULL,
+    uploaded_at_ist TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS support_sla_config (
+    id INT PRIMARY KEY DEFAULT 1,
+    urgent_sla_minutes INT DEFAULT 15,
+    high_sla_minutes INT DEFAULT 45,
+    medium_sla_minutes INT DEFAULT 120,
+    low_sla_minutes INT DEFAULT 240,
+    auto_escalate_on_breach BOOLEAN DEFAULT TRUE,
+    notify_assigned_staff BOOLEAN DEFAULT TRUE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS support_tags (
+    tag_id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(128) NOT NULL UNIQUE,
+    color VARCHAR(32) NOT NULL DEFAULT '#10B981',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 
 CREATE TABLE IF NOT EXISTS subscriptions (
     subscription_id BIGSERIAL PRIMARY KEY,

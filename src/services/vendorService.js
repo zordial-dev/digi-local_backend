@@ -146,6 +146,9 @@ class VendorService {
     vendor.is_global_coverage = Boolean(vendor.is_global_coverage);
     vendor.delivery_radius_km = Number(vendor.delivery_radius_km || 0);
     vendor.selected_zones = typeof vendor.selected_zones === 'string' ? (JSON.parse(vendor.selected_zones || '[]')) : (vendor.selected_zones || []);
+    vendor.shop_number = vendor.shop_number || vendor.shop_no || '';
+    vendor.shop_no = vendor.shop_number || vendor.shop_no || '';
+    vendor.address = vendor.address || '';
 
     return {
       vendor,

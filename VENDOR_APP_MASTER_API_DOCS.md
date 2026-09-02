@@ -258,9 +258,19 @@ Authenticates a registered vendor using mobile number and password.
 
 ---
 
-### 1.10 Resubmit Application (`POST /api/vendors/resubmit`)
+### 1.10 Resubmit & Re-Application for Rejected Vendors
 
-#### Request Body
+There are **two supported ways** for a vendor whose application was `REJECTED` or placed on `HOLD` to resubmit their details for Admin approval:
+
+#### Method A (Recommended Best Practice): Standard Registration API (`POST /api/vendors/register`)
+- **How it works**: The merchant opens the standard registration screen in the Vendor App, updates their details (e.g. corrected shop photo, tax ID, address), and clicks "Register Store".
+- **Backend Behavior**: The backend detects that an existing account with status `REJECTED` or `HOLD` exists for this phone number/email, updates the record, sets `status = 'PENDING'`, and returns new JWT access tokens.
+- **Advantage**: Zero extra UI screen or form required on frontend. The merchant uses the standard registration form!
+
+#### Method B: Dedicated Resubmit Endpoint (`POST /api/vendors/resubmit` or `POST /api/vendors/:vendorId/resubmit`)
+- **How it works**: Used when a vendor is logged in and clicking a "Resubmit Application" button on the Status/Review screen.
+
+##### Request Body (`POST /api/vendors/resubmit`)
 ```json
 {
   "vendor_id": 1216,
@@ -271,18 +281,13 @@ Authenticates a registered vendor using mobile number and password.
 }
 ```
 
-#### Response (`HTTP 200 OK`)
+##### Response (`HTTP 200 OK`)
 ```json
 {
-  "code": 200,
-  "status": "success",
-  "message": "Vendor application resubmitted successfully for review.",
-  "data": {
-    "vendor_id": 1216,
-    "status": "PENDING",
-    "has_resubmitted": true,
-    "resubmitted_at_ist": "2026-09-02T12:35:00+05:30"
-  }
+  "vendor_id": 1216,
+  "status": "pending",
+  "has_resubmitted": true,
+  "message": "Your application has been resubmitted successfully for Admin review."
 }
 ```
 

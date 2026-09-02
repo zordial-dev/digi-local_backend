@@ -1388,16 +1388,26 @@ async function deleteSubAdmin(req, res) {
 }
 
 // Module 9: Support Desk
-async function listSupportTickets(req, res) { return respond(res, 200, [], 'Support tickets list.'); }
-async function getTicketById(req, res) { return respond(res, 200, {}, 'Ticket details.'); }
-async function getTicketMessages(req, res) { return respond(res, 200, [], 'Ticket messages.'); }
-async function replyToTicket(req, res) { return respond(res, 200, {}, 'Ticket reply sent.'); }
-async function escalateTicket(req, res) { return respond(res, 200, {}, 'Ticket escalated.'); }
-async function deescalateTicket(req, res) { return respond(res, 200, {}, 'Ticket deescalated.'); }
-async function addTicketFollower(req, res) { return respond(res, 200, {}, 'Ticket follower added.'); }
-async function mergeTickets(req, res) { return respond(res, 200, {}, 'Tickets merged.'); }
-async function unmergeTickets(req, res) { return respond(res, 200, {}, 'Tickets unmerged.'); }
-async function updateTicketStatus(req, res) { return respond(res, 200, {}, 'Ticket status updated.'); }
+const supportController = require('../Support/supportController');
+
+async function listSupportTickets(req, res) { return supportController.listAdminTickets(req, res); }
+async function getTicketById(req, res) { return supportController.getTicketById(req, res); }
+async function getTicketMessages(req, res) { return supportController.getTicketMessages(req, res); }
+async function replyToTicket(req, res) { return supportController.replyToTicket(req, res); }
+async function escalateTicket(req, res) { return supportController.escalateTicket(req, res); }
+async function deescalateTicket(req, res) { return supportController.deescalateTicket(req, res); }
+async function addTicketFollower(req, res) { return supportController.manageFollowers(req, res); }
+async function mergeTickets(req, res) { return supportController.mergeTickets(req, res); }
+async function unmergeTickets(req, res) { return supportController.unmergeTickets(req, res); }
+async function updateTicketStatus(req, res) { return supportController.updateTicketStatus(req, res); }
+async function getSupportAnalytics(req, res) { return supportController.getAnalytics(req, res); }
+async function getSlaConfig(req, res) { return supportController.getSlaConfig(req, res); }
+async function updateSlaConfig(req, res) { return supportController.updateSlaConfig(req, res); }
+async function getTags(req, res) { return supportController.getTags(req, res); }
+async function createTag(req, res) { return supportController.createTag(req, res); }
+async function deleteTag(req, res) { return supportController.deleteTag(req, res); }
+async function uploadAttachment(req, res) { return supportController.uploadAttachment(req, res); }
+
 
 // Module 10: Executive Reports & Exports
 async function getExecutiveReports(req, res) { return respond(res, 200, {}, 'Executive reports.'); }
@@ -1540,6 +1550,14 @@ module.exports = {
   mergeTickets,
   unmergeTickets,
   updateTicketStatus,
+  getSupportAnalytics,
+  getSlaConfig,
+  updateSlaConfig,
+  getTags,
+  createTag,
+  deleteTag,
+  uploadAttachment,
+
 
   // Module 10: Executive Reports & Exports
   getExecutiveReports,

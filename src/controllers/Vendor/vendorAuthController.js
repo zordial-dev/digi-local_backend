@@ -83,6 +83,24 @@ async function registerVendor(req, res) {
             return res.status(400).json({ error: 'Either GSTIN or PAN number is required for vendor registration.' });
         }
 
+        // Check if vendor already exists
+        const cleanPhone = phone_number.replace(/\D/g, '').slice(-10);
+        const existingCheck = await query(
+            `SELECT vendor_id, status FROM vendors WHERE phone_number = ? OR phone_number LIKE ? OR LOWER(email) = LOWER(?)`,
+            [phone_number, `%${cleanPhone}`, email]
+        );
+
+        let existingVendor = existingCheck.rows && existingCheck.rows.length > 0 ? existingCheck.rows[0] : null;
+        if (existingVendor) {
+            const statusUpper = String(existingVendor.status || '').toUpperCase();
+            if (statusUpper === 'ACTIVE' || statusUpper === 'APPROVED') {
+                return res.status(400).json({ error: 'An active vendor store account with this mobile number/email already exists. Please log in.' });
+            }
+            if (statusUpper === 'BLOCKED') {
+                return res.status(403).json({ error: 'Your vendor store account has been blocked by admin. Please contact support.' });
+            }
+        }
+
         // Optional Fields
         const category = String(body.category || body.business_category || body.businessCategory || 'General').trim();
         const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
@@ -119,32 +137,11 @@ async function registerVendor(req, res) {
             }
         }
 
-        // Check for existing shop with same store_name (shop name) in the same society
-        if (store_name) {
-            const nameDuplicate = await query(
-                `SELECT vendor_id FROM vendors WHERE society_id = ? AND LOWER(TRIM(store_name)) = LOWER(TRIM(?))`,
-                [society_id, store_name]
-            );
-            if (nameDuplicate.rows && nameDuplicate.rows.length > 0) {
-                return res.status(400).json({ error: 'A shop with this name already exists in this society.' });
-            }
-        }
-
-        const vendorLocation = String(body.location || body.area || body.location_name || rawAddress || '').trim();
+        const address = String(body.address || body.full_address || body.shop_address || body.address_line || '').trim();
+        const vendorLocation = String(body.location || body.area || body.location_name || address || '').trim();
         const vendorCity = String(body.city || city || '').trim();
         const vendorState = String(body.state || state || '').trim();
         const vendorPincode = String(body.pincode || pincode || '').trim();
-
-        // Ensure registered area is persisted in locations table for area suggestions
-        if (area) {
-            const locCheck = await query(`SELECT location_id FROM locations WHERE LOWER(TRIM(area)) = LOWER(TRIM(?))`, [area]).catch(() => ({ rows: [] }));
-            if (!locCheck.rows || locCheck.rows.length === 0) {
-                await query(
-                    `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
-                    [area, vendorCity || 'Noida', vendorState || 'Uttar Pradesh', vendorPincode || '201301']
-                ).catch(err => console.error('Auto location insert error:', err.message));
-            }
-        }
 
         const rawVendorType = String(body.vendor_type || body.vendorType || body.business_type || 'product').toLowerCase().trim();
         const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
@@ -155,13 +152,28 @@ async function registerVendor(req, res) {
 
         const kolkataISTNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T');
 
-        const vendorRes = await query(
-            `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-            [society_id, vendor_name, gstin || pan_number || '', gstin || '', pan_number || '', phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, rawAddress || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
-        );
-        const newVendorRow = vendorRes.rows[0] || {};
-        const vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
+        let vendor_id = null;
+        if (existingVendor) {
+            // Update existing rejected/hold vendor record with new details and move to PENDING status
+            vendor_id = Number(existingVendor.vendor_id);
+            await query(
+                `UPDATE vendors SET 
+                    vendor_name = ?, store_name = ?, email = ?, phone_number = ?, password = ?, password_hash = ?, 
+                    gstin = ?, pan_number = ?, shop_number = ?, shop_no = ?, address = ?, location = ?, city = ?, state = ?, pincode = ?, 
+                    shop_image = ?, logo = ?, category = ?, status = 'PENDING', has_resubmitted = TRUE, resubmitted_at = CURRENT_TIMESTAMP
+                 WHERE vendor_id = ?`,
+                [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, vendor_id]
+            );
+        } else {
+            // Insert new vendor record
+            const vendorRes = await query(
+                `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
+                [society_id, vendor_name, gstin || pan_number || '', gstin || '', pan_number || '', phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
+            );
+            const newVendorRow = vendorRes.rows[0] || {};
+            vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
+        }
 
         if (vendorLocation) {
             await query(
@@ -196,6 +208,15 @@ async function registerVendor(req, res) {
             vendor_id,
             vendor: {
                 vendor_id,
+                store_name,
+                vendor_name,
+                shop_number,
+                shop_no: shop_number,
+                address: address || shop_number || area || vendorLocation || '',
+                area: vendorLocation,
+                city: vendorCity,
+                state: vendorState,
+                pincode: vendorPincode,
                 gstin,
                 pan_number,
                 account_holder_name,
@@ -329,17 +350,17 @@ async function resubmitVendorRequest(req, res) {
         area = COALESCE(?, area),
         city = COALESCE(?, city),
         pincode = COALESCE(?, pincode),
-        status = 'HOLD',
+        status = 'PENDING',
         has_resubmitted = TRUE,
         resubmitted_at = CURRENT_TIMESTAMP
-      WHERE vendor_id = ?
-    `, [body.store_name, body.vendor_name, body.phone_number, body.gstin, body.pan_number, body.area, body.city, body.pincode, vendorId]);
+      WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?
+    `, [body.store_name, body.vendor_name, body.phone_number, body.gstin, body.pan_number, body.area, body.city, body.pincode, vendorId, String(vendorId)]);
 
     return res.status(200).json({
       vendor_id: Number(vendorId),
-      status: 'on_hold',
+      status: 'pending',
       has_resubmitted: true,
-      message: 'Your application update has been resubmitted successfully.'
+      message: 'Your application has been resubmitted successfully for Admin review.'
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to resubmit vendor application.' });

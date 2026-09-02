@@ -123,8 +123,11 @@ router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
-// DELETE /api/vendorPanel/:vendorId
-router.delete('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.deleteStore);
-router.delete('/:vendorId/store', authenticateToken, requireVendorOwner, vendorPanelController.deleteStore);
+const supportController = require('../../controllers/Support/supportController');
+
+// Vendor Support Desk Tickets (vendor-portal)
+router.post('/tickets', supportController.createVendorTicket);
+router.get('/tickets', supportController.getVendorTickets);
 
 module.exports = router;
+

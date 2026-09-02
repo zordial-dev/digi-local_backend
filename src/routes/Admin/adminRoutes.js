@@ -93,17 +93,26 @@ router.delete(['/sub-admins/:id', '/subadmins/:id'], adminPanelController.delete
 
 // ── Support Desk ─────────────────────────────────────────────────────
 router.get('/support/tickets', adminPanelController.listSupportTickets);
-router.get('/support/tickets/:id', adminPanelController.getTicketById);
-router.get('/support/tickets/:id/messages', adminPanelController.getTicketMessages);
-router.post('/support/tickets/:id/reply', adminPanelController.replyToTicket);
-router.post('/support/tickets/:id/messages', adminPanelController.replyToTicket);
-router.post('/support/tickets/:id/escalate', adminPanelController.escalateTicket);
-router.post('/support/tickets/:id/deescalate', adminPanelController.deescalateTicket);
-router.post('/support/tickets/:id/followers', adminPanelController.addTicketFollower);
-router.post('/support/tickets/:id/merge', adminPanelController.mergeTickets);
-router.post('/support/tickets/:id/unmerge', adminPanelController.unmergeTickets);
-router.patch('/support/tickets/:id/status', adminPanelController.updateTicketStatus);
-router.put('/support/tickets/:id/status', adminPanelController.updateTicketStatus);
+router.get('/support/analytics', adminPanelController.getSupportAnalytics);
+router.get('/support/sla', adminPanelController.getSlaConfig);
+router.put('/support/sla', adminPanelController.updateSlaConfig);
+router.get('/support/tags', adminPanelController.getTags);
+router.post('/support/tags', adminPanelController.createTag);
+router.delete('/support/tags/:tagId', adminPanelController.deleteTag);
+
+router.get(['/support/tickets/:ticketId', '/support/tickets/:id'], adminPanelController.getTicketById);
+router.get(['/support/tickets/:ticketId/messages', '/support/tickets/:id/messages'], adminPanelController.getTicketMessages);
+router.post(['/support/tickets/:ticketId/reply', '/support/tickets/:id/reply'], adminPanelController.replyToTicket);
+router.post(['/support/tickets/:ticketId/messages', '/support/tickets/:id/messages'], adminPanelController.replyToTicket);
+router.post(['/support/tickets/:ticketId/escalate', '/support/tickets/:id/escalate'], adminPanelController.escalateTicket);
+router.post(['/support/tickets/:ticketId/deescalate', '/support/tickets/:id/deescalate'], adminPanelController.deescalateTicket);
+router.post(['/support/tickets/:ticketId/followers', '/support/tickets/:id/followers'], adminPanelController.addTicketFollower);
+router.post(['/support/tickets/:ticketId/merge', '/support/tickets/:id/merge'], adminPanelController.mergeTickets);
+router.post(['/support/tickets/:ticketId/unmerge', '/support/tickets/:id/unmerge'], adminPanelController.unmergeTickets);
+router.patch(['/support/tickets/:ticketId/status', '/support/tickets/:id/status'], adminPanelController.updateTicketStatus);
+router.put(['/support/tickets/:ticketId/status', '/support/tickets/:id/status'], adminPanelController.updateTicketStatus);
+router.post(['/support/tickets/:ticketId/attachments', '/support/tickets/:id/attachments'], adminPanelController.uploadAttachment);
+
 
 // ── Executive Reports & Exports ───────────────────────────────────────
 router.get('/reports/telemetry', adminPanelController.getExecutiveReports);
