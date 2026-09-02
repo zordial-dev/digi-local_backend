@@ -1,5 +1,6 @@
 const { query } = require('../../models/db');
 const { generateTokens, comparePassword, hashPassword } = require('../../utils/auth');
+const { formatPhoneWithCountryCode, get10DigitPhone } = require('../../utils/phoneUtils');
 
 function sendStandardError(res, statusCode, message, errorCode) {
   return res.status(statusCode).json({
@@ -22,20 +23,35 @@ function respond(res, statusCode, data, message, pagination = null) {
 }
 
 /**
+ * Helper: Format Date to standard UTC ISO string (e.g. "2026-09-02T01:02:11.000Z")
+ */
+function formatUTCISO(inputDate) {
+  if (!inputDate) inputDate = new Date();
+  const d = new Date(inputDate);
+  if (isNaN(d.getTime())) return new Date().toISOString();
+  return d.toISOString();
+}
+
+/**
  * Helper: Format Date directly to ISO string with +05:30 IST offset without double shifting
  */
 function formatKolkataISO(inputDate) {
   if (!inputDate) inputDate = new Date();
+  let strInput = String(inputDate).trim();
+  if (strInput.includes('+05:30') && strInput.includes('T') && strInput.length === 25) {
+    return strInput;
+  }
   const d = new Date(inputDate);
   if (isNaN(d.getTime())) return new Date().toISOString();
 
+  const istTime = new Date(d.getTime() + (330 * 60 * 1000));
   const pad = n => String(n).padStart(2, '0');
-  const YYYY = d.getFullYear();
-  const MM = pad(d.getMonth() + 1);
-  const DD = pad(d.getDate());
-  const hh = pad(d.getHours());
-  const mm = pad(d.getMinutes());
-  const ss = pad(d.getSeconds());
+  const YYYY = istTime.getUTCFullYear();
+  const MM = pad(istTime.getUTCMonth() + 1);
+  const DD = pad(istTime.getUTCDate());
+  const hh = pad(istTime.getUTCHours());
+  const mm = pad(istTime.getUTCMinutes());
+  const ss = pad(istTime.getUTCSeconds());
 
   return `${YYYY}-${MM}-${DD}T${hh}:${mm}:${ss}+05:30`;
 }
@@ -48,14 +64,15 @@ function formatKolkataReadable(inputDate) {
   const d = new Date(inputDate);
   if (isNaN(d.getTime())) return '';
 
+  const istTime = new Date(d.getTime() + (330 * 60 * 1000));
   const pad = n => String(n).padStart(2, '0');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const YYYY = d.getFullYear();
-  const monthStr = months[d.getMonth()];
-  const DD = pad(d.getDate());
+  const YYYY = istTime.getUTCFullYear();
+  const monthStr = months[istTime.getUTCMonth()];
+  const DD = pad(istTime.getUTCDate());
 
-  let hours = d.getHours();
-  const minutes = pad(d.getMinutes());
+  let hours = istTime.getUTCHours();
+  const minutes = pad(istTime.getUTCMinutes());
   const ampm = hours >= 12 ? 'pm' : 'am';
   hours = hours % 12;
   hours = hours ? hours : 12;
@@ -91,6 +108,7 @@ function serializeVendorForAdmin(v) {
   if (!v) return null;
 
   const rawCreatedAt = v.created_at || v.registered_at || new Date();
+  const createdAtUTC = formatUTCISO(rawCreatedAt);
   const createdAtIST = formatKolkataISO(rawCreatedAt);
   const createdAtReadable = formatKolkataReadable(rawCreatedAt);
   const createdAtTimeOnly = formatKolkataTimeOnly(rawCreatedAt);
@@ -108,6 +126,11 @@ function serializeVendorForAdmin(v) {
     }
   }
 
+  const rawPhone = v.phone_number || v.phone || v.whatsapp_number || '';
+  const digitsPhone = get10DigitPhone(rawPhone);
+  const rawWhatsapp = v.whatsapp_number || rawPhone;
+  const digitsWhatsapp = get10DigitPhone(rawWhatsapp);
+
   return {
     vendor_id: Number(v.vendor_id),
     id: Number(v.vendor_id),
@@ -116,7 +139,9 @@ function serializeVendorForAdmin(v) {
     store_name: v.store_name || v.shop_name || '',
     shop_name: v.store_name || v.shop_name || '',
     email: v.email || '',
-    phone_number: v.phone_number || v.phone || v.whatsapp_number || '',
+    country_code: '+91',
+    phone_number: digitsPhone,
+    whatsapp_number: digitsWhatsapp,
     gstin: gstinVal,
     pan_number: panVal,
     category: v.category || 'General',
@@ -129,6 +154,9 @@ function serializeVendorForAdmin(v) {
     shop_image: v.shop_image || v.logo || v.avatar_url || '',
     description: v.description || '',
     status: (v.status || 'PENDING').toUpperCase(),
+    created_at: createdAtUTC,
+    created_at_ist: createdAtIST,
+    created_at_readable: createdAtReadable,
     hold_reason: v.hold_reason || '',
     hold_email_subject: v.hold_email_subject || '',
     has_resubmitted: Boolean(v.has_resubmitted),
@@ -724,13 +752,16 @@ async function listUsers(req, res) {
       user_id: String(u.user_id),
       name: u.name || '',
       email: u.email || '',
-      phone: u.phone || '',
+      country_code: '+91',
+      phone_number: get10DigitPhone(u.phone),
       area: u.area || u.society_name || '',
       society_name: u.society_name || u.area || '',
       flat: u.flat || '',
       status: (u.status || 'ACTIVE').toLowerCase(),
       is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
-      created_at: formatKolkataISO(u.created_at)
+      created_at: formatUTCISO(u.created_at),
+      created_at_ist: formatKolkataISO(u.created_at),
+      created_at_readable: formatKolkataReadable(u.created_at)
     }));
     return respond(res, 200, users, 'Users directory retrieved successfully.');
   } catch (err) {
@@ -751,13 +782,16 @@ async function getUserById(req, res) {
       user_id: String(u.user_id),
       name: u.name || '',
       email: u.email || '',
-      phone: u.phone || '',
+      country_code: '+91',
+      phone_number: get10DigitPhone(u.phone),
       area: u.area || u.society_name || '',
       society_name: u.society_name || u.area || '',
       flat: u.flat || '',
       status: (u.status || 'ACTIVE').toLowerCase(),
       is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
-      created_at: formatKolkataISO(u.created_at)
+      created_at: formatUTCISO(u.created_at),
+      created_at_ist: formatKolkataISO(u.created_at),
+      created_at_readable: formatKolkataReadable(u.created_at)
     };
     return respond(res, 200, userObj, 'User profile retrieved successfully.');
   } catch (err) {
