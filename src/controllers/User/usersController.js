@@ -79,8 +79,8 @@ async function sendOtp(req, res) {
  */
 async function checkPhone(req, res) {
   try {
-    const { phone, identifier, mobile, phone_number } = req.body;
-    const rawTarget = String(phone || identifier || mobile || phone_number || '').trim();
+    const { phone, identifier, mobile, phone_number, number } = req.body || {};
+    const rawTarget = String(phone || identifier || mobile || phone_number || number || req.query?.phone || req.query?.number || '').trim();
 
     if (!rawTarget) {
       return res.status(400).json({ error: 'Phone number is required' });
@@ -91,11 +91,16 @@ async function checkPhone(req, res) {
     const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
 
     const userRes = await query(
-      `SELECT user_id, name, phone FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
-      [rawTarget, cleanPhone, last10, `%${last10}`]
-    );
+      `SELECT user_id, name, phone FROM users WHERE phone = ? OR phone = ? OR phone = ? OR (LENGTH(?) >= 10 AND phone LIKE ?)`,
+      [rawTarget, cleanPhone, last10, last10, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
 
-    const exists = userRes.rows && userRes.rows.length > 0;
+    const vendorRes = await query(
+      `SELECT vendor_id, store_name, phone_number FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`,
+      [rawTarget, cleanPhone, last10, last10, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
+
+    const exists = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
 
     res.status(200).json({
       exists,
