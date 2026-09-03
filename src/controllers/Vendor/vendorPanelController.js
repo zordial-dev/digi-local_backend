@@ -3,41 +3,131 @@ const { query } = require('../../models/db');
 const { normalizeImageUrl, resolveImageUrl } = require('../../utils/imageUtils');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
 
+const fs = require('fs');
+const path = require('path');
+
 /**
- * POST /api/vendorPanel/upload-image - Upload item image
- * Supports: camera photos (JPEG, HEIC, no-extension), gallery picks, file picker
+ * Helper: Save Base64 Image payload to public/uploads directory and return hosted image URL
  */
-function uploadImage(req, res) {
-    const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
-    if (!file) {
-        const bodyUrl = req.body?.image_url || req.body?.logo_url || req.body?.logo || req.body?.image;
-        if (bodyUrl) {
-            return res.json({
-                success: true,
-                image_url: bodyUrl,
-                logo_url: bodyUrl,
-                logo: bodyUrl
-            });
+function processBase64Upload(req) {
+    const body = req.body || {};
+    let rawBase64 = body.base64 || body.image_base64 || body.file_base64 || body.logo_base64 || body.data;
+
+    if (!rawBase64) {
+        const candidate = body.image || body.logo || body.file || body.logo_url || body.image_url;
+        if (typeof candidate === 'string' && candidate.length > 100 && !candidate.startsWith('http://') && !candidate.startsWith('https://')) {
+            rawBase64 = candidate;
         }
-        return res.status(400).json({
-            error: 'No image file or URL received.',
-            hint: 'Upload camera/gallery photo via multipart form-data or pass image_url string.',
-            code: 'NO_FILE_RECEIVED'
-        });
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const imageUrl = `${baseUrl}/uploads/${file.filename}`;
+    if (!rawBase64 || typeof rawBase64 !== 'string') {
+        return null;
+    }
 
-    res.json({
-        success: true,
+    let cleanBase64 = rawBase64.trim();
+    let mimeType = body.fileType || body.filetype || body.mimetype || body.mime_type || 'image/jpeg';
+    let filenameHint = body.filename || body.original_name || body.name || '';
+    let ext = 'jpg';
+
+    // Data URI format: e.g. data:image/png;base64,iVBORw0KGgo...
+    const dataUriMatch = cleanBase64.match(/^data:(image\/[a-zA-Z0-9\+\-\.]+);base64,(.+)$/i);
+    if (dataUriMatch) {
+        mimeType = dataUriMatch[1];
+        cleanBase64 = dataUriMatch[2];
+        ext = mimeType.split('/')[1] || 'jpg';
+        if (ext === 'jpeg') ext = 'jpg';
+    } else {
+        if (filenameHint && filenameHint.includes('.')) {
+            ext = filenameHint.split('.').pop().toLowerCase();
+        } else if (mimeType) {
+            ext = mimeType.split('/')[1] || 'jpg';
+            if (ext === 'jpeg') ext = 'jpg';
+        }
+    }
+
+    // Sanitize extension
+    const validExts = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'heic', 'heif', 'gif'];
+    if (!validExts.includes(ext)) {
+        ext = 'jpg';
+    }
+    if (ext === 'jpeg') ext = 'jpg';
+
+    const timestamp = Date.now();
+    const randomSuffix = Math.floor(Math.random() * 10000);
+    const savedFilename = `upload-${timestamp}-${randomSuffix}.${ext}`;
+
+    const uploadDir = path.join(__dirname, '../../public/uploads');
+    if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const filePath = path.join(uploadDir, savedFilename);
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    fs.writeFileSync(filePath, buffer);
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const imageUrl = `${baseUrl}/uploads/${savedFilename}`;
+
+    return {
+        filename: savedFilename,
         image_url: imageUrl,
         logo_url: imageUrl,
         logo: imageUrl,
-        filename: file.filename,
-        size: file.size,
-        mimetype: file.mimetype,
-        original_name: file.originalname || 'shop_logo'
+        size: buffer.length,
+        mimetype: mimeType,
+        original_name: filenameHint || savedFilename
+    };
+}
+
+/**
+ * POST /api/vendorPanel/upload-image - Upload item / shop logo image
+ * Supports: 
+ * 1. Multipart form-data file uploads (camera, gallery, files)
+ * 2. Base64 JSON payloads ({ base64, fileType, filename } or { image_base64 })
+ * 3. Direct image_url / logo_url string
+ */
+function uploadImage(req, res) {
+    // 1. Check multipart form-data file
+    const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+    if (file) {
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const imageUrl = `${baseUrl}/uploads/${file.filename}`;
+        return res.json({
+            success: true,
+            image_url: imageUrl,
+            logo_url: imageUrl,
+            logo: imageUrl,
+            filename: file.filename,
+            size: file.size,
+            mimetype: file.mimetype,
+            original_name: file.originalname || 'shop_logo'
+        });
+    }
+
+    // 2. Check base64 string payload in req.body
+    const base64Result = processBase64Upload(req);
+    if (base64Result) {
+        return res.json({
+            success: true,
+            ...base64Result
+        });
+    }
+
+    // 3. Check direct image_url / logo_url string
+    const bodyUrl = req.body?.image_url || req.body?.logo_url || req.body?.logo || req.body?.image;
+    if (bodyUrl && typeof bodyUrl === 'string' && (bodyUrl.startsWith('http://') || bodyUrl.startsWith('https://') || bodyUrl.startsWith('/uploads/'))) {
+        return res.json({
+            success: true,
+            image_url: bodyUrl,
+            logo_url: bodyUrl,
+            logo: bodyUrl
+        });
+    }
+
+    return res.status(400).json({
+        error: 'No image file, base64 payload, or URL received.',
+        hint: 'Send a file via multipart form-data, a base64 string (JSON key base64, image_base64, or image), or image_url.',
+        code: 'NO_FILE_RECEIVED'
     });
 }
 
@@ -52,15 +142,22 @@ async function updateVendorLogo(req, res) {
         }
 
         const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
-        let logoUrl = req.body?.logo_url || req.body?.logo || req.body?.image_url || req.body?.image;
+        let logoUrl = null;
 
         if (file) {
             const baseUrl = `${req.protocol}://${req.get('host')}`;
             logoUrl = `${baseUrl}/uploads/${file.filename}`;
+        } else {
+            const base64Result = processBase64Upload(req);
+            if (base64Result) {
+                logoUrl = base64Result.logo_url;
+            } else {
+                logoUrl = req.body?.logo_url || req.body?.logo || req.body?.image_url || req.body?.image;
+            }
         }
 
         if (!logoUrl) {
-            return res.status(400).json({ error: 'Please provide a logo image file (camera photo/gallery file) or logo_url string' });
+            return res.status(400).json({ error: 'Please provide a logo image file (multipart form-data), base64 string, or logo_url string' });
         }
 
         await query(`UPDATE vendors SET logo = ? WHERE vendor_id = ? OR public_id = ?`, [logoUrl, vendorId, String(vendorId)]);
