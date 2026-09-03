@@ -151,6 +151,68 @@ Admin puts a vendor application on Hold, inputs the email subject & content, and
 
 ---
 
+## 3.1 Get Vendor Reapplication Field Diffs (Old vs New Data)
+
+### **Endpoint:** `GET /api/admin/vendors/:id/reapplication-changes`
+*(Or: `GET /api/admin/vendors/:id/changes` / `GET /api/admin/requests/:id/reapplication-changes`)*
+
+**Purpose:**  
+When a vendor resubmits their application after being placed on **HOLD** or **REJECTED**, this endpoint returns **only the fields that were modified** by the vendor (comparing `old_value` and `new_value`). Unchanged fields are excluded.
+
+### **Response Example (`200 OK`):**
+```json
+{
+  "code": 200,
+  "status": "success",
+  "message": "Retrieved 2 field change(s) for vendor reapplication.",
+  "vendor_id": 1185,
+  "store_name": "Sharma Super Electronics",
+  "status": "PENDING",
+  "has_resubmitted": true,
+  "resubmitted_at": "2026-09-03T12:30:00.000Z",
+  "hold_reason": "Please update your GSTIN and PAN card details.",
+  "total_changed_fields": 2,
+  "changed_fields": {
+    "gstin": {
+      "field_name": "gstin",
+      "field_label": "GSTIN Number",
+      "old_value": "07AAAAA0000A1Z5",
+      "new_value": "07BBBCC1111D1Z2",
+      "changed_at": "2026-09-03T12:30:00.000Z"
+    },
+    "pan_number": {
+      "field_name": "pan_number",
+      "field_label": "PAN Card Number",
+      "old_value": "AAAAA0000A",
+      "new_value": "BBBCC1111D",
+      "changed_at": "2026-09-03T12:30:00.000Z"
+    }
+  },
+  "changes_list": [
+    {
+      "change_id": 2,
+      "field_name": "gstin",
+      "field_label": "GSTIN Number",
+      "old_value": "07AAAAA0000A1Z5",
+      "new_value": "07BBBCC1111D1Z2",
+      "changed_at": "2026-09-03T12:30:00.000Z"
+    },
+    {
+      "change_id": 1,
+      "field_name": "pan_number",
+      "field_label": "PAN Card Number",
+      "old_value": "AAAAA0000A",
+      "new_value": "BBBCC1111D",
+      "changed_at": "2026-09-03T12:30:00.000Z"
+    }
+  ]
+}
+```
+
+*See [`ADMIN_VENDOR_REAPPLICATION_DIFF_API_DOCS.md`](file:///c:/Users/LENOVO/Desktop/digilocal_backend_mock/ADMIN_VENDOR_REAPPLICATION_DIFF_API_DOCS.md) for full developer details and React UI component code.*
+
+---
+
 ## 4. Approve Vendor Application
 
 ### **Endpoint:** `POST /api/vendors/:vendorId/approve`

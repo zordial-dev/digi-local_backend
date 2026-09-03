@@ -476,6 +476,20 @@ async function setupTablesPg() {
     )
   `).catch(() => { });
 
+  // Ensure vendor_reapplication_changes table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS vendor_reapplication_changes (
+      change_id BIGSERIAL PRIMARY KEY,
+      vendor_id BIGINT NOT NULL,
+      field_name VARCHAR(100) NOT NULL,
+      field_label VARCHAR(100) NOT NULL,
+      old_value TEXT,
+      new_value TEXT,
+      changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      batch_id VARCHAR(100)
+    )
+  `).catch(() => { });
+
   // Ensure platform_config table
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS platform_config (

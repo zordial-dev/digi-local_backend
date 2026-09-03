@@ -26,6 +26,7 @@ router.get(['/vendors/hold/list', '/vendors/hold'], adminPanelController.listOnH
 router.post('/vendors', adminPanelController.createVendor);
 router.post('/vendors/bulk-action', adminPanelController.bulkVendorAction);
 router.get('/vendors/:id', adminPanelController.getVendorById);
+router.get(['/vendors/:id/reapplication-changes', '/vendors/:id/changes', '/requests/:id/reapplication-changes'], adminPanelController.getVendorReapplicationChanges);
 router.put('/vendors/:id', adminPanelController.updateVendor);
 router.patch('/vendors/:id', adminPanelController.updateVendor);
 router.post('/vendors/:id/block', adminPanelController.blockVendor);

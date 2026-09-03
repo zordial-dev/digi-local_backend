@@ -1,5 +1,6 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens } = require('../../utils/auth');
+const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
 
 /**
  * POST /api/vendors/register
@@ -82,7 +83,7 @@ async function registerVendor(req, res) {
         // Check if vendor already exists
         const cleanPhone = phone_number.replace(/\D/g, '').slice(-10);
         const existingCheck = await query(
-            `SELECT vendor_id, status FROM vendors WHERE phone_number = ? OR phone_number LIKE ? OR LOWER(email) = LOWER(?)`,
+            `SELECT * FROM vendors WHERE phone_number = ? OR phone_number LIKE ? OR LOWER(email) = LOWER(?)`,
             [phone_number, `%${cleanPhone}`, email]
         );
 
@@ -152,6 +153,7 @@ async function registerVendor(req, res) {
         if (existingVendor) {
             // Update existing rejected/hold vendor record with new details and move to PENDING status
             vendor_id = Number(existingVendor.vendor_id);
+            await recordVendorFieldChanges(vendor_id, existingVendor, body);
             await query(
                 `UPDATE vendors SET 
                     vendor_name = ?, store_name = ?, email = ?, phone_number = ?, password = ?, password_hash = ?, 
@@ -337,6 +339,15 @@ async function resubmitVendorRequest(req, res) {
     if (!vendorId) return res.status(400).json({ error: 'Vendor ID is required for resubmission.' });
 
     const body = req.body || {};
+
+    // Fetch prior vendor data to record diff
+    const currentRes = await query(`SELECT * FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`, [vendorId, String(vendorId)]);
+    const currentVendor = currentRes.rows && currentRes.rows.length > 0 ? currentRes.rows[0] : {};
+
+    if (currentVendor && currentVendor.vendor_id) {
+      await recordVendorFieldChanges(currentVendor.vendor_id, currentVendor, body);
+    }
+
     await query(`
       UPDATE vendors SET 
         store_name = COALESCE(?, store_name),

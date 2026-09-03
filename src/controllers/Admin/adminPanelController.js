@@ -1,6 +1,7 @@
 const { query } = require('../../models/db');
 const { generateTokens, comparePassword, hashPassword } = require('../../utils/auth');
 const { formatPhoneWithCountryCode, get10DigitPhone } = require('../../utils/phoneUtils');
+const { getVendorReapplicationDiffs } = require('../../services/vendorDiffService');
 
 function sendStandardError(res, statusCode, message, errorCode) {
   return res.status(statusCode).json({
@@ -382,6 +383,52 @@ async function listOnHoldVendors(req, res) {
   } catch (err) {
     console.error('Error fetching on-hold vendors:', err);
     return sendStandardError(res, 500, 'Failed to fetch on-hold vendor applications.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+async function getVendorReapplicationChanges(req, res) {
+  try {
+    const targetId = req.params.vendorId || req.params.id || req.query.vendorId || req.query.vendor_id;
+    if (!targetId) {
+      return sendStandardError(res, 400, 'Vendor ID is required.', 'INVALID_PARAMETERS');
+    }
+
+    const result = await query(
+      `SELECT vendor_id, store_name, vendor_name, email, phone_number, status, hold_reason, hold_email_subject, has_resubmitted, resubmitted_at, created_at
+       FROM vendors 
+       WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+      [targetId, String(targetId)]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return sendStandardError(res, 404, `Vendor ID "${targetId}" not found.`, 'RESOURCE_NOT_FOUND');
+    }
+
+    const v = result.rows[0];
+    const diffs = await getVendorReapplicationDiffs(v.vendor_id);
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: diffs.total_changed_fields > 0 
+        ? `Retrieved ${diffs.total_changed_fields} field change(s) for vendor reapplication.`
+        : 'No field changes recorded for this vendor reapplication.',
+      vendor_id: Number(v.vendor_id),
+      store_name: v.store_name || '',
+      vendor_name: v.vendor_name || '',
+      email: v.email || '',
+      phone_number: v.phone_number || '',
+      status: String(v.status || 'PENDING').toUpperCase(),
+      has_resubmitted: Boolean(v.has_resubmitted),
+      resubmitted_at: v.resubmitted_at || null,
+      hold_reason: v.hold_reason || '',
+      total_changed_fields: diffs.total_changed_fields,
+      changed_fields: diffs.changed_fields,
+      changes_list: diffs.changes_list
+    });
+  } catch (err) {
+    console.error('Error fetching vendor reapplication diffs:', err);
+    return sendStandardError(res, 500, 'Failed to fetch vendor reapplication field changes.', 'INTERNAL_SERVER_ERROR');
   }
 }
 
@@ -1506,7 +1553,9 @@ module.exports = {
   // Module 3: Vendors
   listVendors,
   listPendingVendors,
+  listOnHoldVendors,
   getVendorById,
+  getVendorReapplicationChanges,
   approveVendor,
   rejectVendor,
   blockVendor,

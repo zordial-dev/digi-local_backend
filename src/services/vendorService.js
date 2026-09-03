@@ -1,6 +1,7 @@
 const { query, withTransaction } = require('../models/db');
 const paymentService = require('./paymentService');
 const { normalizeImageUrl } = require('../utils/imageUtils');
+const { recordVendorFieldChanges } = require('./vendorDiffService');
 
 /**
  * Service handling Vendor Profile, Store Settings, Subscription Renewals, and Dashboard Data.
@@ -213,6 +214,14 @@ class VendorService {
 
     const defaultLogo = 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80';
     const logoUrl = logo && logo.trim() !== '' ? logo : defaultLogo;
+
+    // Fetch prior vendor data to record diff
+    const currentRes = await query(`SELECT * FROM vendors WHERE vendor_id = ? OR public_id = ?`, [numId, rawIdStr]);
+    const currentVendor = currentRes.rows && currentRes.rows.length > 0 ? currentRes.rows[0] : {};
+
+    if (currentVendor && currentVendor.vendor_id) {
+      await recordVendorFieldChanges(currentVendor.vendor_id, currentVendor, settingsData);
+    }
 
     await query(
       `UPDATE vendors 

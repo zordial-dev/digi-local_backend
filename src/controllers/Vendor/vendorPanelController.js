@@ -1,6 +1,7 @@
 const vendorService = require('../../services/vendorService');
 const { query } = require('../../models/db');
 const { normalizeImageUrl, resolveImageUrl } = require('../../utils/imageUtils');
+const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
 
 /**
  * POST /api/vendorPanel/upload-image - Upload item image
@@ -466,10 +467,13 @@ async function updatePaymentDetails(req, res) {
       return res.status(400).json({ error: 'Vendor ID is required to update payment details.' });
     }
 
-    const existing = await query(`SELECT vendor_id FROM vendors WHERE vendor_id = ?`, [vendorId]);
+    const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [vendorId]);
     if (!existing.rows || existing.rows.length === 0) {
       return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
     }
+
+    const currentVendor = existing.rows[0];
+    await recordVendorFieldChanges(vendorId, currentVendor, body);
 
     await query(
       `UPDATE vendors SET 
