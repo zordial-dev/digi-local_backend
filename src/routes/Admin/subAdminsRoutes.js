@@ -9,6 +9,7 @@ const { authenticateAdminToken, requirePower } = require('../../middleware/admin
 
 // 6.2 GET /admin/subadmins — Fetch All Sub-Admin Accounts
 router.get('/', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
+router.get('/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.getSubAdminById);
 
 // 6.3 POST /admin/subadmins — Create Sub-Admin Account
 router.post('/', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);

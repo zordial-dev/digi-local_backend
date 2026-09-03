@@ -228,18 +228,32 @@ async function listSubAdmins(req, res) {
       const powersList = (powersRes.rows || []).map(r => r.power_code);
       const allowedList = (allowedRes.rows || []).map(r => r.allowed_power_code);
 
+      const finalPowers = powersList.length > 0 ? powersList : parseJsonArray(sa.powers);
+      const finalAllowed = allowedList.length > 0 ? allowedList : parseJsonArray(sa.allowed_delegation_powers);
+
+      const creatorIdVal = sa.creator_id || 'super-admin';
+      const creatorNameVal = sa.created_by || 'Super Admin';
+      const creatorRoleVal = sa.created_role || 'super_admin';
+
       return {
         id: sa.id,
         name: sa.name,
         email: sa.email,
         role: sa.role || 'sub_admin',
-        powers: powersList.length > 0 ? powersList : (sa.powers || []),
-        allowed_delegation_powers: allowedList.length > 0 ? allowedList : (sa.allowed_delegation_powers || []),
+        powers: finalPowers,
+        allowed_delegation_powers: finalAllowed,
+        grantable_powers: finalAllowed,
+        can_manage_subadmins: finalPowers.includes('SUB_ADMINS'),
         status: sa.status || 'active',
         created_at: sa.created_at,
-        created_by: sa.created_by || 'Super Admin',
-        creator_id: sa.creator_id || 'super-admin',
-        created_role: sa.created_role || 'super_admin'
+        created_by: creatorNameVal,
+        creator_id: creatorIdVal,
+        created_role: creatorRoleVal,
+        created_by_info: {
+          creator_id: creatorIdVal,
+          created_by: creatorNameVal,
+          created_role: creatorRoleVal
+        }
       };
     }));
 
@@ -255,14 +269,85 @@ async function listSubAdmins(req, res) {
 }
 
 /**
+ * GET /api/v1/admin/subadmins/:id — Get Single Sub-Admin Details
+ */
+async function getSubAdminById(req, res) {
+  try {
+    const { id } = req.params;
+    const subAdminRes = await query(`SELECT * FROM sub_admins WHERE id = ? OR CAST(id AS TEXT) = ?`, [id, String(id)]);
+
+    if (!subAdminRes.rows || subAdminRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'NOT_FOUND',
+        message: `Sub-admin ID "${id}" does not exist.`
+      });
+    }
+
+    const sa = subAdminRes.rows[0];
+    const powersRes = await query(`SELECT power_code FROM sub_admin_powers WHERE sub_admin_id = ?`, [sa.id]).catch(() => ({ rows: [] }));
+    const allowedRes = await query(`SELECT allowed_power_code FROM sub_admin_allowed_delegation_powers WHERE sub_admin_id = ?`, [sa.id]).catch(() => ({ rows: [] }));
+
+    const powersList = (powersRes.rows || []).map(r => r.power_code);
+    const allowedList = (allowedRes.rows || []).map(r => r.allowed_power_code);
+
+    const finalPowers = powersList.length > 0 ? powersList : parseJsonArray(sa.powers);
+    const finalAllowed = allowedList.length > 0 ? allowedList : parseJsonArray(sa.allowed_delegation_powers);
+
+    const creatorIdVal = sa.creator_id || 'super-admin';
+    const creatorNameVal = sa.created_by || 'Super Admin';
+    const creatorRoleVal = sa.created_role || 'super_admin';
+
+    return res.status(200).json({
+      success: true,
+      message: 'Sub-admin details retrieved',
+      data: {
+        id: sa.id,
+        name: sa.name,
+        email: sa.email,
+        role: sa.role || 'sub_admin',
+        powers: finalPowers,
+        allowed_delegation_powers: finalAllowed,
+        grantable_powers: finalAllowed,
+        can_manage_subadmins: finalPowers.includes('SUB_ADMINS'),
+        status: sa.status || 'active',
+        created_at: sa.created_at,
+        created_by: creatorNameVal,
+        creator_id: creatorIdVal,
+        created_role: creatorRoleVal,
+        created_by_info: {
+          creator_id: creatorIdVal,
+          created_by: creatorNameVal,
+          created_role: creatorRoleVal
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching sub-admin details:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch sub-admin details' });
+  }
+}
+
+/**
  * 6.3 POST /api/v1/admin/subadmins — Create Sub-Admin Account
  */
 async function createSubAdmin(req, res) {
   try {
     const requestor = req.user || { role: 'super_admin', id: 'super-admin', name: 'Super Admin' };
-    const { name, email, password, powers = [], allowed_delegation_powers = [], created_by, creator_id, created_role } = req.body || {};
+    const { 
+      name, sub_admin_name, username,
+      email, password,
+      powers = [], delegated_powers,
+      allowed_delegation_powers, grantable_powers, delegatable_powers,
+      can_manage_subadmins,
+      created_by, creator_id, created_role 
+    } = req.body || {};
 
-    if (!name || !email || !password) {
+    const targetName = String(name || sub_admin_name || username || '').trim();
+    const cleanEmail = String(email || '').trim().toLowerCase();
+    const targetPassword = String(password || '').trim();
+
+    if (!targetName || !cleanEmail || !targetPassword) {
       return res.status(400).json({
         success: false,
         error: 'INVALID_PAYLOAD',
@@ -270,13 +355,19 @@ async function createSubAdmin(req, res) {
       });
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
-    const targetPowers = Array.isArray(powers) ? powers : [];
-    const targetAllowed = Array.isArray(allowed_delegation_powers) ? allowed_delegation_powers : [];
+    let targetPowers = Array.isArray(powers) ? [...powers] : (Array.isArray(delegated_powers) ? [...delegated_powers] : []);
+    let targetAllowed = Array.isArray(allowed_delegation_powers) ? [...allowed_delegation_powers] : 
+                        (Array.isArray(grantable_powers) ? [...grantable_powers] : 
+                        (Array.isArray(delegatable_powers) ? [...delegatable_powers] : []));
+
+    // Handle can_manage_subadmins boolean alias
+    if (can_manage_subadmins === true && !targetPowers.includes('SUB_ADMINS')) {
+      targetPowers.push('SUB_ADMINS');
+    }
 
     // Check duplicate email
     const dupRes = await query(`SELECT id FROM sub_admins WHERE LOWER(email) = ?`, [cleanEmail]);
-    if (dupRes.rows.length > 0) {
+    if (dupRes.rows && dupRes.rows.length > 0) {
       return res.status(400).json({
         success: false,
         error: 'DUPLICATE_EMAIL',
@@ -284,21 +375,30 @@ async function createSubAdmin(req, res) {
       });
     }
 
-    // ── Rule 1: Delegation Power Ceiling Validation ─────────────────────────────
-    if (requestor.role !== 'super_admin') {
-      // 1. Sub-admins cannot grant SUB_ADMINS power
-      if (targetPowers.includes('SUB_ADMINS') || targetAllowed.includes('SUB_ADMINS')) {
+    const isSuperAdmin = requestor.role === 'super_admin' || requestor.role === 'SUPER_ADMIN';
+
+    // ── Rule 1: Sub-Admin Administration Power Check ─────────────────────────────
+    if (!isSuperAdmin) {
+      const requestorPowers = parseJsonArray(requestor.powers || []);
+      const requestorAllowed = parseJsonArray(requestor.allowed_delegation_powers || []);
+      const hasSubAdminPower = requestorPowers.includes('SUB_ADMINS') || 
+                               requestorPowers.includes('subadmin_administration') ||
+                               requestorAllowed.includes('SUB_ADMINS') ||
+                               requestor.can_manage_subadmins === true;
+
+      if (!hasSubAdminPower) {
         return res.status(403).json({
           success: false,
-          error: 'FORBIDDEN_POWER_CEILING',
-          message: 'Power Ceiling Exceeded: Sub-admins cannot grant the SUB_ADMINS power.'
+          error: 'FORBIDDEN_SUBADMIN_ADMINISTRATION',
+          message: 'Sub-admin administration power disabled: You are not authorized to create sub-admin accounts.'
         });
       }
 
-      // 2. Sub-admins can only grant powers listed in their allowed_delegation_powers ceiling
-      const requestorAllowedSet = requestor.allowed_delegation_powers || requestor.powers || [];
-      const hasExceededCeiling = targetPowers.some(p => !requestorAllowedSet.includes(p)) ||
-                                 targetAllowed.some(p => !requestorAllowedSet.includes(p));
+      // ── Rule 2: Delegation Power Ceiling Validation ─────────────────────────────
+      const grantableSet = new Set([...requestorAllowed, ...requestorPowers]);
+
+      const hasExceededCeiling = targetPowers.some(p => p !== 'SUB_ADMINS' && !grantableSet.has(p)) ||
+                                 targetAllowed.some(p => p !== 'SUB_ADMINS' && !grantableSet.has(p));
 
       if (hasExceededCeiling) {
         return res.status(403).json({
@@ -309,22 +409,22 @@ async function createSubAdmin(req, res) {
       }
     }
 
-    const hashedPassword = await hashPassword(password);
-    const slugName = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const hashedPassword = await hashPassword(targetPassword);
+    const slugName = String(targetName).toLowerCase().replace(/[^a-z0-9]+/g, '');
     const newId = `sub-${slugName}-${Date.now().toString().slice(-4)}`;
 
-    const creatorName = created_by || (requestor.role === 'super_admin' ? 'Super Admin' : `Sub-Admin ${requestor.name}`);
-    const creatorIdVal = creator_id || requestor.id || 'super-admin';
+    const creatorName = created_by || (isSuperAdmin ? 'Super Admin' : (requestor.name || `Sub-Admin ${requestor.id}`));
+    const creatorIdVal = String(creator_id || requestor.id || 'super-admin');
     const creatorRoleVal = created_role || requestor.role || 'super_admin';
 
-    const powersPg = '{' + targetPowers.join(',') + '}';
-    const allowedPg = '{' + targetAllowed.join(',') + '}';
+    const powersVal = JSON.stringify(targetPowers);
+    const allowedVal = JSON.stringify(targetAllowed);
 
     await query(
       `INSERT INTO sub_admins 
        (id, name, email, password_hash, role, status, created_by, creator_id, created_role, powers, allowed_delegation_powers)
        VALUES (?, ?, ?, ?, 'sub_admin', 'active', ?, ?, ?, ?, ?)`,
-      [newId, name, cleanEmail, hashedPassword, creatorName, creatorIdVal, creatorRoleVal, powersPg, allowedPg]
+      [newId, targetName, cleanEmail, hashedPassword, creatorName, creatorIdVal, creatorRoleVal, powersVal, allowedVal]
     );
 
     // Save junction records
@@ -342,8 +442,8 @@ async function createSubAdmin(req, res) {
       user_role: requestor.role || 'super_admin',
       module: 'SUB_ADMINS',
       action_type: 'CREATE',
-      summary: `Created Sub-Admin account "${name}" (${cleanEmail})`,
-      details: `Assigned powers: ${targetPowers.join(', ') || 'None'}`,
+      summary: `Created Sub-Admin account "${targetName}" (${cleanEmail})`,
+      details: `Assigned powers: ${targetPowers.join(', ') || 'None'} | Grantable powers: ${targetAllowed.join(', ') || 'None'}`,
       entity_id: newId,
       page_path: '/dashboard/sub-admins'
     });
@@ -353,16 +453,23 @@ async function createSubAdmin(req, res) {
       message: 'Sub-admin account created successfully',
       data: {
         id: newId,
-        name,
+        name: targetName,
         email: cleanEmail,
         role: 'sub_admin',
         powers: targetPowers,
         allowed_delegation_powers: targetAllowed,
+        grantable_powers: targetAllowed,
+        can_manage_subadmins: targetPowers.includes('SUB_ADMINS'),
         status: 'active',
         created_at: new Date().toISOString(),
         created_by: creatorName,
         creator_id: creatorIdVal,
-        created_role: creatorRoleVal
+        created_role: creatorRoleVal,
+        created_by_info: {
+          creator_id: creatorIdVal,
+          created_by: creatorName,
+          created_role: creatorRoleVal
+        }
       }
     });
   } catch (err) {
@@ -432,14 +539,14 @@ async function updateSubAdmin(req, res) {
     const newName = name || targetSubAdmin.name;
     const newEmail = email ? String(email).trim().toLowerCase() : targetSubAdmin.email;
 
-    const powersPg = '{' + targetPowers.join(',') + '}';
-    const allowedPg = '{' + targetAllowed.join(',') + '}';
+    const powersVal = JSON.stringify(targetPowers);
+    const allowedVal = JSON.stringify(targetAllowed);
 
     await query(
       `UPDATE sub_admins 
        SET name = ?, email = ?, status = ?, powers = ?, allowed_delegation_powers = ?, updated_at = CURRENT_TIMESTAMP 
        WHERE id = ?`,
-      [newName, newEmail, newStatus, powersPg, allowedPg, id]
+      [newName, newEmail, newStatus, powersVal, allowedVal, id]
     );
 
     // Update junction tables
@@ -559,11 +666,16 @@ async function deleteSubAdmin(req, res) {
     }
 
     // ── Rule 2: Parent-Only Revocation Security ──────────────────────────────────
-    if (requestor.role !== 'super_admin' && targetSubAdmin.creator_id !== requestor.id) {
+    const isSuperAdmin = requestor.role === 'super_admin' || requestor.role === 'SUPER_ADMIN';
+    const isDirectCreator = String(targetSubAdmin.creator_id) === String(requestor.id) ||
+                            String(targetSubAdmin.created_by) === String(requestor.name) ||
+                            (requestor.email && String(targetSubAdmin.created_by).toLowerCase().includes(String(requestor.email).toLowerCase()));
+
+    if (!isSuperAdmin && !isDirectCreator) {
       return res.status(403).json({
         success: false,
         error: 'FORBIDDEN_REVOCATION',
-        message: 'Revocation Restricted: Only the Parent Sub-Admin Creator or Super Admin can delete this child sub-admin account.'
+        message: 'Revocation Restricted: Only Super Admin or the direct creator Sub-Admin of this account can delete it.'
       });
     }
 
@@ -681,6 +793,7 @@ async function getAuditLogs(req, res) {
 module.exports = {
   subAdminLogin,
   listSubAdmins,
+  getSubAdminById,
   createSubAdmin,
   updateSubAdmin,
   toggleSubAdminStatus,

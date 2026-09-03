@@ -1325,115 +1325,24 @@ async function updatePromotion(req, res) { return respond(res, 200, {}, 'Promoti
 async function deletePromotion(req, res) { return respond(res, 200, {}, 'Promotion deleted.'); }
 
 // Module 8: Sub-Admins Management
-async function listSubAdmins(req, res) {
-  try {
-    const result = await query(`SELECT id, name, email, phone_number, role, powers, status, created_at FROM sub_admins ORDER BY id DESC`);
-    const list = (result.rows || []).map(r => {
-      let parsedPowers = r.powers;
-      if (typeof parsedPowers === 'string') {
-        try { parsedPowers = JSON.parse(parsedPowers); } catch (_) { parsedPowers = ['all']; }
-      }
-      return {
-        id: Number(r.id),
-        name: r.name,
-        email: r.email,
-        phone_number: r.phone_number || '',
-        role: r.role || 'sub_admin',
-        powers: Array.isArray(parsedPowers) ? parsedPowers : ['all'],
-        status: r.status || 'active',
-        created_at: r.created_at
-      };
-    });
-    return respond(res, 200, list, 'Sub-admins list retrieved successfully.');
-  } catch (err) {
-    console.error('Error listing sub-admins:', err);
-    return sendStandardError(res, 500, 'Failed to fetch sub-admins.', 'INTERNAL_SERVER_ERROR');
-  }
+async function listSubAdmins(req, res, next) {
+  const subAdminsController = require('./subAdminsController');
+  return subAdminsController.listSubAdmins(req, res, next);
 }
 
-async function createSubAdmin(req, res) {
-  try {
-    const { name, sub_admin_name, username, email, phone_number, phone, password, powers, delegated_powers, role } = req.body || {};
-
-    const subName = String(name || sub_admin_name || username || '').trim();
-    const subEmail = String(email || '').trim().toLowerCase();
-    const subPhone = String(phone_number || phone || '').trim();
-    const subPassword = String(password || 'SubAdmin123!').trim();
-    let subPowers = powers || delegated_powers || ['all'];
-
-    if (typeof subPowers === 'string') {
-      try { subPowers = JSON.parse(subPowers); } catch (_) { subPowers = [subPowers]; }
-    }
-    if (!Array.isArray(subPowers) || subPowers.length === 0) {
-      subPowers = ['all'];
-    }
-
-    if (!subName) return sendStandardError(res, 400, 'Sub-Admin name is required.', 'MISSING_FIELDS');
-    if (!subEmail) return sendStandardError(res, 400, 'Sub-Admin email is required.', 'MISSING_FIELDS');
-
-    const checkExisting = await query(`SELECT id FROM sub_admins WHERE LOWER(email) = LOWER(?)`, [subEmail]);
-    if (checkExisting.rows && checkExisting.rows.length > 0) {
-      return sendStandardError(res, 400, 'Sub-Admin with this email already exists.', 'DUPLICATE_EMAIL');
-    }
-
-    const { hashPassword } = require('../../utils/auth');
-    const pwdHash = await hashPassword(subPassword);
-    const powersJson = JSON.stringify(subPowers);
-
-    const insertRes = await query(
-      `INSERT INTO sub_admins (name, email, phone_number, password_hash, role, powers, status) VALUES (?, ?, ?, ?, ?, ?, 'active') RETURNING *`,
-      [subName, subEmail, subPhone, pwdHash, role || 'sub_admin', powersJson]
-    );
-
-    const newSub = insertRes.rows[0] || {};
-    const createdObj = {
-      id: Number(newSub.id || insertRes.insertId),
-      name: newSub.name || subName,
-      email: newSub.email || subEmail,
-      phone_number: newSub.phone_number || subPhone,
-      role: newSub.role || 'sub_admin',
-      powers: subPowers,
-      status: 'active',
-      created_at: newSub.created_at || new Date().toISOString()
-    };
-
-    return respond(res, 201, createdObj, 'Sub-Admin account created successfully.');
-  } catch (err) {
-    console.error('Error creating sub-admin:', err);
-    return sendStandardError(res, 500, 'Failed to create sub-admin account.', 'INTERNAL_SERVER_ERROR');
-  }
+async function createSubAdmin(req, res, next) {
+  const subAdminsController = require('./subAdminsController');
+  return subAdminsController.createSubAdmin(req, res, next);
 }
 
-async function updateSubAdminPowers(req, res) {
-  try {
-    const { id } = req.params;
-    const { powers, delegated_powers, status } = req.body || {};
-    let subPowers = powers || delegated_powers;
-
-    if (typeof subPowers === 'string') {
-      try { subPowers = JSON.parse(subPowers); } catch (_) { subPowers = [subPowers]; }
-    }
-    if (!Array.isArray(subPowers)) subPowers = ['all'];
-
-    await query(
-      `UPDATE sub_admins SET powers = ?, status = COALESCE(?, status) WHERE id = ?`,
-      [JSON.stringify(subPowers), status, id]
-    );
-
-    return respond(res, 200, { id: Number(id), powers: subPowers }, 'Sub-Admin powers updated successfully.');
-  } catch (err) {
-    return sendStandardError(res, 500, 'Failed to update sub-admin powers.', 'INTERNAL_SERVER_ERROR');
-  }
+async function updateSubAdminPowers(req, res, next) {
+  const subAdminsController = require('./subAdminsController');
+  return subAdminsController.updateSubAdmin(req, res, next);
 }
 
-async function deleteSubAdmin(req, res) {
-  try {
-    const { id } = req.params;
-    await query(`DELETE FROM sub_admins WHERE id = ?`, [id]);
-    return respond(res, 200, { id: Number(id) }, 'Sub-Admin account deleted successfully.');
-  } catch (err) {
-    return sendStandardError(res, 500, 'Failed to delete sub-admin account.', 'INTERNAL_SERVER_ERROR');
-  }
+async function deleteSubAdmin(req, res, next) {
+  const subAdminsController = require('./subAdminsController');
+  return subAdminsController.deleteSubAdmin(req, res, next);
 }
 
 // Module 9: Support Desk
