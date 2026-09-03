@@ -201,10 +201,14 @@ router.post('/api/admin/auth/login', subAdminsController.subAdminLogin);
 
 router.get('/api/v1/admin/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
 router.get('/api/v1/admin/sub-admins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
+router.get('/api/v1/admin/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.getSubAdminById);
+router.get('/api/v1/admin/sub-admins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.getSubAdminById);
 router.post('/api/v1/admin/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
 router.post('/api/v1/admin/sub-admins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
 router.put('/api/v1/admin/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
 router.put('/api/v1/admin/sub-admins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
+router.put('/api/v1/admin/subadmins/:id/powers', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
+router.put('/api/v1/admin/sub-admins/:id/powers', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.updateSubAdmin);
 router.post('/api/v1/admin/subadmins/:id/toggle-status', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.toggleSubAdminStatus);
 router.post('/api/v1/admin/sub-admins/:id/toggle-status', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.toggleSubAdminStatus);
 router.delete('/api/v1/admin/subadmins/:id', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.deleteSubAdmin);

@@ -323,6 +323,7 @@ async function setupTablesPg() {
     `ALTER TABLE sub_admins ADD COLUMN IF NOT EXISTS created_role VARCHAR(50) DEFAULT 'super_admin'`,
     `ALTER TABLE sub_admins ADD COLUMN IF NOT EXISTS powers TEXT[] DEFAULT '{}'`,
     `ALTER TABLE sub_admins ADD COLUMN IF NOT EXISTS allowed_delegation_powers TEXT[] DEFAULT '{}'`,
+    `ALTER TABLE sub_admins ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS id VARCHAR(64)`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS ticket_number VARCHAR(50)`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS subject VARCHAR(255)`,
