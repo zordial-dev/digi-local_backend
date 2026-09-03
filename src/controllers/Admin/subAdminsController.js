@@ -36,6 +36,21 @@ function parseJsonArray(val) {
 }
 
 /**
+ * Helper: Comprehensive Super Admin Check
+ */
+function checkIsSuperAdmin(requestor) {
+  if (!requestor) return true;
+  const roleLower = String(requestor.role || '').toLowerCase();
+  const idLower = String(requestor.id || '').toLowerCase();
+  return (
+    roleLower === 'super_admin' ||
+    roleLower === 'superadmin' ||
+    roleLower === 'admin' ||
+    idLower === 'super-admin'
+  );
+}
+
+/**
  * Helper: Internal Audit Log Recording
  */
 async function recordInternalAuditLog({ user_email, user_name, user_role, module, action_type, summary, details, entity_id, page_path }) {
@@ -375,7 +390,7 @@ async function createSubAdmin(req, res) {
       });
     }
 
-    const isSuperAdmin = requestor.role === 'super_admin' || requestor.role === 'SUPER_ADMIN';
+    const isSuperAdmin = checkIsSuperAdmin(requestor);
 
     // ── Rule 1: Sub-Admin Administration Power Check ─────────────────────────────
     if (!isSuperAdmin) {
@@ -485,10 +500,17 @@ async function updateSubAdmin(req, res) {
   try {
     const { id } = req.params;
     const requestor = req.user || { role: 'super_admin', id: 'super-admin' };
-    const { powers, allowed_delegation_powers, status, name, email } = req.body || {};
+    const { 
+      powers, delegated_powers, 
+      allowed_delegation_powers, grantable_powers, delegatable_powers, 
+      can_manage_subadmins, 
+      status, name, email 
+    } = req.body || {};
 
-    const subAdminRes = await query(`SELECT * FROM sub_admins WHERE id = ?`, [id]);
-    if (subAdminRes.rows.length === 0) {
+    const isSuperAdmin = checkIsSuperAdmin(requestor);
+
+    const subAdminRes = await query(`SELECT * FROM sub_admins WHERE id = ? OR CAST(id AS TEXT) = ?`, [id, String(id)]);
+    if (!subAdminRes.rows || subAdminRes.rows.length === 0) {
       return res.status(404).json({
         success: false,
         error: 'NOT_FOUND',
@@ -499,8 +521,8 @@ async function updateSubAdmin(req, res) {
     const targetSubAdmin = subAdminRes.rows[0];
 
     // ── Rule 3: Self-Power Escalation Prevention ────────────────────────────────
-    if (requestor.role !== 'super_admin' && requestor.id === targetSubAdmin.id) {
-      if (powers !== undefined || allowed_delegation_powers !== undefined) {
+    if (!isSuperAdmin && String(requestor.id) === String(targetSubAdmin.id)) {
+      if (powers !== undefined || allowed_delegation_powers !== undefined || grantable_powers !== undefined) {
         return res.status(403).json({
           success: false,
           error: 'FORBIDDEN_SELF_ESCALATION',
@@ -509,11 +531,24 @@ async function updateSubAdmin(req, res) {
       }
     }
 
-    const targetPowers = Array.isArray(powers) ? powers : (targetSubAdmin.powers || []);
-    const targetAllowed = Array.isArray(allowed_delegation_powers) ? allowed_delegation_powers : (targetSubAdmin.allowed_delegation_powers || []);
+    const initialPowers = parseJsonArray(targetSubAdmin.powers);
+    const initialAllowed = parseJsonArray(targetSubAdmin.allowed_delegation_powers);
+
+    let targetPowers = powers !== undefined ? parseJsonArray(powers) : 
+                       (delegated_powers !== undefined ? parseJsonArray(delegated_powers) : initialPowers);
+
+    let targetAllowed = allowed_delegation_powers !== undefined ? parseJsonArray(allowed_delegation_powers) : 
+                        (grantable_powers !== undefined ? parseJsonArray(grantable_powers) : 
+                        (delegatable_powers !== undefined ? parseJsonArray(delegatable_powers) : initialAllowed));
+
+    if (can_manage_subadmins === true && !targetPowers.includes('SUB_ADMINS')) {
+      targetPowers.push('SUB_ADMINS');
+    } else if (can_manage_subadmins === false && targetPowers.includes('SUB_ADMINS')) {
+      targetPowers = targetPowers.filter(p => p !== 'SUB_ADMINS');
+    }
 
     // ── Rule 1: Delegation Power Ceiling Validation ─────────────────────────────
-    if (requestor.role !== 'super_admin') {
+    if (!isSuperAdmin) {
       if (targetPowers.includes('SUB_ADMINS') || targetAllowed.includes('SUB_ADMINS')) {
         return res.status(403).json({
           success: false,
@@ -522,7 +557,7 @@ async function updateSubAdmin(req, res) {
         });
       }
 
-      const requestorAllowedSet = requestor.allowed_delegation_powers || requestor.powers || [];
+      const requestorAllowedSet = parseJsonArray(requestor.allowed_delegation_powers || requestor.powers || []);
       const hasExceededCeiling = targetPowers.some(p => !requestorAllowedSet.includes(p)) ||
                                  targetAllowed.some(p => !requestorAllowedSet.includes(p));
 
@@ -666,7 +701,7 @@ async function deleteSubAdmin(req, res) {
     }
 
     // ── Rule 2: Parent-Only Revocation Security ──────────────────────────────────
-    const isSuperAdmin = requestor.role === 'super_admin' || requestor.role === 'SUPER_ADMIN';
+    const isSuperAdmin = checkIsSuperAdmin(requestor);
     const isDirectCreator = String(targetSubAdmin.creator_id) === String(requestor.id) ||
                             String(targetSubAdmin.created_by) === String(requestor.name) ||
                             (requestor.email && String(targetSubAdmin.created_by).toLowerCase().includes(String(requestor.email).toLowerCase()));
