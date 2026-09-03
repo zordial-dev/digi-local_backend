@@ -10,231 +10,231 @@ const { recordVendorFieldChanges } = require('../../services/vendorDiffService')
  * - Stores both gstin and pan_number in database.
  */
 async function registerVendor(req, res) {
-    try {
-        const body = req.body || {};
+  try {
+    const body = req.body || {};
 
-        const rawAddress = String(
-            body.address || body.street_address || body.shop_address ||
-            body.full_address || body.address_line1 || body.addressLine1 ||
-            body.shop_number || body.shopNumber || body.shop_no || ''
-        ).trim();
+    const rawAddress = String(
+      body.address || body.street_address || body.shop_address ||
+      body.full_address || body.address_line1 || body.addressLine1 ||
+      body.shop_number || body.shopNumber || body.shop_no || ''
+    ).trim();
 
-        const vendor_name = String(
-            body.vendor_name || body.owner_name || body.ownerName ||
-            body.vendorName || body.name || body.owner || ''
-        ).trim();
+    const vendor_name = String(
+      body.vendor_name || body.owner_name || body.ownerName ||
+      body.vendorName || body.name || body.owner || ''
+    ).trim();
 
-        const store_name = String(
-            body.store_name || body.shop_name || body.business_name ||
-            body.storeName || body.shopName || body.businessName || ''
-        ).trim();
+    const store_name = String(
+      body.store_name || body.shop_name || body.business_name ||
+      body.storeName || body.shopName || body.businessName || ''
+    ).trim();
 
-        const email = String(
-            body.email || body.email_address || body.emailAddress || ''
-        ).trim();
+    const email = String(
+      body.email || body.email_address || body.emailAddress || ''
+    ).trim();
 
-        const password = String(
-            body.password || body.pass || body.create_password || ''
-        );
+    const password = String(
+      body.password || body.pass || body.create_password || ''
+    );
 
-        let phone_number = String(
-            body.phone_number || body.mobile_number || body.mobile ||
-            body.phone || body.phoneNumber || body.mobileNumber || ''
-        ).trim();
+    let phone_number = String(
+      body.phone_number || body.mobile_number || body.mobile ||
+      body.phone || body.phoneNumber || body.mobileNumber || ''
+    ).trim();
 
-        const area = String(
-            body.area || body.society_name || body.location_name || body.society || ''
-        ).trim();
+    const area = String(
+      body.area || body.society_name || body.location_name || body.society || ''
+    ).trim();
 
-        const city = String(body.city || '').trim();
-        const state = String(body.state || '').trim();
-        const pincode = String(body.pincode || body.pin_code || body.pinCode || '').trim();
+    const city = String(body.city || '').trim();
+    const state = String(body.state || '').trim();
+    const pincode = String(body.pincode || body.pin_code || body.pinCode || '').trim();
 
-        const whatsapp_number = String(
-            body.whatsapp_number || body.whatsapp || body.merchant_whatsapp || ''
-        ).trim();
+    const whatsapp_number = String(
+      body.whatsapp_number || body.whatsapp || body.merchant_whatsapp || ''
+    ).trim();
 
-        const shop_number = String(
-            body.shop_number || body.shopNumber || body.shop_no || ''
-        ).trim();
+    const shop_number = String(
+      body.shop_number || body.shopNumber || body.shop_no || ''
+    ).trim();
 
-        const shop_image = String(
-            body.shop_image || body.logo || body.shop_images?.[0] || body.images?.[0] || body.shopImage || ''
-        ).trim();
+    const shop_image = String(
+      body.shop_image || body.logo || body.shop_images?.[0] || body.images?.[0] || body.shopImage || ''
+    ).trim();
 
-        // Mandatory Validations
-        if (!vendor_name) return res.status(400).json({ error: 'Vendor / owner_name is required for registration.' });
-        if (!store_name) return res.status(400).json({ error: 'Store / shop_name is required for registration.' });
-        if (!email) return res.status(400).json({ error: 'Email address is required for registration.' });
-        if (!phone_number) return res.status(400).json({ error: 'Phone number is required for registration.' });
-        if (!password) return res.status(400).json({ error: 'Password is a mandatory field for vendor registration.' });
-        if (!area) return res.status(400).json({ error: 'Area / location is a mandatory field for vendor registration.' });
-        if (!city) return res.status(400).json({ error: 'City is a mandatory field for vendor registration.' });
-        if (!state) return res.status(400).json({ error: 'State is a mandatory field for vendor registration.' });
-        if (!pincode) return res.status(400).json({ error: 'Pincode is a mandatory field for vendor registration.' });
-        if (!whatsapp_number) return res.status(400).json({ error: 'WhatsApp number is a mandatory field for vendor registration.' });
-        if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
-        if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
+    // Mandatory Validations
+    if (!vendor_name) return res.status(400).json({ error: 'Vendor / owner_name is required for registration.' });
+    if (!store_name) return res.status(400).json({ error: 'Store / shop_name is required for registration.' });
+    if (!email) return res.status(400).json({ error: 'Email address is required for registration.' });
+    if (!phone_number) return res.status(400).json({ error: 'Phone number is required for registration.' });
+    if (!password) return res.status(400).json({ error: 'Password is a mandatory field for vendor registration.' });
+    if (!area) return res.status(400).json({ error: 'Area / location is a mandatory field for vendor registration.' });
+    if (!city) return res.status(400).json({ error: 'City is a mandatory field for vendor registration.' });
+    if (!state) return res.status(400).json({ error: 'State is a mandatory field for vendor registration.' });
+    if (!pincode) return res.status(400).json({ error: 'Pincode is a mandatory field for vendor registration.' });
+    if (!whatsapp_number) return res.status(400).json({ error: 'WhatsApp number is a mandatory field for vendor registration.' });
+    if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
+    if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
 
-        // Store GSTIN & PAN exactly as provided (both are optional; no fallback/dummy values)
-        let gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim().toUpperCase();
-        let pan_number = String(body.pan_number || body.pan || body.panNumber || '').trim().toUpperCase();
+    // Store GSTIN & PAN exactly as provided (both are optional; no fallback/dummy values)
+    let gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim().toUpperCase();
+    let pan_number = String(body.pan_number || body.pan || body.panNumber || '').trim().toUpperCase();
 
-        // Check if vendor already exists
-        const cleanPhone = phone_number.replace(/\D/g, '').slice(-10);
-        const existingCheck = await query(
-            `SELECT * FROM vendors WHERE phone_number = ? OR phone_number LIKE ? OR LOWER(email) = LOWER(?)`,
-            [phone_number, `%${cleanPhone}`, email]
-        );
+    // Check if vendor already exists
+    const cleanPhone = phone_number.replace(/\D/g, '').slice(-10);
+    const existingCheck = await query(
+      `SELECT * FROM vendors WHERE phone_number = ? OR phone_number LIKE ? OR LOWER(email) = LOWER(?)`,
+      [phone_number, `%${cleanPhone}`, email]
+    );
 
-        let existingVendor = existingCheck.rows && existingCheck.rows.length > 0 ? existingCheck.rows[0] : null;
-        if (existingVendor) {
-            const statusUpper = String(existingVendor.status || '').toUpperCase();
-            if (statusUpper === 'ACTIVE' || statusUpper === 'APPROVED') {
-                return res.status(400).json({ error: 'An active vendor store account with this mobile number/email already exists. Please log in.' });
-            }
-            if (statusUpper === 'BLOCKED') {
-                return res.status(403).json({ error: 'Your vendor store account has been blocked by admin. Please contact support.' });
-            }
+    let existingVendor = existingCheck.rows && existingCheck.rows.length > 0 ? existingCheck.rows[0] : null;
+    if (existingVendor) {
+      const statusUpper = String(existingVendor.status || '').toUpperCase();
+      if (statusUpper === 'ACTIVE' || statusUpper === 'APPROVED') {
+        return res.status(400).json({ error: 'An active vendor store account with this mobile number/email already exists. Please log in.' });
+      }
+      if (statusUpper === 'BLOCKED') {
+        return res.status(403).json({ error: 'Your vendor store account has been blocked by admin. Please contact support.' });
+      }
+    }
+
+    // Optional Fields
+    const category = String(body.category || body.business_category || body.businessCategory || 'General').trim();
+    const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
+    const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
+    const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
+    const account_holder_name = String(body.account_holder_name || body.accountHolderName || vendor_name || '').trim();
+    const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
+    const qr_code_url = String(body.qr_code_url || body.qr_code || body.upi_qr_code || body.qrCodeUrl || '').trim();
+
+    const hashedPassword = await hashPassword(password);
+    const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
+
+    let society_id = null;
+    const rawSociety = body.society_id || body.societyId || body.society || body.society_name || body.societyName;
+
+    if (typeof rawSociety === 'number' && rawSociety > 0) {
+      society_id = rawSociety;
+    } else if (rawSociety) {
+      const rawStr = String(rawSociety).trim();
+      if (/^\d+$/.test(rawStr)) {
+        society_id = parseInt(rawStr, 10);
+      } else {
+        const foundSoc = await query(`SELECT society_id FROM societies WHERE LOWER(society_name) = LOWER(?)`, [rawStr]);
+        if (foundSoc.rows && foundSoc.rows.length > 0) {
+          society_id = Number(foundSoc.rows[0].society_id);
+        } else {
+          const newSocLocation = rawAddress ? `${rawAddress}, ${city || 'City'}` : (city || 'Local Area');
+          const newSocRes = await query(
+            `INSERT INTO societies (society_name, location, secretary_name, secretary_mobile) VALUES (?, ?, ?, ?) RETURNING *`,
+            [rawStr, newSocLocation, vendor_name, phone_number]
+          );
+          society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || 1);
         }
+      }
+    }
 
-        // Optional Fields
-        const category = String(body.category || body.business_category || body.businessCategory || 'General').trim();
-        const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
-        const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
-        const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
-        const account_holder_name = String(body.account_holder_name || body.accountHolderName || vendor_name || '').trim();
-        const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
-        const qr_code_url = String(body.qr_code_url || body.qr_code || body.upi_qr_code || body.qrCodeUrl || '').trim();
+    const address = String(body.address || body.full_address || body.shop_address || body.address_line || '').trim();
+    const vendorLocation = String(body.location || body.area || body.location_name || address || '').trim();
+    const vendorCity = String(body.city || city || '').trim();
+    const vendorState = String(body.state || state || '').trim();
+    const vendorPincode = String(body.pincode || pincode || '').trim();
 
-        const hashedPassword = await hashPassword(password);
-        const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
+    const rawVendorType = String(body.vendor_type || body.vendorType || body.business_type || 'product').toLowerCase().trim();
+    const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
+    const can_add_items = vendor_type === 'product';
 
-        let society_id = null;
-        const rawSociety = body.society_id || body.societyId || body.society || body.society_name || body.societyName;
+    const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || ['UPI', 'COD']);
+    const payment_instructions = String(body.payment_instructions || body.instructions || '').trim();
 
-        if (typeof rawSociety === 'number' && rawSociety > 0) {
-            society_id = rawSociety;
-        } else if (rawSociety) {
-            const rawStr = String(rawSociety).trim();
-            if (/^\d+$/.test(rawStr)) {
-                society_id = parseInt(rawStr, 10);
-            } else {
-                const foundSoc = await query(`SELECT society_id FROM societies WHERE LOWER(society_name) = LOWER(?)`, [rawStr]);
-                if (foundSoc.rows && foundSoc.rows.length > 0) {
-                    society_id = Number(foundSoc.rows[0].society_id);
-                } else {
-                    const newSocLocation = rawAddress ? `${rawAddress}, ${city || 'City'}` : (city || 'Local Area');
-                    const newSocRes = await query(
-                        `INSERT INTO societies (society_name, location, secretary_name, secretary_mobile) VALUES (?, ?, ?, ?) RETURNING *`,
-                        [rawStr, newSocLocation, vendor_name, phone_number]
-                    );
-                    society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || 1);
-                }
-            }
-        }
+    const kolkataISTNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T');
 
-        const address = String(body.address || body.full_address || body.shop_address || body.address_line || '').trim();
-        const vendorLocation = String(body.location || body.area || body.location_name || address || '').trim();
-        const vendorCity = String(body.city || city || '').trim();
-        const vendorState = String(body.state || state || '').trim();
-        const vendorPincode = String(body.pincode || pincode || '').trim();
-
-        const rawVendorType = String(body.vendor_type || body.vendorType || body.business_type || 'product').toLowerCase().trim();
-        const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
-        const can_add_items = vendor_type === 'product';
-
-        const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || ['UPI', 'COD']);
-        const payment_instructions = String(body.payment_instructions || body.instructions || '').trim();
-
-        const kolkataISTNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T');
-
-        let vendor_id = null;
-        if (existingVendor) {
-            // Update existing rejected/hold vendor record with new details and move to PENDING status
-            vendor_id = Number(existingVendor.vendor_id);
-            await recordVendorFieldChanges(vendor_id, existingVendor, body);
-            await query(
-                `UPDATE vendors SET 
+    let vendor_id = null;
+    if (existingVendor) {
+      // Update existing rejected/hold vendor record with new details and move to PENDING status
+      vendor_id = Number(existingVendor.vendor_id);
+      await recordVendorFieldChanges(vendor_id, existingVendor, body);
+      await query(
+        `UPDATE vendors SET 
                     vendor_name = ?, store_name = ?, email = ?, phone_number = ?, password = ?, password_hash = ?, 
                     gstin = ?, pan_number = ?, shop_number = ?, shop_no = ?, address = ?, location = ?, city = ?, state = ?, pincode = ?, 
                     shop_image = ?, logo = ?, category = ?, status = 'PENDING', has_resubmitted = TRUE, resubmitted_at = CURRENT_TIMESTAMP
                  WHERE vendor_id = ?`,
-                [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, vendor_id]
-            );
-        } else {
-            // Insert new vendor record (gst_number takes gstin, pan_number takes pan_number; no cross-substitution)
-            const vendorRes = await query(
-                `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
+        [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, vendor_id]
+      );
+    } else {
+      // Insert new vendor record (gst_number takes gstin, pan_number takes pan_number; no cross-substitution)
+      const vendorRes = await query(
+        `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-                [society_id, vendor_name, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
-            );
-            const newVendorRow = vendorRes.rows[0] || {};
-            vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
-        }
-
-
-        if (vendorLocation) {
-            await query(
-                `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
-                [vendorLocation, vendorCity || 'N/A', vendorState || 'N/A', vendorPincode || '000000']
-            ).catch(() => {});
-        }
-
-        if (!vendor_id || isNaN(vendor_id)) {
-            throw new Error('Failed to obtain vendor ID during registration');
-        }
-
-        await query(
-            `INSERT INTO subscriptions (vendor_id, start_date, end_date, status) VALUES (?, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 'PENDING') RETURNING *`,
-            [vendor_id]
-        ).catch(() => {});
-
-        // Auto-create corresponding Resident User account in users table so vendor can immediately log into User Panel as customer
-        await query(
-            `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-            [`usr_v_${vendor_id}`, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
-        ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
-
-        const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor', 'user', 'customer'], isVendor: true, isUser: true };
-        const tokens = generateTokens(authUser);
-
-        return res.status(201).json({
-            token: tokens.accessToken,
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken,
-            vendor_id,
-            vendor: {
-                vendor_id,
-                store_name,
-                vendor_name,
-                shop_number,
-                shop_no: shop_number,
-                address: address || shop_number || area || vendorLocation || '',
-                area: vendorLocation,
-                city: vendorCity,
-                state: vendorState,
-                pincode: vendorPincode,
-                gstin,
-                pan_number,
-                account_holder_name,
-                upi_id,
-                qr_code_url,
-                upi_qr_code: qr_code_url,
-                qr_code: qr_code_url,
-                whatsapp_number,
-                accepted_payment_methods: body.accepted_payment_methods || ['UPI', 'COD'],
-                payment_instructions,
-                vendor_type,
-                can_add_items,
-                status: 'PENDING'
-            }
-        });
-    } catch (err) {
-        console.error('Error registering vendor:', err);
-        return res.status(500).json({ error: 'Failed to process vendor registration', details: err.message });
+        [society_id, vendor_name, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
+      );
+      const newVendorRow = vendorRes.rows[0] || {};
+      vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
     }
+
+
+    if (vendorLocation) {
+      await query(
+        `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
+        [vendorLocation, vendorCity || 'N/A', vendorState || 'N/A', vendorPincode || '000000']
+      ).catch(() => { });
+    }
+
+    if (!vendor_id || isNaN(vendor_id)) {
+      throw new Error('Failed to obtain vendor ID during registration');
+    }
+
+    await query(
+      `INSERT INTO subscriptions (vendor_id, start_date, end_date, status) VALUES (?, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 'PENDING') RETURNING *`,
+      [vendor_id]
+    ).catch(() => { });
+
+    // Auto-create corresponding Resident User account in users table so vendor can immediately log into User Panel as customer
+    await query(
+      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [`usr_v_${vendor_id}`, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
+    ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
+
+    const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor', 'user', 'customer'], isVendor: true, isUser: true };
+    const tokens = generateTokens(authUser);
+
+    return res.status(201).json({
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      vendor_id,
+      vendor: {
+        vendor_id,
+        store_name,
+        vendor_name,
+        shop_number,
+        shop_no: shop_number,
+        address: address || shop_number || area || vendorLocation || '',
+        area: vendorLocation,
+        city: vendorCity,
+        state: vendorState,
+        pincode: vendorPincode,
+        gstin,
+        pan_number,
+        account_holder_name,
+        upi_id,
+        qr_code_url,
+        upi_qr_code: qr_code_url,
+        qr_code: qr_code_url,
+        whatsapp_number,
+        accepted_payment_methods: body.accepted_payment_methods || ['UPI', 'COD'],
+        payment_instructions,
+        vendor_type,
+        can_add_items,
+        status: 'PENDING'
+      }
+    });
+  } catch (err) {
+    console.error('Error registering vendor:', err);
+    return res.status(500).json({ error: 'Failed to process vendor registration', details: err.message });
+  }
 }
 
 async function getVendorStatus(req, res) {
@@ -248,7 +248,7 @@ async function getVendorStatus(req, res) {
         const authConfig = require('../../config/auth');
         const payload = verifyJwt(token, authConfig.jwt.secret);
         if (payload) vendorId = payload.vendor_id || payload.id;
-      } catch (_) {}
+      } catch (_) { }
     }
 
     if (!vendorId) return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
@@ -375,15 +375,56 @@ async function resubmitVendorRequest(req, res) {
   }
 }
 
-async function checkVendorPhone(req, res) { return res.status(200).json({ exists: false }); }
+async function checkVendorPhone(req, res) {
+  try {
+    const rawTarget = req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.number || req.body?.identifier || req.query?.phone || req.query?.mobile || req.query?.number;
+
+    if (!rawTarget) {
+      return res.status(400).json({ exists: false, error: 'Phone number or identifier is required.' });
+    }
+
+    const cleanTarget = String(rawTarget).trim();
+    const digitsOnly = cleanTarget.replace(/\D/g, '');
+    const last10 = digitsOnly.slice(-10);
+
+    const result = await query(
+      `SELECT vendor_id, store_name, vendor_name, email, phone_number, status 
+       FROM vendors 
+       WHERE phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?) OR LOWER(email) = LOWER(?)`,
+      [cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget]
+    );
+
+    if (result.rows && result.rows.length > 0) {
+      const v = result.rows[0];
+      const statusLower = (v.status || 'pending').toLowerCase();
+      return res.status(200).json({
+        exists: true,
+        vendor_id: Number(v.vendor_id),
+        store_name: v.store_name || '',
+        vendor_name: v.vendor_name || '',
+        phone_number: v.phone_number || '',
+        status: statusLower,
+        message: 'Vendor store account found.'
+      });
+    }
+
+    return res.status(200).json({
+      exists: false,
+      message: 'No vendor store account found with this phone number.'
+    });
+  } catch (err) {
+    console.error('Error in checkVendorPhone:', err);
+    return res.status(500).json({ exists: false, error: 'Failed to check vendor phone.' });
+  }
+}
 async function getVendorPublicProfile(req, res, next) {
   const storefrontController = require('../Storefront/storefrontController');
   return storefrontController.getVendorStorefront(req, res, next);
 }
 async function loginVendor(req, res) {
   try {
-    const { email, phone, mobile, phone_number, identifier, password, pass } = req.body || {};
-    const target = email || phone || mobile || phone_number || identifier;
+    const { email, phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, password, pass } = req.body || {};
+    const target = email || phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone;
     const loginPassword = password || pass;
 
     if (!target || !loginPassword) {
@@ -391,10 +432,17 @@ async function loginVendor(req, res) {
     }
 
     const cleanTarget = String(target).trim();
+    const digitsOnly = cleanTarget.replace(/\D/g, '');
+    const last10 = digitsOnly.slice(-10);
 
     const result = await query(
-      `SELECT * FROM vendors WHERE LOWER(email) = LOWER(?) OR phone_number = ? OR phone_number LIKE ? OR CAST(vendor_id AS TEXT) = ?`,
-      [cleanTarget, cleanTarget, `%${cleanTarget}`, cleanTarget]
+      `SELECT * FROM vendors 
+       WHERE LOWER(email) = LOWER(?) 
+          OR phone_number = ? 
+          OR phone_number = ? 
+          OR (LENGTH(?) >= 10 AND phone_number LIKE ?) 
+          OR CAST(vendor_id AS TEXT) = ?`,
+      [cleanTarget, cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget]
     );
 
     if (!result.rows || result.rows.length === 0) {
@@ -469,7 +517,7 @@ async function logoutVendor(req, res) {
       await query(
         `UPDATE vendors SET push_token = NULL, fcm_token = NULL, device_token = NULL WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
         [targetVendorId, String(targetVendorId)]
-      ).catch(() => {});
+      ).catch(() => { });
     }
 
     return res.status(200).json({
