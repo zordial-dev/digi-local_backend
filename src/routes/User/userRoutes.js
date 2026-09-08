@@ -25,6 +25,9 @@ router.get('/status/:userId', usersController.getUserStatus);
 router.get('/:userId/status', usersController.getUserStatus);
 router.get('/profile', usersController.getUserProfile);
 router.get('/me', usersController.getUserProfile);
+router.get('/strikes', usersController.getUserStrikes);
+router.get('/strikes/:userId', usersController.getUserStrikes);
+router.get('/:userId/strikes', usersController.getUserStrikes);
 
 // B2.1 Update Resident User Profile & Address
 router.put('/profile', usersController.updateUserProfile);

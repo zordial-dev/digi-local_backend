@@ -15,6 +15,7 @@ const subscriptionsRoutes = require('./Admin/subscriptionsRoutes');
 const configRoutes = require('./Admin/configRoutes');
 const otpRoutes = require('./otp');
 const cmsRoutes = require('./Cms/cmsRoutes');
+const ratingRoutes = require('./Rating/ratingRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
@@ -51,6 +52,7 @@ router.use('/api/admin', adminRoutes);               // Admin portal
 router.use('/api/auth', authRoutes);                 // Admin Auth & Profile
 router.use('/api/sub-admins', subAdminsRoutes);      // Sub-Admins & RBAC
 router.use('/api/subscriptions', subscriptionsRoutes); // Financial Analytics & Subscriptions
+router.use(ratingRoutes);                                  // Vendor Ratings & Reviews
 const storefrontController = require('../controllers/Storefront/storefrontController');
 
 // ── Categories & Platform Config Direct Endpoints ──────────

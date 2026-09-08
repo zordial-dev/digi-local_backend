@@ -175,10 +175,19 @@ async function registerVendor(req, res) {
 
 
     if (vendorLocation) {
-      await query(
-        `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
-        [vendorLocation, vendorCity || 'N/A', vendorState || 'N/A', vendorPincode || '000000']
-      ).catch(() => { });
+      const locArea = String(vendorLocation).trim();
+      const locCity = String(vendorCity || 'N/A').trim();
+      const existingLoc = await query(
+        `SELECT location_id FROM locations WHERE LOWER(TRIM(area)) = LOWER(?) AND LOWER(TRIM(city)) = LOWER(?)`,
+        [locArea, locCity]
+      ).catch(() => ({ rows: [] }));
+
+      if (!existingLoc.rows || existingLoc.rows.length === 0) {
+        await query(
+          `INSERT INTO locations (area, city, state, pincode) VALUES (?, ?, ?, ?)`,
+          [locArea, locCity, vendorState || 'N/A', vendorPincode || '000000']
+        ).catch(() => { });
+      }
     }
 
     if (!vendor_id || isNaN(vendor_id)) {

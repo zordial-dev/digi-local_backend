@@ -316,3 +316,18 @@ CREATE TABLE IF NOT EXISTS cms_pages (
     content TEXT NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS vendor_ratings (
+    rating_id BIGSERIAL PRIMARY KEY,
+    vendor_id BIGINT NOT NULL REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+    user_id VARCHAR(100) NOT NULL,
+    user_name VARCHAR(255) DEFAULT 'Anonymous Customer',
+    rating DECIMAL(2,1) NOT NULL CHECK (rating >= 1.0 AND rating <= 5.0),
+    review_text TEXT DEFAULT '',
+    order_id VARCHAR(100) DEFAULT NULL,
+    status VARCHAR(20) DEFAULT 'PUBLISHED',
+    reply_text TEXT DEFAULT NULL,
+    replied_at TIMESTAMP DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

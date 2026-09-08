@@ -97,6 +97,7 @@ async function initDb(maxRetries = 5, initialDelayMs = 2000) {
         console.log('[Database] Connected to PostgreSQL successfully (Pool max: 20).');
         await setupTablesPg();
         await removeDuplicateVendors();
+        await removeDuplicateLocations();
         await createIndexes();
         await seedInitialData();
         return;
@@ -419,7 +420,9 @@ async function setupTablesPg() {
     `ALTER TABLE items ADD COLUMN IF NOT EXISTS is_available BOOLEAN DEFAULT TRUE`,
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS latitude DECIMAL(10,7) DEFAULT 28.6270`,
     `ALTER TABLE societies ADD COLUMN IF NOT EXISTS longitude DECIMAL(10,7) DEFAULT 77.3720`,
-    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS avg_rating DECIMAL(3,2) DEFAULT 0.00`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS rating_count INT DEFAULT 0`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS total_ratings_sum DECIMAL(10,2) DEFAULT 0.00`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS strikes INT DEFAULT 0`,
     `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
@@ -477,6 +480,18 @@ async function setupTablesPg() {
     )
   `).catch(() => { });
 
+  // Ensure user_strikes table for tracking strike reasons and history
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS user_strikes (
+      strike_id BIGSERIAL PRIMARY KEY,
+      user_id VARCHAR(100) NOT NULL,
+      strike_number INT NOT NULL,
+      reason TEXT NOT NULL,
+      admin_id VARCHAR(100) DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `).catch(() => { });
+
   // Ensure vendor_reapplication_changes table
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS vendor_reapplication_changes (
@@ -501,6 +516,24 @@ async function setupTablesPg() {
       gst_percentage DECIMAL(5,2) DEFAULT 18.00,
       maintenance_mode BOOLEAN DEFAULT FALSE,
       currency VARCHAR(10) DEFAULT 'INR',
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `).catch(() => { });
+
+  // Ensure vendor_ratings table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS vendor_ratings (
+      rating_id BIGSERIAL PRIMARY KEY,
+      vendor_id BIGINT NOT NULL REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+      user_id VARCHAR(100) NOT NULL,
+      user_name VARCHAR(255) DEFAULT 'Anonymous Customer',
+      rating DECIMAL(2,1) NOT NULL CHECK (rating >= 1.0 AND rating <= 5.0),
+      review_text TEXT DEFAULT '',
+      order_id VARCHAR(100) DEFAULT NULL,
+      status VARCHAR(20) DEFAULT 'PUBLISHED',
+      reply_text TEXT DEFAULT NULL,
+      replied_at TIMESTAMP DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
@@ -616,6 +649,46 @@ async function removeDuplicateVendors() {
   }
 }
 
+async function removeDuplicateLocations() {
+  try {
+    const res = await query(`SELECT location_id, area, city, state, pincode FROM locations ORDER BY location_id ASC`);
+    if (!res.rows || res.rows.length === 0) return { removedCount: 0 };
+
+    const seenLocations = new Map();
+    const duplicatesToRemove = [];
+
+    for (const loc of res.rows) {
+      const areaNorm = loc.area ? String(loc.area).trim().toLowerCase() : '';
+      const cityNorm = loc.city ? String(loc.city).trim().toLowerCase() : '';
+      const stateNorm = loc.state ? String(loc.state).trim().toLowerCase() : '';
+      const pinNorm = loc.pincode ? String(loc.pincode).trim() : '';
+      if (!areaNorm) continue;
+
+      const key = `${areaNorm}:${cityNorm}:${stateNorm}:${pinNorm}`;
+      const currentLocId = Number(loc.location_id);
+
+      if (seenLocations.has(key)) {
+        const keptLocId = seenLocations.get(key);
+        duplicatesToRemove.push({ duplicateLocId: currentLocId, keptLocId });
+      } else {
+        seenLocations.set(key, currentLocId);
+      }
+    }
+
+    for (const dup of duplicatesToRemove) {
+      const { duplicateLocId, keptLocId } = dup;
+      await query(`UPDATE vendors SET location_id = ? WHERE location_id = ?`, [keptLocId, duplicateLocId]).catch(() => {});
+      await query(`DELETE FROM locations WHERE location_id = ?`, [duplicateLocId]).catch(() => {});
+      console.log(`[Deduplication] Removed duplicate location ID ${duplicateLocId}. Reassigned vendors to location ID ${keptLocId}.`);
+    }
+
+    return { removedCount: duplicatesToRemove.length };
+  } catch (err) {
+    console.error('[Deduplication Error] Failed to remove duplicate locations:', err.message);
+    return { removedCount: 0, error: err.message };
+  }
+}
+
 /**
  * Cleans non-sensitive transactional database tables while strictly preserving 
  * admin credentials, sub_admins, platform_config, support_contacts, and CMS pages.
@@ -685,6 +758,36 @@ async function cleanDatabaseTables(options = {}) {
 }
 
 /**
+ * Recalculates and updates avg_rating, rating_count, and total_ratings_sum on vendors table.
+ */
+async function recalculateVendorRating(vendorId) {
+  try {
+    const vId = Number(vendorId);
+    if (!vId || isNaN(vId)) return { avg_rating: 0, rating_count: 0 };
+
+    const res = await query(
+      `SELECT COUNT(*) as count, COALESCE(AVG(rating), 0) as avg, COALESCE(SUM(rating), 0) as sum FROM vendor_ratings WHERE vendor_id = ? AND status = 'PUBLISHED'`,
+      [vId]
+    );
+
+    const count = parseInt(res.rows[0]?.count || 0, 10);
+    const rawAvg = parseFloat(res.rows[0]?.avg || 0);
+    const sum = parseFloat(res.rows[0]?.sum || 0);
+    const avgRating = Math.round(rawAvg * 100) / 100;
+
+    await query(
+      `UPDATE vendors SET avg_rating = ?, rating_count = ?, total_ratings_sum = ? WHERE vendor_id = ?`,
+      [avgRating, count, sum, vId]
+    );
+
+    return { avg_rating: avgRating, rating_count: count, total_ratings_sum: sum };
+  } catch (err) {
+    console.error('[Recalculate Rating Error]:', err.message);
+    return { avg_rating: 0, rating_count: 0 };
+  }
+}
+
+/**
  * Closes PostgreSQL database connection pool cleanly during process termination.
  */
 async function closeDb() {
@@ -701,6 +804,8 @@ module.exports = {
   genPublicId,
   getDbType,
   removeDuplicateVendors,
+  removeDuplicateLocations,
+  recalculateVendorRating,
   cleanDatabaseTables,
   DatabaseError
 };

@@ -1127,6 +1127,36 @@ async function strikeUser(req, res) {
       [newStrikes, newStatus, String(u.user_id), String(u.user_id)]
     );
 
+    const adminId = req.user?.id || req.user?.admin_id || 'admin';
+    await query(
+      `INSERT INTO user_strikes (user_id, strike_number, reason, admin_id) VALUES (?, ?, ?, ?)`,
+      [String(u.user_id), newStrikes, reason, adminId]
+    ).catch(e => console.error('Error inserting into user_strikes:', e));
+
+    const strikesRes = await query(
+      `SELECT strike_number, reason, created_at FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY strike_number ASC, created_at ASC`,
+      [String(u.user_id), String(u.user_id)]
+    );
+
+    const strike_reasons = (strikesRes.rows || []).map(r => ({
+      strike_number: Number(r.strike_number),
+      reason: r.reason,
+      created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+    }));
+    const strike_reasons_list = strike_reasons.map(r => r.reason);
+
+    const show_second_strike_warning = newStrikes === 2;
+    const show_strike_warning = newStrikes >= 1 && newStrikes < 3;
+
+    let warning_message = '';
+    if (newStrikes === 2) {
+      warning_message = 'Warning: You have received 2 strikes on your account due to policy violations. Receiving a 3rd strike will result in your account being automatically blocked!';
+    } else if (newStrikes === 1) {
+      warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
+    } else if (isAutoBanned) {
+      warning_message = 'Account has reached 3 strikes and is automatically blocked.';
+    }
+
     const message = isAutoBanned
       ? `Strike #${newStrikes} issued to user "${u.name || u.user_id}". Account has reached 3 strikes and is AUTOMATICALLY BANNED / BLOCKED!`
       : `Strike #${newStrikes} issued to user "${u.name || u.user_id}". (${3 - newStrikes} strikes remaining before automatic ban).`;
@@ -1140,7 +1170,13 @@ async function strikeUser(req, res) {
       status: newStatus.toLowerCase(),
       is_blocked: isAutoBanned || String(newStatus).toUpperCase() === 'BLOCKED',
       is_auto_banned: isAutoBanned,
+      show_second_strike_warning,
+      show_strike_warning,
+      warning_title: newStrikes === 2 ? 'Second Strike Warning' : (newStrikes === 1 ? 'First Strike Warning' : 'Account Blocked'),
+      warning_message,
       reason,
+      strike_reasons,
+      strike_reasons_list,
       message
     }, message);
   } catch (err) {
@@ -1181,6 +1217,24 @@ async function unstrikeUser(req, res) {
       [newStrikes, newStatus, String(u.user_id), String(u.user_id)]
     );
 
+    if (resetAll) {
+      await query(`DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [String(u.user_id), String(u.user_id)]).catch(() => {});
+    } else {
+      await query(`DELETE FROM user_strikes WHERE strike_id IN (SELECT strike_id FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY strike_number DESC LIMIT 1)`, [String(u.user_id), String(u.user_id)]).catch(() => {});
+    }
+
+    const strikesRes = await query(
+      `SELECT strike_number, reason, created_at FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY strike_number ASC, created_at ASC`,
+      [String(u.user_id), String(u.user_id)]
+    );
+
+    const strike_reasons = (strikesRes.rows || []).map(r => ({
+      strike_number: Number(r.strike_number),
+      reason: r.reason,
+      created_at: r.created_at ? new Date(r.created_at).toISOString() : new Date().toISOString()
+    }));
+    const strike_reasons_list = strike_reasons.map(r => r.reason);
+
     return respond(res, 200, {
       user_id: String(u.user_id),
       name: u.name || '',
@@ -1188,7 +1242,11 @@ async function unstrikeUser(req, res) {
       strikes: newStrikes,
       max_strikes_allowed: 3,
       status: newStatus.toLowerCase(),
-      is_blocked: String(newStatus).toUpperCase() === 'BLOCKED'
+      is_blocked: String(newStatus).toUpperCase() === 'BLOCKED',
+      show_second_strike_warning: newStrikes === 2,
+      show_strike_warning: newStrikes >= 1 && newStrikes < 3,
+      strike_reasons,
+      strike_reasons_list
     }, `User strikes count updated to ${newStrikes}.`);
   } catch (err) {
     console.error('Error removing strike from user:', err);

@@ -498,6 +498,27 @@ async function getUserOrders(req, res) {
 /**
  * GET /api/users/profile - Fetch Resident User Profile
  */
+async function fetchStrikeDetailsForUser(userId) {
+  try {
+    const res = await query(
+      `SELECT strike_number, reason, created_at FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY strike_number ASC, created_at ASC`,
+      [String(userId), String(userId)]
+    );
+    const strike_reasons = (res.rows || []).map(r => ({
+      strike_number: Number(r.strike_number),
+      reason: r.reason,
+      created_at: r.created_at ? formatISTISO(r.created_at) : formatISTISO()
+    }));
+    const strike_reasons_list = strike_reasons.map(r => r.reason);
+    return { strike_reasons, strike_reasons_list };
+  } catch (e) {
+    return { strike_reasons: [], strike_reasons_list: [] };
+  }
+}
+
+/**
+ * GET /api/users/profile - Fetch Resident User Profile
+ */
 async function getUserProfile(req, res) {
   try {
     const userId = req.user?.id || req.params.userId || req.query.userId;
@@ -516,16 +537,40 @@ async function getUserProfile(req, res) {
     }
 
     const user = userRes.rows[0];
+    const userStrikes = Number(user.strikes || 0);
     const statusLower = String(user.status || 'active').toLowerCase();
-    if (statusLower === 'blocked' || statusLower === 'suspended') {
+    const isBlocked = statusLower === 'blocked' || statusLower === 'suspended' || userStrikes >= 3;
+
+    const { strike_reasons, strike_reasons_list } = await fetchStrikeDetailsForUser(user.user_id);
+
+    if (isBlocked) {
       return res.status(403).json({
         success: false,
+        user_id: String(user.user_id),
         error: 'Your resident user account has been blocked by admin.',
         code: 'USER_BLOCKED',
         is_blocked: true,
+        is_auto_banned: true,
+        strikes: userStrikes,
+        max_strikes_allowed: 3,
         action: 'logout',
-        message: 'Account is blocked. Please log out and contact support.'
+        message: 'Account is blocked due to 3 policy strikes. Please log out and contact support.',
+        strike_reasons,
+        strike_reasons_list
       });
+    }
+
+    const show_second_strike_warning = userStrikes === 2;
+    const show_strike_warning = userStrikes >= 1 && userStrikes < 3;
+
+    let warning_title = '';
+    let warning_message = '';
+    if (userStrikes === 2) {
+      warning_title = 'Second Strike Warning';
+      warning_message = 'Warning: You have received 2 strikes on your account due to policy violations. Receiving a 3rd strike will result in your account being automatically blocked!';
+    } else if (userStrikes === 1) {
+      warning_title = 'First Strike Warning';
+      warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
     }
 
     res.status(200).json({
@@ -535,6 +580,14 @@ async function getUserProfile(req, res) {
       phone: user.phone || '',
       status: statusLower,
       is_blocked: false,
+      strikes: userStrikes,
+      max_strikes_allowed: 3,
+      show_second_strike_warning,
+      show_strike_warning,
+      warning_title,
+      warning_message,
+      strike_reasons,
+      strike_reasons_list,
       society_id: user.society_id ? String(user.society_id) : '',
       society_name: user.society_name || user.area || '',
       area: user.area || user.society_name || '',
@@ -583,6 +636,8 @@ async function getUserStatus(req, res) {
     const statusLower = String(u.status || 'active').toLowerCase();
     const isBlocked = statusLower === 'blocked' || statusLower === 'suspended' || userStrikes >= 3;
 
+    const { strike_reasons, strike_reasons_list } = await fetchStrikeDetailsForUser(u.user_id);
+
     if (isBlocked) {
       return res.status(403).json({
         success: false,
@@ -590,13 +645,29 @@ async function getUserStatus(req, res) {
         status: 'blocked',
         code: 'USER_BLOCKED',
         is_blocked: true,
+        is_auto_banned: true,
         strikes: userStrikes,
         max_strikes_allowed: 3,
         action: 'logout',
         error: 'Resident user account has been blocked by administrator due to policy violation or 3 strikes limit.',
         message: 'Your resident user account has been blocked due to policy violations or 3 strikes limit. Please log out and contact customer support.',
-        recommended_ui_text: 'Your user account has been blocked by admin. Access denied.'
+        recommended_ui_text: 'Your user account has been blocked by admin. Access denied.',
+        strike_reasons,
+        strike_reasons_list
       });
+    }
+
+    const show_second_strike_warning = userStrikes === 2;
+    const show_strike_warning = userStrikes >= 1 && userStrikes < 3;
+
+    let warning_title = '';
+    let warning_message = '';
+    if (userStrikes === 2) {
+      warning_title = 'Second Strike Warning';
+      warning_message = 'Warning: You have received 2 strikes on your account due to policy violations. Receiving a 3rd strike will result in your account being automatically blocked!';
+    } else if (userStrikes === 1) {
+      warning_title = 'First Strike Warning';
+      warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
     }
 
     return res.status(200).json({
@@ -609,6 +680,12 @@ async function getUserStatus(req, res) {
       is_blocked: false,
       strikes: userStrikes,
       max_strikes_allowed: 3,
+      show_second_strike_warning,
+      show_strike_warning,
+      warning_title,
+      warning_message,
+      strike_reasons,
+      strike_reasons_list,
       society_id: u.society_id ? String(u.society_id) : '',
       society_name: u.society_name || u.area || '',
       area: u.area || u.society_name || '',
@@ -616,11 +693,91 @@ async function getUserStatus(req, res) {
       city: u.city || '',
       pincode: u.pincode || '',
       address: u.address || '',
-      message: 'User account is active.',
-      recommended_ui_text: 'Your account is active.'
+      message: userStrikes === 2 ? warning_message : 'User account is active.',
+      recommended_ui_text: userStrikes === 2 ? warning_message : 'Your account is active.'
     });
   } catch (err) {
     return res.status(500).json({ error: 'Failed to fetch user status.' });
+  }
+}
+
+/**
+ * GET /api/users/strikes, /api/users/strikes/:userId, or /api/users/:userId/strikes
+ * Dedicated endpoint for resident user panel to check strike count, reasons, and second strike warning details.
+ */
+async function getUserStrikes(req, res) {
+  try {
+    let userId = req.params.userId || req.params.id || req.user?.id || req.user?.user_id || req.query.userId || req.query.user_id || req.query.phone;
+
+    if (!userId && req.headers['authorization']) {
+      try {
+        const token = req.headers['authorization'].replace('Bearer ', '').trim();
+        const { verifyJwt } = require('../../utils/auth');
+        const authConfig = require('../../config/auth');
+        const payload = verifyJwt(token, authConfig.jwt.secret);
+        if (payload) userId = payload.user_id || payload.id;
+      } catch (_) {}
+    }
+
+    if (!userId) return res.status(400).json({ error: 'User ID or Authorization Bearer token is required.' });
+
+    const result = await query(
+      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+      [userId, String(userId), String(userId)]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ error: `User "${userId}" not found.` });
+    }
+
+    const u = result.rows[0];
+    const userStrikes = Number(u.strikes || 0);
+    const statusLower = String(u.status || 'active').toLowerCase();
+    const isBlocked = statusLower === 'blocked' || statusLower === 'suspended' || userStrikes >= 3;
+
+    const { strike_reasons, strike_reasons_list } = await fetchStrikeDetailsForUser(u.user_id);
+
+    const show_second_strike_warning = userStrikes === 2;
+    const show_strike_warning = userStrikes >= 1 && userStrikes < 3;
+
+    let warning_title = '';
+    let warning_message = '';
+
+    if (isBlocked) {
+      warning_title = 'Account Blocked (3 Strikes)';
+      warning_message = 'Your user account has been blocked due to reaching 3 policy strikes. Please contact support.';
+    } else if (userStrikes === 2) {
+      warning_title = 'Second Strike Warning';
+      warning_message = 'Warning: You have received 2 strikes on your account due to policy violations. Receiving a 3rd strike will result in your account being automatically blocked!';
+    } else if (userStrikes === 1) {
+      warning_title = 'First Strike Warning';
+      warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
+    } else {
+      warning_title = 'Account in Good Standing';
+      warning_message = 'No active policy strikes on your account.';
+    }
+
+    return res.status(isBlocked ? 403 : 200).json({
+      success: !isBlocked,
+      user_id: String(u.user_id),
+      name: u.name || '',
+      phone: u.phone || '',
+      status: isBlocked ? 'blocked' : 'active',
+      is_blocked: isBlocked,
+      is_auto_banned: isBlocked,
+      strikes: userStrikes,
+      max_strikes_allowed: 3,
+      show_second_strike_warning,
+      show_strike_warning,
+      warning_title,
+      warning_message,
+      strike_reasons,
+      strike_reasons_list,
+      message: warning_message
+    });
+  } catch (err) {
+    console.error('Error fetching user strikes:', err);
+    return res.status(500).json({ error: 'Failed to fetch user strikes details.' });
   }
 }
 
@@ -808,6 +965,7 @@ module.exports = {
   getUserOrders,
   getUserProfile,
   getUserStatus,
+  getUserStrikes,
   updateUserProfile,
   deleteAccount
 };

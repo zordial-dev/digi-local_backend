@@ -213,14 +213,41 @@ class VendorService {
     }
 
     const defaultLogo = 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80';
-    const logoUrl = logo && logo.trim() !== '' ? logo : defaultLogo;
+    let logoUrl = logo && logo.trim() !== '' ? logo : defaultLogo;
+
+    if (logoUrl && typeof logoUrl === 'string' && (logoUrl.startsWith('data:image') || logoUrl.length > 200) && !logoUrl.startsWith('http://') && !logoUrl.startsWith('https://')) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        let cleanBase64 = logoUrl.trim();
+        let ext = 'jpg';
+        const dataUriMatch = cleanBase64.match(/^data:(image\/[a-zA-Z0-9\+\-\.]+);base64,(.+)$/i);
+        if (dataUriMatch) {
+          cleanBase64 = dataUriMatch[2];
+          ext = dataUriMatch[1].split('/')[1] || 'jpg';
+          if (ext === 'jpeg') ext = 'jpg';
+        }
+        const timestamp = Date.now();
+        const savedFilename = `upload-${timestamp}-${Math.floor(Math.random() * 10000)}.${ext}`;
+        const uploadDir = path.join(__dirname, '../../public/uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filePath = path.join(uploadDir, savedFilename);
+        const buffer = Buffer.from(cleanBase64, 'base64');
+        fs.writeFileSync(filePath, buffer);
+        logoUrl = `/uploads/${savedFilename}`;
+      } catch (err) {
+        console.error('Error processing logo base64 in updateStoreSettings:', err.message);
+      }
+    }
 
     // Fetch prior vendor data to record diff
     const currentRes = await query(`SELECT * FROM vendors WHERE vendor_id = ? OR public_id = ?`, [numId, rawIdStr]);
     const currentVendor = currentRes.rows && currentRes.rows.length > 0 ? currentRes.rows[0] : {};
 
     if (currentVendor && currentVendor.vendor_id) {
-      await recordVendorFieldChanges(currentVendor.vendor_id, currentVendor, settingsData);
+      await recordVendorFieldChanges(currentVendor.vendor_id, currentVendor, settings);
     }
 
     await query(
