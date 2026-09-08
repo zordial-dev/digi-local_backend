@@ -222,27 +222,51 @@ async function getVendorRatingSummary(req, res) {
 }
 
 /**
- * GET /api/vendor/ratings (Vendor Self Ratings for App & Web Dashboard)
+ * GET /api/vendor/ratings, GET /api/vendor/reviews, GET /api/vendorPanel/:vendorId/reviews, etc.
+ * Allows vendor to fetch and see all reviews and ratings submitted by users.
  */
 async function getVendorSelfRatings(req, res) {
   try {
-    const vendorIdHeader = req.headers['x-vendor-id'];
-    const targetVendorId = Number(req.user?.vendor_id || vendorIdHeader || req.query.vendor_id);
+    const vendorIdHeader = req.headers['x-vendor-id'] || req.headers['vendor_id'] || req.headers['x-vendor-id'.toLowerCase()];
+    const targetVendorId = Number(
+      req.params.vendorId ||
+      req.params.venderId ||
+      req.params.id ||
+      req.user?.vendor_id ||
+      req.user?.id ||
+      vendorIdHeader ||
+      req.query.vendor_id ||
+      req.query.vendorId
+    );
 
     if (!targetVendorId || isNaN(targetVendorId)) {
-      return sendStandardError(res, 400, 'Vendor identification missing. Please provide authentication token or X-Vendor-ID header.', 'UNAUTHORIZED_VENDOR');
+      return sendStandardError(res, 400, 'Vendor identification missing. Please provide vendor ID parameter, X-Vendor-ID header, or vendor auth token.', 'UNAUTHORIZED_VENDOR');
+    }
+
+    // Verify vendor exists
+    const vCheck = await query(`SELECT vendor_id, store_name, vendor_name FROM vendors WHERE vendor_id = ?`, [targetVendorId]);
+    if (!vCheck.rows || vCheck.rows.length === 0) {
+      return sendStandardError(res, 404, `Vendor with ID ${targetVendorId} not found`, 'VENDOR_NOT_FOUND');
     }
 
     const page = Math.max(1, parseInt(req.query.page || '1', 10));
     const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '20', 10)));
     const offset = (page - 1) * limit;
+    const starFilter = req.query.star ? parseFloat(req.query.star) : null;
 
-    const ratingsRes = await query(
-      `SELECT rating_id, vendor_id, user_id, user_name, rating, review_text, order_id, status, reply_text, replied_at, created_at
-       FROM vendor_ratings WHERE vendor_id = ? AND status = 'PUBLISHED'
-       ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-      [targetVendorId, limit, offset]
-    );
+    let sql = `SELECT rating_id, vendor_id, user_id, user_name, rating, review_text, order_id, status, reply_text, replied_at, created_at
+               FROM vendor_ratings WHERE vendor_id = ? AND status = 'PUBLISHED'`;
+    const params = [targetVendorId];
+
+    if (starFilter && !isNaN(starFilter)) {
+      sql += ` AND rating = ?`;
+      params.push(starFilter);
+    }
+
+    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    const ratingsRes = await query(sql, params).catch(() => ({ rows: [] }));
 
     const summaryRes = await query(
       `SELECT 
@@ -261,11 +285,27 @@ async function getVendorSelfRatings(req, res) {
     const total = parseInt(s.total_ratings || 0, 10);
     const avgRating = Math.round(parseFloat(s.avg_rating || 0) * 100) / 100;
 
+    const formattedList = ratingsRes.rows.map(r => ({
+      rating_id: Number(r.rating_id),
+      vendor_id: Number(r.vendor_id),
+      user_id: r.user_id,
+      user_name: r.user_name || 'Valued Customer',
+      rating: parseFloat(r.rating),
+      review_text: r.review_text || '',
+      order_id: r.order_id || null,
+      status: r.status,
+      reply_text: r.reply_text || null,
+      replied_at: r.replied_at || null,
+      created_at: r.created_at
+    }));
+
     return respond(res, 200, {
       vendor_id: targetVendorId,
+      store_name: vCheck.rows[0].store_name || '',
       metrics: {
         avg_rating: avgRating,
         rating_count: total,
+        total_reviews: total,
         breakdown: {
           5: parseInt(s.star_5 || 0, 10),
           4: parseInt(s.star_4 || 0, 10),
@@ -280,17 +320,9 @@ async function getVendorSelfRatings(req, res) {
         limit,
         pages: Math.ceil(total / limit) || 1
       },
-      ratings: ratingsRes.rows.map(r => ({
-        rating_id: Number(r.rating_id),
-        user_name: r.user_name,
-        rating: parseFloat(r.rating),
-        review_text: r.review_text || '',
-        order_id: r.order_id,
-        reply_text: r.reply_text || null,
-        replied_at: r.replied_at || null,
-        created_at: r.created_at
-      }))
-    }, 'Vendor self-rating metrics retrieved.');
+      ratings: formattedList,
+      reviews: formattedList
+    }, 'Vendor user ratings and reviews retrieved successfully.');
   } catch (err) {
     console.error('Error in vendor self ratings:', err);
     return sendStandardError(res, 500, 'Failed to retrieve vendor rating statistics');

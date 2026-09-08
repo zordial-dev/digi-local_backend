@@ -38,6 +38,11 @@ router.get('/on-hold', authenticateAdminToken, requirePower('VENDORS'), adminPan
 router.get('/hold', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.listOnHoldVendors);
 router.get('/locations/suggestions', storefrontController.getLocations);
 router.get('/locations', storefrontController.getLocations);
+const ratingController = require('../../controllers/Rating/ratingController');
+
+// Vendor Self Ratings & Customer Reviews
+router.get('/ratings', ratingController.getVendorSelfRatings);
+router.get('/reviews', ratingController.getVendorSelfRatings);
 router.get('/status', vendorAuthController.getVendorStatus);
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.post('/resubmit', vendorAuthController.resubmitVendorRequest);
@@ -110,7 +115,7 @@ router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
 router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
 
 router.get('/:id', (req, res, next) => {
-    if (req.params.id === 'categories' || req.params.id === 'search' || req.params.id === 'locations') return next();
+    if (req.params.id === 'categories' || req.params.id === 'search' || req.params.id === 'locations' || req.params.id === 'ratings' || req.params.id === 'reviews') return next();
     return storefrontController.getVendorStorefront(req, res, next);
 });
 router.delete('/:vendorId', vendorPanelController.deleteStore);

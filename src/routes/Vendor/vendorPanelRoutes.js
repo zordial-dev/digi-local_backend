@@ -82,6 +82,19 @@ router.post('/upload-logo', upload.any(), handleMulterError, vendorPanelControll
 router.post('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
 router.put('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
 
+const ratingController = require('../../controllers/Rating/ratingController');
+
+// GET & POST Vendor Ratings and Reviews in vendorPanel
+router.get('/ratings', ratingController.getVendorSelfRatings);
+router.get('/reviews', ratingController.getVendorSelfRatings);
+router.get('/:vendorId/ratings', ratingController.getVendorSelfRatings);
+router.get('/:vendorId/reviews', ratingController.getVendorSelfRatings);
+router.get('/:vendorId/ratings/summary', ratingController.getVendorRatingSummary);
+router.post('/:vendorId/ratings', ratingController.submitRating);
+router.post('/:vendorId/reviews', ratingController.submitRating);
+router.post('/ratings/:ratingId/reply', ratingController.replyToRating);
+router.post('/reviews/:ratingId/reply', ratingController.replyToRating);
+
 // Direct vendor status check
 router.get('/status', vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
