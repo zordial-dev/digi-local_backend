@@ -22,6 +22,7 @@ const enquiryController = require('../controllers/Vendor/enquiryController');
 const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
+const { authenticateToken } = require('../middleware/auth');
 
 
 // ── Health & Observability Routes ───────────────────────────
@@ -166,13 +167,13 @@ router.put(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/t
 router.post(['/api/admin/support/tickets/:ticketId/attachments', '/api/support/tickets/:ticketId/attachments', '/api/support/tickets/:id/attachments'], supportUpload.single('file'), supportController.uploadAttachment);
 
 // ── Resident User Mobile App & Website (user-app) ────────────────────────
-router.post(['/api/user/tickets', '/api/users/tickets'], supportController.createCustomerTicket);
-router.get(['/api/user/tickets', '/api/users/tickets'], supportController.getUserTickets);
-router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply', '/api/users/tickets/:ticketId/reply', '/api/users/tickets/:id/reply'], supportController.userReplyToTicket);
+router.post(['/api/user/tickets', '/api/users/tickets'], authenticateToken, supportController.createCustomerTicket);
+router.get(['/api/user/tickets', '/api/users/tickets'], authenticateToken, supportController.getUserTickets);
+router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply', '/api/users/tickets/:ticketId/reply', '/api/users/tickets/:id/reply'], authenticateToken, supportController.userReplyToTicket);
 
 // ── Merchant Vendor Mobile App & Portal (vendor-portal) ──────────────────
-router.post(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.createVendorTicket);
-router.get(['/api/vendor/tickets', '/api/vendors/tickets'], supportController.getVendorTickets);
+router.post(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, supportController.createVendorTicket);
+router.get(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, supportController.getVendorTickets);
 router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId'], vendorPanelController.getVendorPurchases);
 
 

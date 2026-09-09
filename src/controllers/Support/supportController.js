@@ -1186,6 +1186,14 @@ async function getUserTickets(req, res) {
     const email = req.query.email || req.user?.email;
     const userId = req.user?.user_id || req.user?.id;
 
+    if (!userId && !email) {
+      return res.status(200).json({
+        code: 200,
+        status: 'success',
+        data: []
+      });
+    }
+
     let sql = `SELECT * FROM support_tickets WHERE 1=1`;
     const params = [];
 
@@ -1198,8 +1206,6 @@ async function getUserTickets(req, res) {
     } else if (userId) {
       sql += ` AND reporter_user_id = ?`;
       params.push(String(userId));
-    } else {
-      sql += ` AND user_type = 'user'`;
     }
 
     sql += ` ORDER BY created_at DESC`;
@@ -1369,6 +1375,14 @@ async function getVendorTickets(req, res) {
     const vendorId = req.user?.vendor_id || req.user?.id;
     const storeName = req.user?.store_name;
 
+    if (!vendorId && !email && !storeName) {
+      return res.status(200).json({
+        code: 200,
+        status: 'success',
+        data: []
+      });
+    }
+
     let sql = `SELECT * FROM support_tickets WHERE 1=1`;
     const params = [];
 
@@ -1384,8 +1398,6 @@ async function getVendorTickets(req, res) {
     } else if (storeName) {
       sql += ` AND (target_vendor = ? OR entity_name = ?)`;
       params.push(storeName, storeName);
-    } else {
-      sql += ` AND user_type = 'vendor'`;
     }
 
     sql += ` ORDER BY created_at DESC`;

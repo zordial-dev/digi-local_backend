@@ -57,9 +57,9 @@ router.get('/:userId/orders', usersController.getUserOrders);
 router.get('/:userId/enquiries', enquiryController.getUserEnquiries);
 
 // B5. Resident User Support Tickets (user-app)
-router.post('/tickets', supportController.createCustomerTicket);
-router.get('/tickets', supportController.getUserTickets);
-router.post(['/tickets/:ticketId/reply', '/tickets/:id/reply'], supportController.userReplyToTicket);
+router.post('/tickets', authenticateToken, supportController.createCustomerTicket);
+router.get('/tickets', authenticateToken, supportController.getUserTickets);
+router.post(['/tickets/:ticketId/reply', '/tickets/:id/reply'], authenticateToken, supportController.userReplyToTicket);
 
 module.exports = router;
 
