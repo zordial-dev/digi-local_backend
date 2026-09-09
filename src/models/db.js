@@ -247,7 +247,13 @@ async function createIndexes() {
     'CREATE INDEX IF NOT EXISTS idx_vendors_lower_store ON vendors (LOWER(store_name))',
     'CREATE INDEX IF NOT EXISTS idx_vendors_lower_name ON vendors (LOWER(vendor_name))',
     'CREATE INDEX IF NOT EXISTS idx_vendors_trgm_store ON vendors USING gin (LOWER(store_name) gin_trgm_ops)',
-    'CREATE INDEX IF NOT EXISTS idx_vendors_trgm_name ON vendors USING gin (LOWER(vendor_name) gin_trgm_ops)'
+    'CREATE INDEX IF NOT EXISTS idx_vendors_trgm_name ON vendors USING gin (LOWER(vendor_name) gin_trgm_ops)',
+
+    // Indexes for Payments & Cashfree Orders
+    'CREATE INDEX IF NOT EXISTS idx_payments_vendor_id ON payments (vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments (order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_payments_cf_order_id ON payments (cashfree_order_id)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_cf_order_id ON orders (cashfree_order_id)'
   ];
 
   for (const sql of indexesToCreate) {
@@ -343,6 +349,8 @@ async function setupTablesPg() {
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS order_amount DECIMAL(10,2)`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS assigned_to VARCHAR(128) DEFAULT 'Super Admin'`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS sla_minutes_remaining INT DEFAULT 120`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS sla_start_time TIMESTAMP WITH TIME ZONE`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS sla_extension_minutes INT DEFAULT 0`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS followers TEXT[] DEFAULT '{}'`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS merged_into VARCHAR(64)`,
     `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS merged_children TEXT[] DEFAULT '{}'`,
@@ -426,7 +434,29 @@ async function setupTablesPg() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS strikes INT DEFAULT 0`,
     `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
-    `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`
+    `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'PENDING'`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'COD'`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashfree_order_id VARCHAR(100)`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashfree_payment_id VARCHAR(100)`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS order_id VARCHAR(100)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS vendor_id BIGINT`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS amount DECIMAL(10,2) DEFAULT 0.00`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(10) DEFAULT 'INR'`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'PENDING'`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'CASHFREE'`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS payment_gateway VARCHAR(50) DEFAULT 'CASHFREE'`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS cashfree_order_id VARCHAR(100)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS cashfree_payment_id VARCHAR(100)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_name VARCHAR(255)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS notes TEXT`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
   ];
 
   await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => { })));
@@ -440,6 +470,29 @@ async function setupTablesPg() {
       state VARCHAR(100) NOT NULL,
       pincode VARCHAR(20) NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `).catch(() => { });
+
+  // Ensure payments table
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS payments (
+      payment_id BIGSERIAL PRIMARY KEY,
+      order_id VARCHAR(100),
+      vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE SET NULL,
+      user_id VARCHAR(100),
+      amount DECIMAL(10,2) NOT NULL,
+      currency VARCHAR(10) DEFAULT 'INR',
+      payment_status VARCHAR(50) DEFAULT 'PENDING',
+      payment_method VARCHAR(50) DEFAULT 'CASHFREE',
+      payment_gateway VARCHAR(50) DEFAULT 'CASHFREE',
+      cashfree_order_id VARCHAR(100),
+      cashfree_payment_id VARCHAR(100),
+      customer_name VARCHAR(255),
+      customer_phone VARCHAR(50),
+      customer_email VARCHAR(255),
+      notes TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `).catch(() => { });
 

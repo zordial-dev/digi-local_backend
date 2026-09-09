@@ -1296,8 +1296,19 @@ async function resetUserPassword(req, res) { return respond(res, 200, {}, 'Passw
 async function deleteUser(req, res) { return respond(res, 200, {}, 'User deleted.'); }
 async function getUserAnalytics(req, res) { return respond(res, 200, {}, 'User analytics.'); }
 
-// Module 5: Subscriptions & Billing
-async function listSubscriptions(req, res) { return respond(res, 200, [], 'Subscriptions list.'); }
+async function listSubscriptions(req, res) {
+  try {
+    const subRes = await query(`
+      SELECT s.*, v.store_name, v.vendor_name 
+      FROM subscriptions s 
+      LEFT JOIN vendors v ON s.vendor_id = v.vendor_id 
+      ORDER BY s.subscription_id DESC
+    `).catch(() => ({ rows: [] }));
+    return respond(res, 200, subRes.rows || [], 'Subscriptions list retrieved from database.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch subscriptions.');
+  }
+}
 async function getFinancialStats(req, res) { return respond(res, 200, {}, 'Financial stats.'); }
 async function renewSubscription(req, res) { return respond(res, 200, {}, 'Subscription renewed.'); }
 async function cancelSubscription(req, res) { return respond(res, 200, {}, 'Subscription cancelled.'); }
@@ -1441,17 +1452,63 @@ async function markAllNotificationsRead(req, res) { return respond(res, 200, {},
 
 
 
-async function getRevenueDashboard(req, res) { return respond(res, 200, { total_revenue: 0 }, 'Revenue dashboard.'); }
+async function getRevenueDashboard(req, res) {
+  try {
+    const revRes = await query(`
+      SELECT 
+        COALESCE(SUM(total_amount), 0) as total_revenue,
+        COUNT(*) as total_orders,
+        COUNT(CASE WHEN UPPER(COALESCE(payment_status, '')) IN ('SUCCESS', 'PAID') THEN 1 END) as paid_orders
+      FROM orders
+    `).catch(() => ({ rows: [{ total_revenue: 0, total_orders: 0, paid_orders: 0 }] }));
+    const row = revRes.rows[0] || {};
+    return respond(res, 200, {
+      total_revenue: parseFloat(row.total_revenue || 0),
+      total_orders: parseInt(row.total_orders || 0, 10),
+      paid_orders: parseInt(row.paid_orders || 0, 10)
+    }, 'Revenue dashboard retrieved from database.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch revenue dashboard.');
+  }
+}
 async function getPlatformConfig(req, res) { return respond(res, 200, { platform_name: 'DigiLocal' }, 'Platform config.'); }
 async function updateBrandingConfig(req, res) { return respond(res, 200, {}, 'Branding updated.'); }
 async function updateAdminProfile(req, res) { return respond(res, 200, {}, 'Admin profile updated.'); }
 async function changeAdminPassword(req, res) { return respond(res, 200, {}, 'Password changed.'); }
 async function updateSettingsSection(req, res) { return respond(res, 200, {}, 'Settings updated.'); }
 async function sendTestEmail(req, res) { return respond(res, 200, {}, 'Test email sent.'); }
-async function getDashboardData(req, res) { return respond(res, 200, { total_vendors: 0, pending_vendors: 0, total_revenue: 0 }, 'Dashboard metrics.'); }
+async function getDashboardData(req, res) {
+  try {
+    const [vendorsRes, pendingRes, usersRes, societiesRes, ordersRes, revRes] = await Promise.all([
+      query(`SELECT COUNT(*) as count FROM vendors`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*) as count FROM vendors WHERE UPPER(COALESCE(status, 'active')) = 'PENDING'`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*) as count FROM users`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*) as count FROM societies`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COUNT(*) as count FROM orders`).catch(() => ({ rows: [{ count: 0 }] })),
+      query(`SELECT COALESCE(SUM(total_amount), 0) as total FROM orders WHERE UPPER(COALESCE(payment_status, '')) IN ('SUCCESS', 'PAID')`).catch(() => ({ rows: [{ total: 0 }] }))
+    ]);
+    return respond(res, 200, {
+      total_vendors: parseInt(vendorsRes.rows[0]?.count || 0, 10),
+      pending_vendors: parseInt(pendingRes.rows[0]?.count || 0, 10),
+      total_users: parseInt(usersRes.rows[0]?.count || 0, 10),
+      total_societies: parseInt(societiesRes.rows[0]?.count || 0, 10),
+      total_orders: parseInt(ordersRes.rows[0]?.count || 0, 10),
+      total_revenue: parseFloat(revRes.rows[0]?.total || 0)
+    }, 'Dashboard metrics retrieved from database successfully.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch dashboard metrics.');
+  }
+}
 async function getVendorDetails(req, res) { return getVendorById(req, res); }
 async function toggleSubAdminStatus(req, res) { return respond(res, 200, {}, 'Sub-admin status toggled.'); }
-async function listAuditLogs(req, res) { return respond(res, 200, [], 'Audit logs list.'); }
+async function listAuditLogs(req, res) {
+  try {
+    const logsRes = await query(`SELECT * FROM backend_audit_logs ORDER BY timestamp DESC LIMIT 200`).catch(() => ({ rows: [] }));
+    return respond(res, 200, logsRes.rows || [], 'Audit logs retrieved from database.');
+  } catch (err) {
+    return sendStandardError(res, 500, 'Failed to fetch audit logs.');
+  }
+}
 
 
 async function downloadPaymentReceipt(req, res) { return respond(res, 200, {}, 'Receipt.'); }

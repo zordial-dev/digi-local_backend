@@ -1,6 +1,8 @@
-const { query, closeDb } = require('../src/models/db');
+require('dotenv').config();
+const { initDb, query, closeDb } = require('../src/models/db');
 
 async function showCounts() {
+  await initDb();
   console.log('\n📊 CURRENT DATABASE TABLE ROW COUNTS');
   console.log('==================================================');
 

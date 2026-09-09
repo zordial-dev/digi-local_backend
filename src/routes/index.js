@@ -48,7 +48,7 @@ router.use('/api/stores', vendorAuthRoutes);         // Stores alias for website
 router.use('/api/users', userRoutes);               // Resident user auth & profile
 router.use('/api/orders', orderRoutes);             // Customer orders & status pipeline
 router.use('/api/vendorPanel', vendorPanelRoutes);  // Vendor dashboard & inventory
-router.use('/api/admin', adminRoutes);               // Admin portal
+router.use(['/api/admin', '/api/admin/panel'], adminRoutes);               // Admin portal
 router.use('/api/auth', authRoutes);                 // Admin Auth & Profile
 router.use('/api/sub-admins', subAdminsRoutes);      // Sub-Admins & RBAC
 router.use('/api/subscriptions', subscriptionsRoutes); // Financial Analytics & Subscriptions
@@ -102,6 +102,17 @@ router.post('/api/people/:id/unblock', adminPanelController.unblockUser);
 router.put('/api/people/:id/status', adminPanelController.updateUserStatus);
 router.patch('/api/people/:id/status', adminPanelController.updateUserStatus);
 router.delete('/api/people/:id', adminPanelController.deleteUser);
+
+const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
+
+// ── Cashfree Payment Gateway Routes (PG v3) ───────────────────
+router.post(['/api/payments/cashfree/create-order-session', '/api/payments/cashfree/create-session'], cashfreePaymentController.createOrderPaymentSession);
+router.post(['/api/payments/cashfree/verify', '/api/payments/cashfree/verify-order'], cashfreePaymentController.verifyOrderPayment);
+router.post('/api/payments/cashfree/pay-vendor-direct', cashfreePaymentController.payVendorDirect);
+router.post('/api/payments/cashfree/verify-direct', cashfreePaymentController.verifyDirectPayment);
+router.post('/api/payments/cashfree/webhook', cashfreePaymentController.cashfreeWebhook);
+router.get(['/api/vendors/:vendorId/cashfree-payments', '/api/vendor/:vendorId/cashfree-payments'], cashfreePaymentController.getVendorCashfreePayments);
+router.get('/api/admin/payments/cashfree-ledger', cashfreePaymentController.getAdminCashfreeLedger);
 
 router.get('/api/payments/transactions', adminPanelController.getPaymentTransactions);
 router.get('/api/payments/revenue-dashboard', adminPanelController.getRevenueDashboard);

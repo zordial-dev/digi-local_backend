@@ -196,9 +196,12 @@ CREATE TABLE IF NOT EXISTS orders (
     status VARCHAR(50) DEFAULT 'PENDING',
     payment_method VARCHAR(50) DEFAULT 'COD',
     payment_status VARCHAR(50) DEFAULT 'PENDING',
+    cashfree_order_id VARCHAR(100),
+    cashfree_payment_id VARCHAR(100),
+    paid_at TIMESTAMP,
     delivery_address TEXT,
     customer_name VARCHAR(255),
-    customer_phone VARCHAR(20),
+    customer_phone VARCHAR(50),
     order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -248,6 +251,8 @@ CREATE TABLE IF NOT EXISTS support_tickets (
     order_amount DECIMAL(10, 2),
     assigned_to VARCHAR(128) DEFAULT 'Super Admin',
     sla_minutes_remaining INT DEFAULT 120,
+    sla_start_time TIMESTAMP WITH TIME ZONE,
+    sla_extension_minutes INT DEFAULT 0,
     followers TEXT[] DEFAULT '{}',
     merged_into VARCHAR(64),
     merged_children TEXT[] DEFAULT '{}',
@@ -328,6 +333,26 @@ CREATE TABLE IF NOT EXISTS vendor_ratings (
     status VARCHAR(20) DEFAULT 'PUBLISHED',
     reply_text TEXT DEFAULT NULL,
     replied_at TIMESTAMP DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS payments (
+    payment_id BIGSERIAL PRIMARY KEY,
+    order_id VARCHAR(100),
+    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE SET NULL,
+    user_id VARCHAR(100),
+    amount DECIMAL(10,2) NOT NULL,
+    currency VARCHAR(10) DEFAULT 'INR',
+    payment_status VARCHAR(50) DEFAULT 'PENDING',
+    payment_method VARCHAR(50) DEFAULT 'CASHFREE',
+    payment_gateway VARCHAR(50) DEFAULT 'CASHFREE',
+    cashfree_order_id VARCHAR(100),
+    cashfree_payment_id VARCHAR(100),
+    customer_name VARCHAR(255),
+    customer_phone VARCHAR(50),
+    customer_email VARCHAR(255),
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

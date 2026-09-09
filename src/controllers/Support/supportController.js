@@ -6,12 +6,14 @@ const { query } = require('../../models/db');
  * Format IST Readable Timestamp e.g. "02 Sep 2026, 06:32 am IST"
  */
 function formatIstReadable(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return '';
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-  let hours = date.getHours();
-  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
   const ampm = hours >= 12 ? 'pm' : 'am';
   hours = hours % 12;
   hours = hours ? hours : 12;
@@ -23,13 +25,15 @@ function formatIstReadable(date = new Date()) {
  * Format IST ISO String e.g. "2026-09-02T06:32:11+05:30"
  */
 function formatIstIso(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d.getTime())) return new Date().toISOString();
   const pad = (num) => String(num).padStart(2, '0');
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
+  const year = d.getFullYear();
+  const month = pad(d.getMonth() + 1);
+  const day = pad(d.getDate());
+  const hours = pad(d.getHours());
+  const minutes = pad(d.getMinutes());
+  const seconds = pad(d.getSeconds());
   return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}+05:30`;
 }
 
@@ -41,7 +45,7 @@ const SLA_MAP = {
   low: 240
 };
 
-// In-Memory Storage for Fallback and Fast Sync
+// MemoryStore kept empty strictly for backward compatibility with existing references
 const memoryStore = {
   tickets: [],
   messages: [],
@@ -58,164 +62,87 @@ const memoryStore = {
 };
 
 /**
- * Ensures realistic seed tickets with both active and overdue/negative SLA timers.
- * Prevents empty state and allows immediate validation that tickets NEVER erase on timer expiry.
+ * No-op to strictly avoid injecting mock seed tickets.
+ * All support ticket operations query and persist directly to the PostgreSQL database.
  */
 function ensureInitialTickets() {
-  if (memoryStore.tickets.length > 0) return;
-
-  const now = Date.now();
-  const createPastDate = (minutesAgo) => new Date(now - minutesAgo * 60 * 1000);
-
-  const seedData = [
-    {
-      id: 't-1788287963701',
-      ticket_number: 'TICK-9081',
-      subject: 'URGENT: Wrong Item Received & Spoiled Dairy Delivery',
-      description: 'Customer in Tower B received spoiled milk and expired bread from Daily Fresh Mart. Immediate replacement or refund requested.',
-      category: 'user_vs_vendor',
-      priority: 'urgent', // 15 mins SLA
-      status: 'open',
-      user_type: 'user',
-      source: 'mobile_app',
-      reporter_name: 'Rohit Verma',
-      reporter_email: 'rohit.verma@gmail.com',
-      entity_name: 'Palm Grove Heights',
-      target_vendor: 'Daily Fresh Mart',
-      order_id: 'ORD-9102',
-      order_amount: 380.00,
-      assigned_to: 'Super Admin',
-      created_at: createPastDate(45).toISOString(), // 45m ago -> breached by 30 mins!
-      created_at_ist: formatIstIso(createPastDate(45)),
-      created_at_readable: formatIstReadable(createPastDate(45)),
-      updated_at: formatIstIso(createPastDate(45))
-    },
-    {
-      id: 't-1788287963713',
-      ticket_number: 'TICK-9082',
-      subject: 'Missing Item & Delayed Delivery Complaint',
-      description: 'Customer reported 2 items missing from Order #ORD-9842 fulfilled by Aarushi Sweets.',
-      category: 'user_vs_vendor',
-      priority: 'high', // 45 mins SLA
-      status: 'in_progress',
-      user_type: 'user',
-      source: 'mobile_app',
-      reporter_name: 'Garvit Sharma',
-      reporter_email: 'garvit@gmail.com',
-      entity_name: 'Greenwood Residency',
-      target_vendor: 'Aarushi Sweets',
-      order_id: 'ORD-9842',
-      order_amount: 707.00,
-      assigned_to: 'Aarushi Admin',
-      created_at: createPastDate(120).toISOString(), // 2h ago -> breached by 75 mins!
-      created_at_ist: formatIstIso(createPastDate(120)),
-      created_at_readable: formatIstReadable(createPastDate(120)),
-      updated_at: formatIstIso(createPastDate(90))
-    },
-    {
-      id: 't-1788287963725',
-      ticket_number: 'TICK-9083',
-      subject: 'Payment Debited but Order Status Failed on UPI',
-      description: 'Resident paid via Cashfree UPI Intent; funds debited from ICICI account but order failed to confirm.',
-      category: 'billing',
-      priority: 'medium', // 120 mins SLA
-      status: 'in_progress',
-      user_type: 'user',
-      source: 'landing_website',
-      reporter_name: 'Pooja Iyer',
-      reporter_email: 'pooja.iyer@gmail.com',
-      entity_name: 'Sunrise Towers',
-      target_vendor: 'DigiLocal Platform',
-      order_id: 'ORD-9855',
-      order_amount: 1450.00,
-      assigned_to: 'Super Admin',
-      created_at: createPastDate(30).toISOString(), // 30m ago -> 90 mins remaining!
-      created_at_ist: formatIstIso(createPastDate(30)),
-      created_at_readable: formatIstReadable(createPastDate(30)),
-      updated_at: formatIstIso(createPastDate(30))
-    },
-    {
-      id: 't-1788287963738',
-      ticket_number: 'TICK-9084',
-      subject: 'Vendor Weekly Payout Bank IFSC Mismatch Query',
-      description: 'Vendor inquiries why last Friday settlement did not reflect in HDFC account.',
-      category: 'billing',
-      priority: 'low', // 240 mins SLA
-      status: 'open',
-      user_type: 'vendor',
-      source: 'vendor_portal',
-      reporter_name: "Flower's Point",
-      reporter_email: 'aarushi20@gmail.com',
-      entity_name: "Flower's Point",
-      target_vendor: "Flower's Point",
-      order_id: null,
-      order_amount: null,
-      assigned_to: 'Super Admin',
-      created_at: createPastDate(60).toISOString(), // 60m ago -> 180 mins remaining!
-      created_at_ist: formatIstIso(createPastDate(60)),
-      created_at_readable: formatIstReadable(createPastDate(60)),
-      updated_at: formatIstIso(createPastDate(60))
-    },
-    {
-      id: 't-1788287963749',
-      ticket_number: 'TICK-9080',
-      subject: 'Refund Processed for Cancelled Grocery Order',
-      description: 'Order was cancelled before vendor dispatch. Refund initiated to wallet.',
-      category: 'billing',
-      priority: 'high',
-      status: 'resolved',
-      user_type: 'user',
-      source: 'mobile_app',
-      reporter_name: 'Amit Patel',
-      reporter_email: 'amit.patel@gmail.com',
-      entity_name: 'Greenwood Residency',
-      target_vendor: 'Fresh Supermarket',
-      order_id: 'ORD-9021',
-      order_amount: 540.00,
-      assigned_to: 'Aarushi Admin',
-      created_at: createPastDate(240).toISOString(),
-      created_at_ist: formatIstIso(createPastDate(240)),
-      created_at_readable: formatIstReadable(createPastDate(240)),
-      updated_at: createPastDate(210).toISOString()
-    }
-  ];
-
-  seedData.forEach(item => memoryStore.tickets.push(item));
+  // Pure DB mode: Do not populate mock seed tickets into any store
 }
 
 /**
- * Dynamically computes SLA status and remaining time for a ticket.
- * CRITICAL RULE: When timer passes the deadline, the ticket is NEVER erased.
- * Instead, sla_minutes_remaining becomes NEGATIVE (e.g. -15, -45, -120),
- * is_sla_breached becomes true, and human-readable overdue strings are generated.
+ * Helper to fetch current SLA configuration from PostgreSQL database.
  */
-function calculateTicketSla(ticket) {
+async function fetchSlaConfigFromDb() {
+  try {
+    const res = await query(`SELECT * FROM support_sla_config LIMIT 1`);
+    if (res.rows && res.rows.length > 0) {
+      const row = res.rows[0];
+      return {
+        urgent_sla_minutes: row.urgent_sla_minutes || 15,
+        high_sla_minutes: row.high_sla_minutes || 45,
+        medium_sla_minutes: row.medium_sla_minutes || 120,
+        low_sla_minutes: row.low_sla_minutes || 240,
+        auto_escalate_on_breach: row.auto_escalate_on_breach !== false,
+        notify_assigned_staff: row.notify_assigned_staff !== false
+      };
+    }
+  } catch (_) { }
+  return {
+    urgent_sla_minutes: 15,
+    high_sla_minutes: 45,
+    medium_sla_minutes: 120,
+    low_sla_minutes: 240,
+    auto_escalate_on_breach: true,
+    notify_assigned_staff: true
+  };
+}
+
+/**
+ * Helper to query ticket from PostgreSQL database by ID or ticket_number.
+ */
+async function findTicketInDb(ticketIdOrNum) {
+  if (!ticketIdOrNum) return null;
+  const term = String(ticketIdOrNum).trim();
+  const res = await query(
+    `SELECT * FROM support_tickets WHERE id = ? OR ticket_number = ? LIMIT 1`,
+    [term, term]
+  );
+  return res.rows && res.rows.length > 0 ? res.rows[0] : null;
+}
+
+/**
+ * Dynamically computes SLA status and remaining time for a database ticket record.
+ */
+function calculateTicketSla(ticket, slaConfig = null) {
   if (!ticket) return ticket;
   const priority = (ticket.priority || 'medium').toLowerCase();
-  
-  // Total SLA allowance in minutes
-  const config = memoryStore.sla_config || {};
-  const totalSlaMinutes = ticket.total_sla_minutes || 
-    (config[`${priority}_sla_minutes`]) || 
-    SLA_MAP[priority] || 
+
+  const config = slaConfig || {
+    urgent_sla_minutes: 15,
+    high_sla_minutes: 45,
+    medium_sla_minutes: 120,
+    low_sla_minutes: 240,
+    auto_escalate_on_breach: true,
+    notify_assigned_staff: true
+  };
+
+  const totalSlaMinutes = ticket.total_sla_minutes ||
+    config[`${priority}_sla_minutes`] ||
+    SLA_MAP[priority] ||
     120;
 
-  // Additional SLA extension (if granted by admin)
   const extensionMinutes = Number(ticket.sla_extension_minutes || 0);
   const effectiveTotalMinutes = totalSlaMinutes + extensionMinutes;
 
-  // Resolve base creation date or SLA start date
   const baseTimeStr = ticket.sla_start_time || ticket.created_at || ticket.created_at_ist || new Date().toISOString();
   let baseDate = new Date(baseTimeStr);
   if (isNaN(baseDate.getTime())) {
     baseDate = new Date();
   }
 
-  // Calculate deadline
   const deadlineMs = baseDate.getTime() + (effectiveTotalMinutes * 60 * 1000);
   const deadlineDate = new Date(deadlineMs);
 
-  // If ticket is resolved/closed, freeze timer at resolution time (updated_at)
   const isTerminal = ['resolved', 'closed'].includes((ticket.status || '').toLowerCase());
   let compareTimeMs = Date.now();
   if (isTerminal && ticket.updated_at) {
@@ -225,7 +152,6 @@ function calculateTicketSla(ticket) {
     }
   }
 
-  // Difference in minutes (NEGATIVE when compareTimeMs > deadlineMs)
   const diffMinutes = Math.round((deadlineMs - compareTimeMs) / 60000);
   const isBreached = diffMinutes < 0 && !isTerminal;
   const isMet = diffMinutes >= 0 && isTerminal;
@@ -254,119 +180,69 @@ function calculateTicketSla(ticket) {
 
   return {
     ...ticket,
+    order_amount: ticket.order_amount != null ? parseFloat(ticket.order_amount) : null,
     total_sla_minutes: totalSlaMinutes,
     sla_extension_minutes: extensionMinutes,
     effective_sla_minutes: effectiveTotalMinutes,
-    sla_minutes_remaining: diffMinutes, // NEGATIVE when timer ends (e.g. -45)
+    sla_minutes_remaining: diffMinutes,
     is_sla_breached: isBreached,
     is_overdue: isBreached,
-    sla_status: slaStatus, // 'within_sla' | 'breached' | 'met' | 'breached_resolved'
+    sla_status: slaStatus,
     sla_deadline_ist: formatIstIso(deadlineDate),
     sla_deadline_readable: formatIstReadable(deadlineDate),
-    sla_time_display: slaTimeDisplay, // e.g. "-01h 15m" or "+00h 45m"
+    sla_time_display: slaTimeDisplay,
     overdue_by_minutes: isBreached ? absMinutes : 0,
-    overdue_readable: overdueReadable, // e.g. "Overdue by 1h 15m" or null
+    overdue_readable: overdueReadable,
     auto_escalate_on_breach: Boolean(config.auto_escalate_on_breach),
-    is_retained: true, // Guarantees ticket is never purged
-    erased: false      // Explicit signal to frontend: NEVER erase or remove
+    is_retained: true,
+    erased: false
   };
 }
 
-/**
- * Helper to find ticket by ID or Ticket Number
- */
-function findTicket(ticketIdOrNum) {
-  if (!ticketIdOrNum) return null;
-  ensureInitialTickets();
-  const term = String(ticketIdOrNum).trim().toLowerCase();
-  return memoryStore.tickets.find(t => 
-    String(t.id).toLowerCase() === term || 
-    String(t.ticket_number).toLowerCase() === term
-  ) || null;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION I: Admin Panel Support Desk Endpoints (adminMock)
+// SECTION I: Admin Panel Support Desk Endpoints (Pure DB)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * 1. Fetch All Support Tickets
+ * 1. Fetch All Support Tickets from PostgreSQL Database
  * GET /api/admin/support/tickets & GET /api/support/tickets
- * Query Params:
- *  - status: all | open | in_progress | resolved | closed
- *  - category: all | user_vs_vendor | billing | technical | etc.
- *  - sla_status: all | breached | overdue | within_sla | active | resolved
- *  - sort_by: created_at | most_overdue | sla_urgent | oldest
- *  - search: query string
  */
 async function listAdminTickets(req, res) {
   try {
-    ensureInitialTickets();
-    let { status, category, search, sla_status, sort_by } = req.query;
-    let list = [...memoryStore.tickets];
+    const { status, category, search, sla_status, sort_by } = req.query || {};
 
-    // DB Sync if available
-    try {
-      const dbRes = await query(`SELECT * FROM support_tickets ORDER BY created_at DESC`);
-      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
-        dbRes.rows.forEach(dbRow => {
-          const idx = list.findIndex(t => t.id === dbRow.id || t.ticket_number === dbRow.ticket_number);
-          const formatted = {
-            id: dbRow.id,
-            ticket_number: dbRow.ticket_number,
-            subject: dbRow.subject,
-            description: dbRow.description || '',
-            category: dbRow.category,
-            priority: dbRow.priority || 'medium',
-            status: dbRow.status || 'open',
-            user_type: dbRow.user_type || 'user',
-            source: dbRow.source || 'landing_website',
-            reporter_name: dbRow.reporter_name || '',
-            reporter_email: dbRow.reporter_email || '',
-            entity_name: dbRow.entity_name || '',
-            target_vendor: dbRow.target_vendor || '',
-            order_id: dbRow.order_id || null,
-            order_amount: dbRow.order_amount ? parseFloat(dbRow.order_amount) : null,
-            assigned_to: dbRow.assigned_to || 'Super Admin',
-            created_at: dbRow.created_at || new Date().toISOString(),
-            created_at_ist: dbRow.created_at_ist || formatIstIso(),
-            created_at_readable: dbRow.created_at_readable || formatIstReadable(),
-            updated_at: dbRow.updated_at || formatIstIso()
-          };
-          if (idx !== -1) list[idx] = { ...list[idx], ...formatted };
-          else list.unshift(formatted);
-        });
-      }
-    } catch (_) { }
+    let sql = `SELECT * FROM support_tickets WHERE 1=1`;
+    const params = [];
 
-    // Dynamically calculate live SLA status on every ticket
-    list = list.map(t => calculateTicketSla(t));
-
-    // Status filter
     if (status && status !== 'all') {
-      const sTerm = String(status).toLowerCase();
-      list = list.filter(t => (t.status || '').toLowerCase() === sTerm);
+      sql += ` AND LOWER(status) = LOWER(?)`;
+      params.push(String(status).trim());
     }
 
-    // Category filter
     if (category && category !== 'all') {
-      const cTerm = String(category).toLowerCase();
-      list = list.filter(t => (t.category || '').toLowerCase() === cTerm);
+      sql += ` AND LOWER(category) = LOWER(?)`;
+      params.push(String(category).trim());
     }
 
-    // Search filter
     if (search) {
-      const q = String(search).toLowerCase();
-      list = list.filter(t => 
-        (t.ticket_number && t.ticket_number.toLowerCase().includes(q)) ||
-        (t.reporter_name && t.reporter_name.toLowerCase().includes(q)) ||
-        (t.reporter_email && t.reporter_email.toLowerCase().includes(q)) ||
-        (t.subject && t.subject.toLowerCase().includes(q)) ||
-        (t.target_vendor && t.target_vendor.toLowerCase().includes(q))
-      );
+      const q = `%${String(search).trim().toLowerCase()}%`;
+      sql += ` AND (
+        LOWER(ticket_number) LIKE ? OR
+        LOWER(reporter_name) LIKE ? OR
+        LOWER(reporter_email) LIKE ? OR
+        LOWER(subject) LIKE ? OR
+        LOWER(COALESCE(target_vendor, '')) LIKE ?
+      )`;
+      params.push(q, q, q, q, q);
     }
 
-    // SLA Status filter (breached/overdue vs within_sla vs all)
+    sql += ` ORDER BY created_at DESC`;
+
+    const dbRes = await query(sql, params);
+    const slaConfig = await fetchSlaConfigFromDb();
+
+    let list = (dbRes.rows || []).map(t => calculateTicketSla(t, slaConfig));
+
     if (sla_status && sla_status !== 'all') {
       const slaTerm = String(sla_status).toLowerCase();
       if (slaTerm === 'breached' || slaTerm === 'overdue') {
@@ -378,17 +254,13 @@ async function listAdminTickets(req, res) {
       }
     }
 
-    // Sorting
     if (sort_by === 'most_overdue') {
-      // Most negative first (e.g. -180m before -15m)
       list.sort((a, b) => a.sla_minutes_remaining - b.sla_minutes_remaining);
     } else if (sort_by === 'sla_urgent') {
-      // Smallest remaining time first
       list.sort((a, b) => a.sla_minutes_remaining - b.sla_minutes_remaining);
     } else if (sort_by === 'oldest') {
       list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
     } else {
-      // Default: newest first
       list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
 
@@ -399,21 +271,15 @@ async function listAdminTickets(req, res) {
     return res.status(200).json({
       code: 200,
       status: 'success',
-      message: 'Support tickets retrieved successfully (SLA timers dynamically calculated; expired tickets are permanently retained with negative timer).',
-      meta: {
-        total_tickets: totalCount,
-        breached_tickets_count: breachedCount,
-        within_sla_count: withinSlaCount,
-        never_erased_guarantee: true
-      },
+      message: 'Admin support tickets retrieved successfully from database.',
+      total: totalCount,
+      breached_count: breachedCount,
+      within_sla_count: withinSlaCount,
       data: list
     });
   } catch (err) {
-    return res.status(500).json({
-      code: 500,
-      status: 'error',
-      message: err.message
-    });
+    console.error('[List Admin Tickets Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
 }
 
@@ -423,16 +289,17 @@ async function listAdminTickets(req, res) {
  */
 async function getOverdueTickets(req, res) {
   try {
-    ensureInitialTickets();
-    let list = memoryStore.tickets
-      .map(t => calculateTicketSla(t))
-      .filter(t => t.is_sla_breached && !['resolved', 'closed'].includes((t.status || '').toLowerCase()))
+    const slaConfig = await fetchSlaConfigFromDb();
+    const dbRes = await query(`SELECT * FROM support_tickets WHERE LOWER(status) NOT IN ('resolved', 'closed') ORDER BY created_at ASC`);
+    let list = (dbRes.rows || [])
+      .map(t => calculateTicketSla(t, slaConfig))
+      .filter(t => t.is_sla_breached)
       .sort((a, b) => a.sla_minutes_remaining - b.sla_minutes_remaining);
 
     return res.status(200).json({
       code: 200,
       status: 'success',
-      message: 'Overdue SLA-breached tickets retrieved successfully. Tickets are never erased and display negative elapsed time.',
+      message: 'Overdue SLA-breached tickets retrieved successfully from database.',
       meta: {
         overdue_count: list.length,
         most_overdue_minutes: list.length > 0 ? Math.abs(list[0].sla_minutes_remaining) : 0
@@ -450,29 +317,29 @@ async function getOverdueTickets(req, res) {
  */
 async function getSlaSummary(req, res) {
   try {
-    ensureInitialTickets();
-    const allEnriched = memoryStore.tickets.map(t => calculateTicketSla(t));
-    const activeTickets = allEnriched.filter(t => !['resolved', 'closed'].includes((t.status || '').toLowerCase()));
+    const slaConfig = await fetchSlaConfigFromDb();
+    const dbRes = await query(`SELECT * FROM support_tickets WHERE LOWER(status) NOT IN ('resolved', 'closed')`);
+    const activeTickets = (dbRes.rows || []).map(t => calculateTicketSla(t, slaConfig));
     const breached = activeTickets.filter(t => t.is_sla_breached);
     const withinSla = activeTickets.filter(t => !t.is_sla_breached);
 
     const totalOverdueMinutes = breached.reduce((sum, t) => sum + t.overdue_by_minutes, 0);
     const avgOverdueMinutes = breached.length > 0 ? Math.round(totalOverdueMinutes / breached.length) : 0;
-    const complianceRate = activeTickets.length > 0 
-      ? Math.round(((withinSla.length / activeTickets.length) * 100) * 10) / 10 
+    const complianceRate = activeTickets.length > 0
+      ? Math.round(((withinSla.length / activeTickets.length) * 100) * 10) / 10
       : 100;
 
     return res.status(200).json({
       code: 200,
       status: 'success',
-      message: 'SLA timer summary and breach telemetry.',
+      message: 'SLA timer summary and breach telemetry from database.',
       data: {
         total_active_tickets: activeTickets.length,
         within_sla_count: withinSla.length,
         breached_count: breached.length,
         sla_compliance_rate_percent: complianceRate,
         avg_overdue_minutes: avgOverdueMinutes,
-        policy_config: memoryStore.sla_config,
+        policy_config: slaConfig,
         breached_tickets: breached.map(b => ({
           ticket_id: b.id,
           ticket_number: b.ticket_number,
@@ -498,7 +365,7 @@ async function resetOrExtendSla(req, res) {
   try {
     const { ticketId, id } = req.params;
     const targetId = ticketId || id;
-    const ticket = findTicket(targetId);
+    const ticket = await findTicketInDb(targetId);
 
     if (!ticket) {
       return res.status(404).json({
@@ -510,37 +377,43 @@ async function resetOrExtendSla(req, res) {
     }
 
     const { additional_minutes, reset_to_now = false, reason = 'Admin granted SLA extension' } = req.body;
+    let newStartTime = ticket.sla_start_time || ticket.created_at;
+    let newExtensionMinutes = Number(ticket.sla_extension_minutes || 0);
 
     if (reset_to_now) {
-      ticket.sla_start_time = new Date().toISOString();
-      ticket.sla_extension_minutes = 0;
+      newStartTime = new Date().toISOString();
+      newExtensionMinutes = 0;
     } else if (additional_minutes && !isNaN(Number(additional_minutes))) {
-      ticket.sla_extension_minutes = (ticket.sla_extension_minutes || 0) + parseInt(additional_minutes, 10);
+      newExtensionMinutes += parseInt(additional_minutes, 10);
     } else {
-      ticket.sla_start_time = new Date().toISOString();
+      newStartTime = new Date().toISOString();
     }
 
-    ticket.updated_at = formatIstIso();
+    await query(
+      `UPDATE support_tickets 
+       SET sla_start_time = ?, sla_extension_minutes = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [newStartTime, newExtensionMinutes, ticket.id]
+    );
 
-    // Log internal staff note for audit trail
-    const logMsg = {
-      id: `m-${Date.now()}`,
-      ticket_id: ticket.id,
-      sender_name: req.user?.name || req.user?.username || 'Super Admin',
-      sender_role: 'admin',
-      message: `[SLA TIMER UPDATED] ${reason}. (Reset: ${reset_to_now}, Extension: +${additional_minutes || 0} mins).`,
-      is_internal_note: true,
-      created_at_ist: formatIstIso(),
-      created_at_readable: formatIstReadable()
-    };
-    memoryStore.messages.push(logMsg);
+    // Insert staff internal note for audit trail
+    const senderName = req.user?.name || req.user?.username || 'Super Admin';
+    const noteMsg = `[SLA TIMER UPDATED] ${reason}. (Reset: ${reset_to_now}, Extension: +${additional_minutes || 0} mins).`;
+    await query(
+      `INSERT INTO ticket_messages (
+        ticket_id, sender_name, sender_role, message, is_internal_note, created_at_ist, created_at_readable
+      ) VALUES (?, ?, 'admin', ?, true, NOW(), ?)`,
+      [ticket.id, senderName, noteMsg, formatIstReadable()]
+    );
 
-    const enriched = calculateTicketSla(ticket);
+    const updatedTicket = await findTicketInDb(ticket.id);
+    const slaConfig = await fetchSlaConfigFromDb();
+    const enriched = calculateTicketSla(updatedTicket, slaConfig);
 
     return res.status(200).json({
       code: 200,
       status: 'success',
-      message: `SLA timer for Ticket #${ticket.ticket_number} successfully updated.`,
+      message: `SLA timer for Ticket #${ticket.ticket_number} successfully updated in database.`,
       data: enriched
     });
   } catch (err) {
@@ -549,60 +422,74 @@ async function resetOrExtendSla(req, res) {
 }
 
 /**
- * 2. Fetch Single Ticket Details
+ * 2. Fetch Single Ticket Details from PostgreSQL Database
  * GET /api/admin/support/tickets/:ticketId & GET /api/support/tickets/:ticketId
  */
 async function getTicketById(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const slaConfig = await fetchSlaConfigFromDb();
+    const enriched = calculateTicketSla(ticket, slaConfig);
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      data: enriched
     });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  const enriched = calculateTicketSla(ticket);
-
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    data: enriched
-  });
 }
 
 /**
- * 3. Fetch Ticket Message History
+ * 3. Fetch Ticket Message History from PostgreSQL Database
  * GET /api/support/tickets/:ticketId/messages
  */
 async function getTicketMessages(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    let sql = `SELECT * FROM ticket_messages WHERE ticket_id = ? OR ticket_id = ?`;
+    const params = [ticket.id, ticket.ticket_number];
+
+    if (req.user && ['user', 'customer', 'vendor'].includes(req.user.role)) {
+      sql += ` AND is_internal_note = false`;
+    }
+
+    sql += ` ORDER BY id ASC`;
+    const mRes = await query(sql, params);
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      data: mRes.rows || []
     });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  let msgs = memoryStore.messages.filter(m => m.ticket_id === ticket.id || m.ticket_id === ticket.ticket_number);
-  
-  // Exclude internal notes if non-admin user request
-  if (req.user && ['user', 'customer', 'vendor'].includes(req.user.role)) {
-    msgs = msgs.filter(m => !m.is_internal_note);
-  }
-
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    data: msgs
-  });
 }
 
 /**
@@ -610,67 +497,73 @@ async function getTicketMessages(req, res) {
  * POST /api/support/tickets/:ticketId/reply
  */
 async function replyToTicket(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
-
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
-    });
-  }
-
-  const { message, is_internal_note = false, new_status } = req.body;
-  if (!message || !String(message).trim()) {
-    return res.status(400).json({
-      code: 400,
-      status: 'error',
-      message: 'Message content is required.'
-    });
-  }
-
-  const nowIstIso = formatIstIso();
-  const nowIstReadable = formatIstReadable();
-
-  const msgObj = {
-    id: `m-${Date.now()}`,
-    ticket_id: ticket.id,
-    sender_name: req.user?.name || req.user?.username || 'Super Admin',
-    sender_role: req.user?.role === 'sub_admin' ? 'sub_admin' : 'admin',
-    sender_avatar: req.user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin',
-    message: String(message).trim(),
-    is_internal_note: Boolean(is_internal_note),
-    created_at_ist: nowIstIso,
-    created_at_readable: nowIstReadable
-  };
-
-  memoryStore.messages.push(msgObj);
-
-  if (new_status) {
-    ticket.status = new_status;
-  } else if (!is_internal_note && ticket.status === 'open') {
-    ticket.status = 'in_progress';
-  }
-  ticket.updated_at = nowIstIso;
-
-  // DB Sync
   try {
-    await query(
-      `INSERT INTO ticket_messages (id, ticket_id, sender_name, sender_role, message, is_internal_note, created_at_ist, created_at_readable)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [msgObj.id, msgObj.ticket_id, msgObj.sender_name, msgObj.sender_role, msgObj.message, msgObj.is_internal_note, msgObj.created_at_ist, msgObj.created_at_readable]
-    );
-    await query(`UPDATE support_tickets SET status = ?, updated_at = NOW() WHERE id = ?`, [ticket.status, ticket.id]);
-  } catch (_) { }
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: 'Reply sent successfully.',
-    data: msgObj
-  });
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const { message, is_internal_note = false, new_status } = req.body;
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({
+        code: 400,
+        status: 'error',
+        message: 'Message content is required.'
+      });
+    }
+
+    const nowIstIso = formatIstIso();
+    const nowIstReadable = formatIstReadable();
+    const senderName = req.user?.name || req.user?.username || 'Super Admin';
+    const senderRole = req.user?.role === 'sub_admin' ? 'sub_admin' : 'admin';
+    const senderAvatar = req.user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Admin';
+
+    const insRes = await query(
+      `INSERT INTO ticket_messages (
+        ticket_id, sender_name, sender_role, sender_avatar, message, is_internal_note, created_at_ist, created_at_readable
+      ) VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)
+      RETURNING *`,
+      [ticket.id, senderName, senderRole, senderAvatar, String(message).trim(), Boolean(is_internal_note), nowIstReadable]
+    );
+
+    let updatedStatus = ticket.status;
+    if (new_status) {
+      updatedStatus = new_status;
+    } else if (!is_internal_note && (ticket.status || '').toLowerCase() === 'open') {
+      updatedStatus = 'in_progress';
+    }
+
+    await query(`UPDATE support_tickets SET status = ?, updated_at = NOW() WHERE id = ?`, [updatedStatus, ticket.id]);
+
+    const msgRow = insRes.rows[0];
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'Reply sent successfully.',
+      data: {
+        id: msgRow.id,
+        ticket_id: ticket.id,
+        sender_name: senderName,
+        sender_role: senderRole,
+        sender_avatar: senderAvatar,
+        message: String(message).trim(),
+        is_internal_note: Boolean(is_internal_note),
+        created_at_ist: nowIstIso,
+        created_at_readable: nowIstReadable
+      }
+    });
+  } catch (err) {
+    console.error('[Reply To Ticket Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -678,49 +571,57 @@ async function replyToTicket(req, res) {
  * PATCH /api/admin/support/tickets/:ticketId/status & PUT
  */
 async function updateTicketStatus(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
-
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
-    });
-  }
-
-  const { status, priority, assigned_to } = req.body;
-  if (status) ticket.status = status;
-  if (priority) {
-    ticket.priority = priority;
-    ticket.sla_minutes_remaining = SLA_MAP[priority.toLowerCase()] || ticket.sla_minutes_remaining;
-  }
-  if (assigned_to) ticket.assigned_to = assigned_to;
-  ticket.updated_at = formatIstIso();
-
-  // DB Sync
   try {
-    await query(
-      `UPDATE support_tickets SET status = ?, priority = ?, assigned_to = ?, sla_minutes_remaining = ?, updated_at = NOW() WHERE id = ?`,
-      [ticket.status, ticket.priority, ticket.assigned_to, ticket.sla_minutes_remaining, ticket.id]
-    );
-  } catch (_) { }
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Ticket status updated to ${ticket.status.toUpperCase()} (Priority: ${ticket.priority.toUpperCase()}, Assigned: ${ticket.assigned_to}).`,
-    data: {
-      id: ticket.id,
-      ticket_number: ticket.ticket_number,
-      status: ticket.status,
-      priority: ticket.priority,
-      assigned_to: ticket.assigned_to,
-      sla_minutes_remaining: ticket.sla_minutes_remaining,
-      updated_at: ticket.updated_at
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
     }
-  });
+
+    const { status, priority, assigned_to } = req.body;
+    let newStatus = ticket.status;
+    let newPriority = ticket.priority;
+    let newAssignedTo = ticket.assigned_to;
+    let slaMins = ticket.sla_minutes_remaining;
+
+    if (status) newStatus = status;
+    if (priority) {
+      newPriority = priority;
+      slaMins = SLA_MAP[priority.toLowerCase()] || slaMins;
+    }
+    if (assigned_to) newAssignedTo = assigned_to;
+
+    await query(
+      `UPDATE support_tickets 
+       SET status = ?, priority = ?, assigned_to = ?, sla_minutes_remaining = ?, updated_at = NOW() 
+       WHERE id = ?`,
+      [newStatus, newPriority, newAssignedTo, slaMins, ticket.id]
+    );
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Ticket status updated to ${newStatus.toUpperCase()} (Priority: ${newPriority.toUpperCase()}, Assigned: ${newAssignedTo}).`,
+      data: {
+        id: ticket.id,
+        ticket_number: ticket.ticket_number,
+        status: newStatus,
+        priority: newPriority,
+        assigned_to: newAssignedTo,
+        sla_minutes_remaining: slaMins,
+        updated_at: new Date().toISOString()
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -728,50 +629,54 @@ async function updateTicketStatus(req, res) {
  * POST /api/support/tickets/:ticketId/escalate
  */
 async function escalateTicket(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
-
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
-    });
-  }
-
-  const currentPriority = (ticket.priority || 'medium').toLowerCase();
-  const escalationOrder = ['low', 'medium', 'high', 'urgent'];
-  const currentIndex = escalationOrder.indexOf(currentPriority);
-
-  if (currentIndex === escalationOrder.length - 1 || currentPriority === 'urgent') {
-    return res.status(422).json({
-      code: 422,
-      status: 'error',
-      error: 'BUSINESS_RULE_BREACH',
-      message: 'Ticket is already at the highest priority level (URGENT). Cannot escalate further.'
-    });
-  }
-
-  const newPriority = escalationOrder[currentIndex + 1] || 'urgent';
-  ticket.priority = newPriority;
-  ticket.sla_minutes_remaining = SLA_MAP[newPriority] || 15;
-  ticket.updated_at = formatIstIso();
-
   try {
-    await query(`UPDATE support_tickets SET priority = ?, sla_minutes_remaining = ?, updated_at = NOW() WHERE id = ?`, [newPriority, ticket.sla_minutes_remaining, ticket.id]);
-  } catch (_) { }
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Ticket #${ticket.ticket_number} priority escalated to ${newPriority.toUpperCase()}.`,
-    data: {
-      id: ticket.id,
-      priority: ticket.priority,
-      sla_minutes_remaining: ticket.sla_minutes_remaining
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
     }
-  });
+
+    const currentPriority = (ticket.priority || 'medium').toLowerCase();
+    const escalationOrder = ['low', 'medium', 'high', 'urgent'];
+    const currentIndex = escalationOrder.indexOf(currentPriority);
+
+    if (currentIndex === escalationOrder.length - 1 || currentPriority === 'urgent') {
+      return res.status(422).json({
+        code: 422,
+        status: 'error',
+        error: 'BUSINESS_RULE_BREACH',
+        message: 'Ticket is already at the highest priority level (URGENT). Cannot escalate further.'
+      });
+    }
+
+    const newPriority = escalationOrder[currentIndex + 1] || 'urgent';
+    const newSla = SLA_MAP[newPriority] || 15;
+
+    await query(
+      `UPDATE support_tickets SET priority = ?, sla_minutes_remaining = ?, updated_at = NOW() WHERE id = ?`,
+      [newPriority, newSla, ticket.id]
+    );
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Ticket #${ticket.ticket_number} priority escalated to ${newPriority.toUpperCase()}.`,
+      data: {
+        id: ticket.id,
+        priority: newPriority,
+        sla_minutes_remaining: newSla
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -779,50 +684,54 @@ async function escalateTicket(req, res) {
  * POST /api/support/tickets/:ticketId/deescalate
  */
 async function deescalateTicket(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
-
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
-    });
-  }
-
-  const currentPriority = (ticket.priority || 'medium').toLowerCase();
-  const deescalationOrder = ['urgent', 'high', 'medium', 'low'];
-  const currentIndex = deescalationOrder.indexOf(currentPriority);
-
-  if (currentIndex === deescalationOrder.length - 1 || currentPriority === 'low') {
-    return res.status(422).json({
-      code: 422,
-      status: 'error',
-      error: 'BUSINESS_RULE_BREACH',
-      message: 'Ticket is already at the lowest priority level (LOW). Cannot de-escalate further.'
-    });
-  }
-
-  const newPriority = deescalationOrder[currentIndex + 1] || 'low';
-  ticket.priority = newPriority;
-  ticket.sla_minutes_remaining = SLA_MAP[newPriority] || 240;
-  ticket.updated_at = formatIstIso();
-
   try {
-    await query(`UPDATE support_tickets SET priority = ?, sla_minutes_remaining = ?, updated_at = NOW() WHERE id = ?`, [newPriority, ticket.sla_minutes_remaining, ticket.id]);
-  } catch (_) { }
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Ticket #${ticket.ticket_number} priority de-escalated to ${newPriority.toUpperCase()}.`,
-    data: {
-      id: ticket.id,
-      priority: ticket.priority,
-      sla_minutes_remaining: ticket.sla_minutes_remaining
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
     }
-  });
+
+    const currentPriority = (ticket.priority || 'medium').toLowerCase();
+    const deescalationOrder = ['urgent', 'high', 'medium', 'low'];
+    const currentIndex = deescalationOrder.indexOf(currentPriority);
+
+    if (currentIndex === deescalationOrder.length - 1 || currentPriority === 'low') {
+      return res.status(422).json({
+        code: 422,
+        status: 'error',
+        error: 'BUSINESS_RULE_BREACH',
+        message: 'Ticket is already at the lowest priority level (LOW). Cannot de-escalate further.'
+      });
+    }
+
+    const newPriority = deescalationOrder[currentIndex + 1] || 'low';
+    const newSla = SLA_MAP[newPriority] || 240;
+
+    await query(
+      `UPDATE support_tickets SET priority = ?, sla_minutes_remaining = ?, updated_at = NOW() WHERE id = ?`,
+      [newPriority, newSla, ticket.id]
+    );
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Ticket #${ticket.ticket_number} priority de-escalated to ${newPriority.toUpperCase()}.`,
+      data: {
+        id: ticket.id,
+        priority: newPriority,
+        sla_minutes_remaining: newSla
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -830,40 +739,53 @@ async function deescalateTicket(req, res) {
  * POST /api/support/tickets/:ticketId/merge
  */
 async function mergeTickets(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
-    });
-  }
-
-  const { target_master_ticket_number } = req.body;
-  if (!target_master_ticket_number) {
-    return res.status(400).json({ code: 400, status: 'error', message: 'target_master_ticket_number is required.' });
-  }
-
-  const masterTicket = findTicket(target_master_ticket_number);
-  ticket.merged_into = target_master_ticket_number;
-  ticket.status = 'closed';
-
-  if (masterTicket) {
-    if (!masterTicket.merged_children) masterTicket.merged_children = [];
-    if (!masterTicket.merged_children.includes(ticket.ticket_number)) {
-      masterTicket.merged_children.push(ticket.ticket_number);
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
     }
-  }
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Ticket #${ticket.ticket_number} merged into master ticket ${target_master_ticket_number}.`,
-    targetMaster: target_master_ticket_number
-  });
+    const { target_master_ticket_number } = req.body;
+    if (!target_master_ticket_number) {
+      return res.status(400).json({ code: 400, status: 'error', message: 'target_master_ticket_number is required.' });
+    }
+
+    const masterTicket = await findTicketInDb(target_master_ticket_number);
+    if (!masterTicket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        message: `Master ticket #${target_master_ticket_number} not found in database.`
+      });
+    }
+
+    await query(
+      `UPDATE support_tickets SET merged_into = ?, status = 'closed', updated_at = NOW() WHERE id = ?`,
+      [target_master_ticket_number, ticket.id]
+    );
+
+    await query(
+      `UPDATE support_tickets SET merged_children = array_append(merged_children, ?), updated_at = NOW() WHERE id = ? AND NOT (? = ANY(COALESCE(merged_children, '{}')))`,
+      [ticket.ticket_number, masterTicket.id, ticket.ticket_number]
+    );
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Ticket #${ticket.ticket_number} merged into master ticket ${target_master_ticket_number}.`,
+      targetMaster: target_master_ticket_number
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -871,37 +793,42 @@ async function mergeTickets(req, res) {
  * POST /api/support/tickets/:ticketId/unmerge
  */
 async function unmergeTickets(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const { child_ticket_number } = req.body;
+    const childNumber = child_ticket_number || ticket.ticket_number;
+
+    await query(
+      `UPDATE support_tickets SET merged_into = NULL, status = 'open', updated_at = NOW() WHERE ticket_number = ?`,
+      [childNumber]
+    );
+
+    await query(
+      `UPDATE support_tickets SET merged_children = array_remove(merged_children, ?), updated_at = NOW() WHERE id = ?`,
+      [childNumber, ticket.id]
+    );
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Child ticket ${childNumber} unmerged from ticket #${ticket.ticket_number}.`,
+      childTicket: childNumber
     });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  const { child_ticket_number } = req.body;
-  const childNumber = child_ticket_number || ticket.ticket_number;
-
-  const childTicket = findTicket(childNumber);
-  if (childTicket) {
-    childTicket.merged_into = null;
-    childTicket.status = 'open';
-  }
-
-  if (ticket.merged_children) {
-    ticket.merged_children = ticket.merged_children.filter(c => c !== childNumber);
-  }
-
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Child ticket ${childNumber} unmerged from ticket #${ticket.ticket_number}.`,
-    childTicket: childNumber
-  });
 }
 
 /**
@@ -909,82 +836,121 @@ async function unmergeTickets(req, res) {
  * POST /api/support/tickets/:ticketId/followers
  */
 async function manageFollowers(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const { follower_name, action = 'add' } = req.body;
+    if (!follower_name) {
+      return res.status(400).json({ code: 400, status: 'error', message: 'follower_name is required.' });
+    }
+
+    if (action === 'add') {
+      await query(
+        `UPDATE support_tickets SET followers = array_append(followers, ?), updated_at = NOW() WHERE id = ? AND NOT (? = ANY(COALESCE(followers, '{}')))`,
+        [follower_name, ticket.id, follower_name]
+      );
+    } else if (action === 'remove') {
+      await query(
+        `UPDATE support_tickets SET followers = array_remove(followers, ?), updated_at = NOW() WHERE id = ?`,
+        [follower_name, ticket.id]
+      );
+    }
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Staff ${follower_name} ${action === 'remove' ? 'unsubscribed from' : 'subscribed to'} ticket #${ticket.ticket_number} notifications.`,
+      followerName: follower_name
     });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  const { follower_name, action = 'add' } = req.body;
-  if (!follower_name) {
-    return res.status(400).json({ code: 400, status: 'error', message: 'follower_name is required.' });
-  }
-
-  if (!ticket.followers) ticket.followers = [];
-
-  if (action === 'add' && !ticket.followers.includes(follower_name)) {
-    ticket.followers.push(follower_name);
-  } else if (action === 'remove') {
-    ticket.followers = ticket.followers.filter(f => f !== follower_name);
-  }
-
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Staff ${follower_name} ${action === 'remove' ? 'unsubscribed from' : 'subscribed to'} ticket #${ticket.ticket_number} notifications.`,
-    followerName: follower_name
-  });
 }
 
 /**
- * 11. Support Desk Analytics & KPIs
+ * 11. Support Desk Analytics & KPIs (Pure DB Aggregations)
  * GET /api/admin/support/analytics
  */
 async function getAnalytics(req, res) {
-  const tickets = memoryStore.tickets;
-  const total = tickets.length;
-  const openCount = tickets.filter(t => t.status === 'open').length;
-  const inProgressCount = tickets.filter(t => t.status === 'in_progress').length;
-  const resolvedCount = tickets.filter(t => t.status === 'resolved').length;
-  const closedCount = tickets.filter(t => t.status === 'closed').length;
-  const urgentCount = tickets.filter(t => t.priority === 'urgent').length;
-  const highCount = tickets.filter(t => t.priority === 'high').length;
+  try {
+    const slaConfig = await fetchSlaConfigFromDb();
+    const aggRes = await query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN LOWER(status) = 'open' THEN 1 END) as open_count,
+        COUNT(CASE WHEN LOWER(status) = 'in_progress' THEN 1 END) as in_progress_count,
+        COUNT(CASE WHEN LOWER(status) = 'resolved' THEN 1 END) as resolved_count,
+        COUNT(CASE WHEN LOWER(status) = 'closed' THEN 1 END) as closed_count,
+        COUNT(CASE WHEN LOWER(priority) = 'urgent' THEN 1 END) as urgent_count,
+        COUNT(CASE WHEN LOWER(priority) = 'high' THEN 1 END) as high_count,
+        COUNT(CASE WHEN LOWER(category) = 'user_vs_vendor' THEN 1 END) as cat_user_vs_vendor,
+        COUNT(CASE WHEN LOWER(category) = 'vendor_vs_vendor' THEN 1 END) as cat_vendor_vs_vendor,
+        COUNT(CASE WHEN LOWER(category) = 'vendor_vs_user' THEN 1 END) as cat_vendor_vs_user,
+        COUNT(CASE WHEN LOWER(category) = 'technical' THEN 1 END) as cat_technical,
+        COUNT(CASE WHEN LOWER(category) = 'billing' THEN 1 END) as cat_billing,
+        COUNT(CASE WHEN LOWER(category) = 'onboarding' THEN 1 END) as cat_onboarding,
+        COUNT(CASE WHEN LOWER(category) = 'general' THEN 1 END) as cat_general
+      FROM support_tickets
+    `);
 
-  const category_breakdown = {
-    user_vs_vendor: tickets.filter(t => t.category === 'user_vs_vendor').length || 42,
-    vendor_vs_vendor: tickets.filter(t => t.category === 'vendor_vs_vendor').length || 8,
-    vendor_vs_user: tickets.filter(t => t.category === 'vendor_vs_user').length || 14,
-    technical: tickets.filter(t => t.category === 'technical').length || 25,
-    billing: tickets.filter(t => t.category === 'billing').length || 31,
-    onboarding: tickets.filter(t => t.category === 'onboarding').length || 12,
-    general: tickets.filter(t => t.category === 'general').length || 10
-  };
+    const row = aggRes.rows[0] || {};
+    const total = parseInt(row.total || 0, 10);
+    const openCount = parseInt(row.open_count || 0, 10);
+    const inProgressCount = parseInt(row.in_progress_count || 0, 10);
+    const resolvedCount = parseInt(row.resolved_count || 0, 10);
+    const closedCount = parseInt(row.closed_count || 0, 10);
+    const urgentCount = parseInt(row.urgent_count || 0, 10);
+    const highCount = parseInt(row.high_count || 0, 10);
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: 'Support desk analytics retrieved successfully.',
-    data: {
-      total_tickets_count: total > 2 ? total : 142,
-      open_tickets_count: openCount > 0 ? openCount : 28,
-      in_progress_count: inProgressCount > 0 ? inProgressCount : 19,
-      resolved_count: resolvedCount > 0 ? resolvedCount : 86,
-      closed_count: closedCount > 0 ? closedCount : 9,
-      urgent_tickets_count: urgentCount > 0 ? urgentCount : 4,
-      high_priority_count: highCount > 0 ? highCount : 12,
-      avg_first_response_time_minutes: 14.5,
-      avg_resolution_time_hours: 3.2,
-      sla_compliance_rate_percent: 96.4,
-      sla_breached_count: 3,
-      category_breakdown
-    }
-  });
+    const activeTicketsRes = await query(`SELECT * FROM support_tickets WHERE LOWER(status) NOT IN ('resolved', 'closed')`);
+    const activeTickets = (activeTicketsRes.rows || []).map(t => calculateTicketSla(t, slaConfig));
+    const breached = activeTickets.filter(t => t.is_sla_breached);
+    const withinSla = activeTickets.filter(t => !t.is_sla_breached);
+    const complianceRate = activeTickets.length > 0
+      ? Math.round(((withinSla.length / activeTickets.length) * 100) * 10) / 10
+      : 100;
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'Support desk analytics retrieved successfully from database.',
+      data: {
+        total_tickets_count: total,
+        open_tickets_count: openCount,
+        in_progress_count: inProgressCount,
+        resolved_count: resolvedCount,
+        closed_count: closedCount,
+        urgent_tickets_count: urgentCount,
+        high_priority_count: highCount,
+        avg_first_response_time_minutes: 0,
+        avg_resolution_time_hours: 0,
+        sla_compliance_rate_percent: complianceRate,
+        sla_breached_count: breached.length,
+        category_breakdown: {
+          user_vs_vendor: parseInt(row.cat_user_vs_vendor || 0, 10),
+          vendor_vs_vendor: parseInt(row.cat_vendor_vs_vendor || 0, 10),
+          vendor_vs_user: parseInt(row.cat_vendor_vs_user || 0, 10),
+          technical: parseInt(row.cat_technical || 0, 10),
+          billing: parseInt(row.cat_billing || 0, 10),
+          onboarding: parseInt(row.cat_onboarding || 0, 10),
+          general: parseInt(row.cat_general || 0, 10)
+        }
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -992,117 +958,159 @@ async function getAnalytics(req, res) {
  * GET & PUT /api/admin/support/sla
  */
 async function getSlaConfig(req, res) {
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    data: memoryStore.sla_config
-  });
+  try {
+    const config = await fetchSlaConfigFromDb();
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      data: config
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 async function updateSlaConfig(req, res) {
-  const { urgent_sla_minutes, high_sla_minutes, medium_sla_minutes, low_sla_minutes, auto_escalate_on_breach, notify_assigned_staff } = req.body;
-  if (urgent_sla_minutes !== undefined) memoryStore.sla_config.urgent_sla_minutes = parseInt(urgent_sla_minutes, 10);
-  if (high_sla_minutes !== undefined) memoryStore.sla_config.high_sla_minutes = parseInt(high_sla_minutes, 10);
-  if (medium_sla_minutes !== undefined) memoryStore.sla_config.medium_sla_minutes = parseInt(medium_sla_minutes, 10);
-  if (low_sla_minutes !== undefined) memoryStore.sla_config.low_sla_minutes = parseInt(low_sla_minutes, 10);
-  if (auto_escalate_on_breach !== undefined) memoryStore.sla_config.auto_escalate_on_breach = Boolean(auto_escalate_on_breach);
-  if (notify_assigned_staff !== undefined) memoryStore.sla_config.notify_assigned_staff = Boolean(notify_assigned_staff);
+  try {
+    const { urgent_sla_minutes, high_sla_minutes, medium_sla_minutes, low_sla_minutes, auto_escalate_on_breach, notify_assigned_staff } = req.body;
+    const urgent = urgent_sla_minutes ? parseInt(urgent_sla_minutes, 10) : 15;
+    const high = high_sla_minutes ? parseInt(high_sla_minutes, 10) : 45;
+    const medium = medium_sla_minutes ? parseInt(medium_sla_minutes, 10) : 120;
+    const low = low_sla_minutes ? parseInt(low_sla_minutes, 10) : 240;
+    const autoEscalate = auto_escalate_on_breach !== undefined ? Boolean(auto_escalate_on_breach) : true;
+    const notifyStaff = notify_assigned_staff !== undefined ? Boolean(notify_assigned_staff) : true;
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: 'SLA policy configuration updated successfully.',
-    data: memoryStore.sla_config
-  });
+    await query(
+      `INSERT INTO support_sla_config (id, urgent_sla_minutes, high_sla_minutes, medium_sla_minutes, low_sla_minutes, auto_escalate_on_breach, notify_assigned_staff, updated_at)
+       VALUES (1, ?, ?, ?, ?, ?, ?, NOW())
+       ON CONFLICT (id) DO UPDATE SET
+         urgent_sla_minutes = EXCLUDED.urgent_sla_minutes,
+         high_sla_minutes = EXCLUDED.high_sla_minutes,
+         medium_sla_minutes = EXCLUDED.medium_sla_minutes,
+         low_sla_minutes = EXCLUDED.low_sla_minutes,
+         auto_escalate_on_breach = EXCLUDED.auto_escalate_on_breach,
+         notify_assigned_staff = EXCLUDED.notify_assigned_staff,
+         updated_at = NOW()`,
+      [urgent, high, medium, low, autoEscalate, notifyStaff]
+    );
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'SLA policy updated successfully in database.',
+      data: {
+        urgent_sla_minutes: urgent,
+        high_sla_minutes: high,
+        medium_sla_minutes: medium,
+        low_sla_minutes: low,
+        auto_escalate_on_breach: autoEscalate,
+        notify_assigned_staff: notifyStaff
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
- * 13. Ticket Tag Management
- * GET, POST, DELETE /api/admin/support/tags
+ * 13. Support Tags Management
  */
 async function getTags(req, res) {
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    data: memoryStore.tags
-  });
+  try {
+    const result = await query(`SELECT tag_id, name, color, created_at FROM support_tags ORDER BY name ASC`);
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      data: result.rows || []
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 async function createTag(req, res) {
-  const { name, color = '#10B981' } = req.body;
-  if (!name) {
-    return res.status(400).json({ code: 400, status: 'error', message: 'Tag name is required.' });
+  try {
+    const { name, color = '#10B981' } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ code: 400, status: 'error', message: 'Tag name is required.' });
+    }
+    const tag_id = `tag-${Date.now()}`;
+    const result = await query(
+      `INSERT INTO support_tags (tag_id, name, color, created_at) VALUES (?, ?, ?, NOW()) RETURNING *`,
+      [tag_id, String(name).trim(), color]
+    );
+    return res.status(201).json({
+      code: 201,
+      status: 'success',
+      message: 'Tag created successfully in database.',
+      data: result.rows[0]
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  const newTag = {
-    tag_id: `tag_${Date.now()}`,
-    name: String(name).trim(),
-    color
-  };
-  memoryStore.tags.push(newTag);
-
-  return res.status(201).json({
-    code: 201,
-    status: 'success',
-    message: 'Support tag created successfully.',
-    data: newTag
-  });
 }
 
 async function deleteTag(req, res) {
-  const { tagId } = req.params;
-  memoryStore.tags = memoryStore.tags.filter(t => t.tag_id !== tagId);
-
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: `Support tag ${tagId} deleted successfully.`
-  });
+  try {
+    const { tagId } = req.params;
+    await query(`DELETE FROM support_tags WHERE tag_id = ? OR name = ?`, [tagId, tagId]);
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `Tag ${tagId} deleted successfully from database.`
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
- * 14. File Attachments & Photo Upload
- * POST /api/support/tickets/:ticketId/attachments
+ * 14. Upload Attachment
  */
 async function uploadAttachment(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ code: 400, status: 'error', message: 'No file uploaded.' });
+    }
+
+    const attId = `att-${Date.now()}`;
+    const uploadedBy = req.user?.name || req.user?.username || 'Staff';
+    const fileUrl = `/uploads/support/${file.filename}`;
+
+    const insRes = await query(
+      `INSERT INTO ticket_attachments (id, ticket_id, file_name, file_size_bytes, file_url, uploaded_by, uploaded_at_ist)
+       VALUES (?, ?, ?, ?, ?, ?, NOW())
+       RETURNING *`,
+      [attId, ticket.id, file.originalname, file.size, fileUrl, uploadedBy]
+    );
+
+    return res.status(201).json({
+      code: 201,
+      status: 'success',
+      message: 'Attachment uploaded successfully.',
+      data: insRes.rows[0]
     });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  const uploadedFile = req.file || (req.files && req.files[0]);
-  const fileName = uploadedFile ? uploadedFile.originalname : (req.body.file_name || 'damaged_delivery_photo.jpg');
-  const fileSize = uploadedFile ? uploadedFile.size : 1420500;
-  const fileUrl = uploadedFile ? `/uploads/${uploadedFile.filename}` : `https://storage.digilocal.in/support/att_${Date.now()}.jpg`;
-
-  const attachmentObj = {
-    attachment_id: `att_${Date.now()}`,
-    ticket_id: ticket.id,
-    file_name: fileName,
-    file_size_bytes: fileSize,
-    file_url: fileUrl,
-    uploaded_at_ist: formatIstIso()
-  };
-
-  memoryStore.attachments.push(attachmentObj);
-
-  return res.status(201).json({
-    code: 201,
-    status: 'success',
-    message: 'Attachment uploaded successfully.',
-    data: attachmentObj
-  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION II: Resident User Mobile App & Landing Website Support Endpoints (user-app)
+// SECTION II: Resident User Mobile App & Landing Website Support Endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1110,77 +1118,63 @@ async function uploadAttachment(req, res) {
  * POST /api/user/tickets
  */
 async function createCustomerTicket(req, res) {
-  const { subject, description, category, order_id, target_vendor, reporter_name, reporter_email, source } = req.body;
+  try {
+    const { subject, description, category, order_id, target_vendor, reporter_name, reporter_email, source } = req.body;
 
-  if (!subject || !description) {
-    return res.status(400).json({
-      code: 400,
-      status: 'error',
-      message: 'Subject and description are required.'
-    });
-  }
-
-  const randNum = Math.floor(1000 + Math.random() * 9000);
-  const ticket_number = `TICK-${randNum}`;
-  const id = `t-${Date.now()}`;
-  const nowIstIso = formatIstIso();
-  const nowIstReadable = formatIstReadable();
-
-  const ticketObj = {
-    id,
-    ticket_number,
-    subject,
-    description,
-    category: category || 'user_vs_vendor',
-    priority: 'medium',
-    status: 'open',
-    user_type: 'user',
-    source: source || 'mobile_app',
-    reporter_name: reporter_name || req.user?.name || 'Garvit Sharma',
-    reporter_email: reporter_email || req.user?.email || 'garvit@gmail.com',
-    reporter_user_id: req.user?.id || 'usr_garvit_101',
-    entity_name: 'Greenwood Residency',
-    target_vendor: target_vendor || 'Aarushi Sweets',
-    order_id: order_id || 'ORD-9842',
-    order_amount: 707.00,
-    assigned_to: 'Super Admin',
-    sla_minutes_remaining: 45,
-    followers: [],
-    merged_into: null,
-    merged_children: [],
-    tags: [],
-    created_at: new Date().toISOString(),
-    created_at_ist: nowIstIso,
-    created_at_readable: nowIstReadable,
-    updated_at: nowIstIso
-  };
-
-  memoryStore.tickets.unshift(ticketObj);
-
-  // Initial message
-  memoryStore.messages.push({
-    id: `m-${Date.now()}`,
-    ticket_id: id,
-    sender_name: ticketObj.reporter_name,
-    sender_role: 'user',
-    message: description,
-    is_internal_note: false,
-    created_at_ist: nowIstIso,
-    created_at_readable: nowIstReadable
-  });
-
-  return res.status(201).json({
-    code: 201,
-    status: 'success',
-    message: `Your support ticket ${ticket_number} has been submitted. Our team will respond within 45 minutes.`,
-    data: {
-      ticket_id: id,
-      ticket_number,
-      status: 'open',
-      sla_minutes_remaining: 45,
-      created_at_readable: nowIstReadable
+    if (!subject || !description) {
+      return res.status(400).json({
+        code: 400,
+        status: 'error',
+        message: 'Subject and description are required.'
+      });
     }
-  });
+
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const ticket_number = `TICK-${randNum}`;
+    const id = `t-${Date.now()}`;
+    const nowIstReadable = formatIstReadable();
+
+    const repName = reporter_name || req.user?.name || req.user?.username || 'Customer';
+    const repEmail = reporter_email || req.user?.email || '';
+    const repUserId = req.user?.user_id || req.user?.id || null;
+    const cat = category || 'user_vs_vendor';
+    const tgtVendor = target_vendor || '';
+    const ordId = order_id || null;
+
+    await query(
+      `INSERT INTO support_tickets (
+        id, ticket_number, subject, description, category, priority, status,
+        user_type, source, reporter_name, reporter_email, reporter_user_id,
+        target_vendor, order_id, assigned_to, sla_minutes_remaining,
+        created_at, created_at_ist, created_at_readable, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'medium', 'open', 'user', ?, ?, ?, ?, ?, ?, 'Super Admin', 45, NOW(), NOW(), ?, NOW())`,
+      [id, ticket_number, subject, description, cat, source || 'mobile_app', repName, repEmail, repUserId, tgtVendor, ordId, nowIstReadable]
+    );
+
+    // Initial message
+    await query(
+      `INSERT INTO ticket_messages (
+        ticket_id, sender_name, sender_role, message, is_internal_note, created_at_ist, created_at_readable
+      ) VALUES (?, ?, 'user', ?, false, NOW(), ?)`,
+      [id, repName, description, nowIstReadable]
+    );
+
+    return res.status(201).json({
+      code: 201,
+      status: 'success',
+      message: `Your support ticket ${ticket_number} has been submitted. Our team will respond within 45 minutes.`,
+      data: {
+        ticket_id: id,
+        ticket_number,
+        status: 'open',
+        sla_minutes_remaining: 45,
+        created_at_readable: nowIstReadable
+      }
+    });
+  } catch (err) {
+    console.error('[Create Customer Ticket Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -1188,32 +1182,52 @@ async function createCustomerTicket(req, res) {
  * GET /api/user/tickets
  */
 async function getUserTickets(req, res) {
-  const email = req.query.email || req.user?.email || 'garvit@gmail.com';
-  const userTickets = memoryStore.tickets.filter(t => 
-    t.user_type === 'user' || 
-    (t.reporter_email && t.reporter_email.toLowerCase() === email.toLowerCase())
-  );
+  try {
+    const email = req.query.email || req.user?.email;
+    const userId = req.user?.user_id || req.user?.id;
 
-  const formattedData = userTickets.map(t => {
-    const ticketMsgs = memoryStore.messages.filter(m => (m.ticket_id === t.id || m.ticket_id === t.ticket_number) && !m.is_internal_note);
-    return {
+    let sql = `SELECT * FROM support_tickets WHERE 1=1`;
+    const params = [];
+
+    if (userId && email) {
+      sql += ` AND (reporter_user_id = ? OR LOWER(reporter_email) = LOWER(?))`;
+      params.push(String(userId), String(email).trim());
+    } else if (email) {
+      sql += ` AND LOWER(reporter_email) = LOWER(?)`;
+      params.push(String(email).trim());
+    } else if (userId) {
+      sql += ` AND reporter_user_id = ?`;
+      params.push(String(userId));
+    } else {
+      sql += ` AND user_type = 'user'`;
+    }
+
+    sql += ` ORDER BY created_at DESC`;
+
+    const result = await query(sql, params);
+    const rows = result.rows || [];
+
+    const formattedData = rows.map(t => ({
       ticket_id: t.id,
       ticket_number: t.ticket_number,
       subject: t.subject,
       category: t.category,
       status: t.status,
       order_id: t.order_id,
-      unread_messages_count: ticketMsgs.length > 1 ? 1 : 0,
-      created_at_readable: t.created_at_readable,
-      updated_at_readable: t.created_at_readable
-    };
-  });
+      unread_messages_count: 0,
+      created_at_readable: t.created_at_readable || formatIstReadable(t.created_at),
+      updated_at_readable: t.created_at_readable || formatIstReadable(t.updated_at)
+    }));
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    data: formattedData
-  });
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      data: formattedData
+    });
+  } catch (err) {
+    console.error('[Get User Tickets Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -1221,50 +1235,63 @@ async function getUserTickets(req, res) {
  * POST /api/user/tickets/:ticketId/reply
  */
 async function userReplyToTicket(req, res) {
-  const { ticketId } = req.params;
-  const ticket = findTicket(ticketId);
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = await findTicketInDb(targetId);
 
-  if (!ticket) {
-    return res.status(404).json({
-      code: 404,
-      status: 'error',
-      error: 'TICKET_NOT_FOUND',
-      message: `Support Ticket #${ticketId} not found.`
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const { message } = req.body;
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({ code: 400, status: 'error', message: 'Message content is required.' });
+    }
+
+    const nowIstIso = formatIstIso();
+    const nowIstReadable = formatIstReadable();
+    const senderName = req.user?.name || req.user?.username || ticket.reporter_name || 'Customer';
+
+    const insRes = await query(
+      `INSERT INTO ticket_messages (
+        ticket_id, sender_name, sender_role, message, is_internal_note, created_at_ist, created_at_readable
+      ) VALUES (?, ?, 'user', ?, false, NOW(), ?)
+      RETURNING *`,
+      [ticket.id, senderName, String(message).trim(), nowIstReadable]
+    );
+
+    await query(`UPDATE support_tickets SET updated_at = NOW() WHERE id = ?`, [ticket.id]);
+
+    const msgRow = insRes.rows[0];
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'Reply added to ticket.',
+      data: {
+        id: msgRow.id,
+        ticket_id: ticket.id,
+        sender_name: senderName,
+        sender_role: 'user',
+        message: String(message).trim(),
+        is_internal_note: false,
+        created_at_ist: nowIstIso,
+        created_at_readable: nowIstReadable
+      }
     });
+  } catch (err) {
+    console.error('[User Reply Ticket Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
-
-  const { message } = req.body;
-  if (!message || !String(message).trim()) {
-    return res.status(400).json({ code: 400, status: 'error', message: 'Message content is required.' });
-  }
-
-  const nowIstIso = formatIstIso();
-  const nowIstReadable = formatIstReadable();
-
-  const msgObj = {
-    id: `m-${Date.now()}`,
-    ticket_id: ticket.id,
-    sender_name: req.user?.name || ticket.reporter_name || 'Garvit Sharma',
-    sender_role: 'user',
-    message: String(message).trim(),
-    is_internal_note: false,
-    created_at_ist: nowIstIso,
-    created_at_readable: nowIstReadable
-  };
-
-  memoryStore.messages.push(msgObj);
-  ticket.updated_at = nowIstIso;
-
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    message: 'Reply added to ticket.',
-    data: msgObj
-  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SECTION III: Merchant Vendor Mobile App & Portal Support Endpoints (vendor-portal)
+// SECTION III: Merchant Vendor Mobile App & Portal Support Endpoints
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1272,67 +1299,64 @@ async function userReplyToTicket(req, res) {
  * POST /api/vendor/tickets
  */
 async function createVendorTicket(req, res) {
-  const { subject, description, category, priority, store_name, reporter_email } = req.body;
+  try {
+    const { subject, description, category, priority, store_name, reporter_email } = req.body;
 
-  if (!subject || !description) {
-    return res.status(400).json({
-      code: 400,
-      status: 'error',
-      message: 'Subject and description are required.'
-    });
-  }
-
-  const randNum = Math.floor(1000 + Math.random() * 9000);
-  const ticket_number = `TICK-${randNum}`;
-  const id = `t-${Date.now()}`;
-  const nowIstIso = formatIstIso();
-  const nowIstReadable = formatIstReadable();
-  const ticketPriority = priority || 'high';
-
-  const ticketObj = {
-    id,
-    ticket_number,
-    subject,
-    description,
-    category: category || 'billing',
-    priority: ticketPriority,
-    status: 'open',
-    user_type: 'vendor',
-    source: 'vendor_portal',
-    reporter_name: store_name || req.user?.store_name || "Flower's Point",
-    reporter_email: reporter_email || req.user?.email || 'aarushi20@gmail.com',
-    reporter_user_id: req.user?.vendor_id || 'vnd_flowers_01',
-    entity_name: store_name || "Flower's Point",
-    target_vendor: store_name || "Flower's Point",
-    order_id: null,
-    order_amount: null,
-    assigned_to: 'Super Admin',
-    sla_minutes_remaining: SLA_MAP[ticketPriority] || 45,
-    followers: [],
-    merged_into: null,
-    merged_children: [],
-    tags: [],
-    created_at: new Date().toISOString(),
-    created_at_ist: nowIstIso,
-    created_at_readable: nowIstReadable,
-    updated_at: nowIstIso
-  };
-
-  memoryStore.tickets.unshift(ticketObj);
-
-  return res.status(201).json({
-    code: 201,
-    status: 'success',
-    message: `Merchant inquiry ${ticket_number} submitted successfully.`,
-    data: {
-      ticket_id: id,
-      ticket_number,
-      status: 'open',
-      priority: ticketPriority,
-      sla_minutes_remaining: ticketObj.sla_minutes_remaining,
-      created_at_readable: nowIstReadable
+    if (!subject || !description) {
+      return res.status(400).json({
+        code: 400,
+        status: 'error',
+        message: 'Subject and description are required.'
+      });
     }
-  });
+
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const ticket_number = `TICK-${randNum}`;
+    const id = `t-${Date.now()}`;
+    const nowIstReadable = formatIstReadable();
+    const ticketPriority = (priority || 'high').toLowerCase();
+    const slaMins = SLA_MAP[ticketPriority] || 45;
+
+    const repName = store_name || req.user?.store_name || req.user?.vendor_name || 'Vendor';
+    const repEmail = reporter_email || req.user?.email || '';
+    const repUserId = req.user?.vendor_id ? String(req.user.vendor_id) : (req.user?.id ? String(req.user.id) : null);
+    const cat = category || 'billing';
+
+    await query(
+      `INSERT INTO support_tickets (
+        id, ticket_number, subject, description, category, priority, status,
+        user_type, source, reporter_name, reporter_email, reporter_user_id,
+        entity_name, target_vendor, assigned_to, sla_minutes_remaining,
+        created_at, created_at_ist, created_at_readable, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'open', 'vendor', 'vendor_portal', ?, ?, ?, ?, ?, 'Super Admin', ?, NOW(), NOW(), ?, NOW())`,
+      [id, ticket_number, subject, description, cat, ticketPriority, repName, repEmail, repUserId, repName, repName, slaMins, nowIstReadable]
+    );
+
+    // Initial message
+    await query(
+      `INSERT INTO ticket_messages (
+        ticket_id, sender_name, sender_role, message, is_internal_note, created_at_ist, created_at_readable
+      ) VALUES (?, ?, 'vendor', ?, false, NOW(), ?)`,
+      [id, repName, description, nowIstReadable]
+    );
+
+    return res.status(201).json({
+      code: 201,
+      status: 'success',
+      message: `Merchant inquiry ${ticket_number} submitted successfully.`,
+      data: {
+        ticket_id: id,
+        ticket_number,
+        status: 'open',
+        priority: ticketPriority,
+        sla_minutes_remaining: slaMins,
+        created_at_readable: nowIstReadable
+      }
+    });
+  } catch (err) {
+    console.error('[Create Vendor Ticket Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 /**
@@ -1340,28 +1364,55 @@ async function createVendorTicket(req, res) {
  * GET /api/vendor/tickets
  */
 async function getVendorTickets(req, res) {
-  const email = req.query.email || req.user?.email || 'aarushi20@gmail.com';
-  const vendorTickets = memoryStore.tickets.filter(t => 
-    t.user_type === 'vendor' || 
-    (t.reporter_email && t.reporter_email.toLowerCase() === email.toLowerCase())
-  );
+  try {
+    const email = req.query.email || req.user?.email;
+    const vendorId = req.user?.vendor_id || req.user?.id;
+    const storeName = req.user?.store_name;
 
-  const formattedData = vendorTickets.map(t => ({
-    ticket_id: t.id,
-    ticket_number: t.ticket_number,
-    subject: t.subject,
-    category: t.category,
-    status: t.status,
-    priority: t.priority,
-    unread_messages_count: 0,
-    created_at_readable: t.created_at_readable
-  }));
+    let sql = `SELECT * FROM support_tickets WHERE 1=1`;
+    const params = [];
 
-  return res.status(200).json({
-    code: 200,
-    status: 'success',
-    data: formattedData
-  });
+    if (vendorId && email) {
+      sql += ` AND (reporter_user_id = ? OR LOWER(reporter_email) = LOWER(?))`;
+      params.push(String(vendorId), String(email).trim());
+    } else if (email) {
+      sql += ` AND LOWER(reporter_email) = LOWER(?)`;
+      params.push(String(email).trim());
+    } else if (vendorId) {
+      sql += ` AND reporter_user_id = ?`;
+      params.push(String(vendorId));
+    } else if (storeName) {
+      sql += ` AND (target_vendor = ? OR entity_name = ?)`;
+      params.push(storeName, storeName);
+    } else {
+      sql += ` AND user_type = 'vendor'`;
+    }
+
+    sql += ` ORDER BY created_at DESC`;
+
+    const result = await query(sql, params);
+    const rows = result.rows || [];
+
+    const formattedData = rows.map(t => ({
+      ticket_id: t.id,
+      ticket_number: t.ticket_number,
+      subject: t.subject,
+      category: t.category,
+      status: t.status,
+      priority: t.priority,
+      unread_messages_count: 0,
+      created_at_readable: t.created_at_readable || formatIstReadable(t.created_at)
+    }));
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      data: formattedData
+    });
+  } catch (err) {
+    console.error('[Get Vendor Tickets Error]:', err);
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
 }
 
 module.exports = {

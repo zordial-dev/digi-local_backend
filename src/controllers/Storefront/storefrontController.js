@@ -201,22 +201,7 @@ async function getCategories(req, res) {
             `SELECT DISTINCT category FROM items WHERE in_stock = TRUE AND category IS NOT NULL AND category != ''`
         ).catch(() => ({ rows: [] }));
 
-        const defaultCategories = [
-            'Grocery & Staples',
-            'Dairy & Milk',
-            'Bakery & Sweets',
-            'Fruits & Vegetables',
-            'Beverages & Drinks',
-            'Snacks & Packaged Food',
-            'Personal Care & Hygiene',
-            'Household Essentials',
-            'Electronics & Accessories',
-            'Pharmacy & Health',
-            'Services & Repairs'
-        ];
-
         const combinedNames = Array.from(new Set([
-            ...defaultCategories,
             ...(vendorCatResult.rows || []).map(r => r.category),
             ...(itemCatResult.rows || []).map(r => r.category)
         ])).filter(Boolean);
@@ -364,6 +349,11 @@ async function searchVendorsLocationAware(req, res) {
  */
 async function getLocations(req, res) {
     try {
+        // Prevent browser 304 Not Modified caching so frontend always gets real-time DB state
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+
         const { search, q, query: qParam, area, term, input, city, state } = req.query;
         const kw = String(search || q || qParam || area || term || input || '').trim().toLowerCase();
 
@@ -391,7 +381,7 @@ async function getLocations(req, res) {
         const locRes = await query(sql, params).catch(() => ({ rows: [] }));
         const locations = locRes.rows || [];
 
-        // Distinct area names from locations table ONLY
+        // Distinct area names from DB entries ONLY (locations table)
         const areaSuggestions = Array.from(
             new Set(locations.map(l => String(l.area || '').trim()).filter(Boolean))
         );
