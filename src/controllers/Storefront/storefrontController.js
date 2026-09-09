@@ -91,7 +91,7 @@ async function getVendorStorefront(req, res) {
 
         const startTime = performance.now();
         let vendorResult = await query(
-            `SELECT v.*, s.society_name, s.location, s.latitude as society_latitude, s.longitude as society_longitude 
+            `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location, s.latitude as society_latitude, s.longitude as society_longitude 
              FROM vendors v 
              LEFT JOIN societies s ON v.society_id = s.society_id 
              WHERE (CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)) AND LOWER(COALESCE(v.status, 'active')) IN ('active', 'approved')`,
@@ -101,7 +101,7 @@ async function getVendorStorefront(req, res) {
         if (!vendorResult.rows || vendorResult.rows.length === 0) {
             // Fallback query if vendor status is pending/hold/blocked or numerical lookup
             vendorResult = await query(
-                `SELECT v.*, s.society_name, s.location 
+                `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location 
                  FROM vendors v 
                  LEFT JOIN societies s ON v.society_id = s.society_id 
                  WHERE CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)`,

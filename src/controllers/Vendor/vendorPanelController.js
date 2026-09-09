@@ -341,10 +341,16 @@ async function updateSettings(req, res) {
     try {
         const { vendorId } = req.params;
         const result = await vendorService.updateStoreSettings(vendorId, req.body);
-        res.status(200).json({ message: 'Store settings updated successfully', logo: result.logo });
+        res.status(200).json({
+            message: 'Store settings updated successfully',
+            success: true,
+            logo: result.logo,
+            vendor: result.vendor,
+            data: result.vendor
+        });
     } catch (err) {
         console.error('Error updating settings:', err);
-        res.status(500).json({ error: 'Failed to update store settings' });
+        res.status(500).json({ error: err.message || 'Failed to update store settings' });
     }
 }
 

@@ -127,8 +127,10 @@ router.delete('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner,
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 
-// PUT /api/vendorPanel/:vendorId/settings
+// PUT/POST/PATCH /api/vendorPanel/:vendorId/settings
 router.put('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
+router.post('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
+router.patch('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
 
 // PUT /api/vendorPanel/:vendorId/coverage
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);

@@ -19,7 +19,7 @@ class VendorService {
     if (isPureNum) {
       const numId = parseInt(rawIdStr, 10);
       vendorRes = await query(
-        `SELECT v.*, s.society_name, s.location 
+        `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location 
          FROM vendors v 
          LEFT JOIN societies s ON v.society_id = s.society_id 
          WHERE v.vendor_id = ?`,
@@ -27,7 +27,7 @@ class VendorService {
       );
     } else {
       vendorRes = await query(
-        `SELECT v.*, s.society_name, s.location 
+        `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location 
          FROM vendors v 
          LEFT JOIN societies s ON v.society_id = s.society_id 
          WHERE v.public_id = ? OR CAST(v.vendor_id AS TEXT) = ?`,
@@ -143,7 +143,21 @@ class VendorService {
     // Normalize vendor classification and zone coverage attributes
     vendor.shop_id = String(vendor.vendor_id);
     vendor.id = String(vendor.vendor_id);
-    vendor.gstin = String(vendor.gstin || '').trim().toUpperCase();
+    vendor.store_name = vendor.store_name || vendor.shop_name || "DigiLocal Partner Store";
+    vendor.vendor_name = vendor.vendor_name || vendor.owner_name || '';
+    vendor.owner_name = vendor.vendor_name || vendor.owner_name || '';
+    vendor.email = vendor.email || '';
+    vendor.address = vendor.address || '';
+    vendor.area = vendor.area || vendor.location || '';
+    vendor.location = vendor.area || vendor.location || '';
+    vendor.city = vendor.city || '';
+    vendor.state = vendor.state || '';
+    vendor.pincode = vendor.pincode || '';
+    vendor.bank_name = vendor.bank_name || '';
+    vendor.account_number = vendor.account_number || vendor.bank_account_number || '';
+    vendor.ifsc_code = vendor.ifsc_code || vendor.ifsc || '';
+    vendor.account_holder_name = vendor.account_holder_name || '';
+    vendor.gstin = String(vendor.gstin || vendor.gst_number || '').trim().toUpperCase();
     vendor.gst_number = vendor.gstin;
     vendor.pan_number = String(vendor.pan_number || '').trim().toUpperCase();
     vendor.vendor_type = vendorType;
@@ -155,8 +169,6 @@ class VendorService {
     vendor.selected_zones = typeof vendor.selected_zones === 'string' ? (JSON.parse(vendor.selected_zones || '[]')) : (vendor.selected_zones || []);
     vendor.shop_number = vendor.shop_number || vendor.shop_no || '';
     vendor.shop_no = vendor.shop_number || vendor.shop_no || '';
-    vendor.address = vendor.address || '';
-
 
     return {
       vendor,
@@ -169,7 +181,7 @@ class VendorService {
   }
 
   /**
-   * Updates store profile, business hours, GST, delivery charges, and store status.
+   * Updates store profile, business hours, GST, delivery charges, address, bank details, and store status.
    */
   async updateStoreSettings(vendorIdParam, settings) {
     const rawIdStr = String(vendorIdParam || '').trim();
@@ -177,22 +189,58 @@ class VendorService {
     const numId = isPureNum ? parseInt(rawIdStr, 10) : 0;
 
     const {
-      store_name, logo, description, phone_number, gst_number, gstin, pan_number,
+      store_name, logo, logo_url, shop_image, description, phone_number, phone,
+      gst_number, gstin, gst, gstNumber, pan_number,
       opening_time, closing_time, opening_timing, closing_timing, working_days, business_type,
-      min_order_value, max_quantity_limit, delivery_charge, gst_percentage, service_charge_percentage
+      min_order_value, max_quantity_limit, delivery_charge, gst_percentage, service_charge_percentage,
+      vendor_name, contact_person, merchant_name, owner_name, email,
+      address, location_address, area, city, state, pincode, location,
+      bank_name, account_number, bank_account_number, ifsc_code, ifsc, account_holder_name,
+      whatsapp_number, shop_number, shop_no, category, vendor_type, location_type,
+      is_global_coverage, delivery_radius_km, selected_zones, upi_id
     } = settings;
 
-    const finalGst = gst_number || gstin || '';
-    const finalOpening = opening_time || opening_timing || '08:00 AM';
-    const finalClosing = closing_time || closing_timing || '10:00 PM';
-    const finalWorkingDays = working_days || 'Mon – Sun';
-    const finalBusinessType = business_type || 'PRODUCT';
+    const finalVendorName = String(vendor_name || contact_person || merchant_name || owner_name || '').trim();
+    const finalEmail = String(email || '').trim().toLowerCase();
+    const finalPhone = String(phone_number || phone || '').trim();
+    const finalAddress = String(address || location_address || '').trim();
+    const finalArea = String(area || location || '').trim();
+    const finalLocation = String(location || area || '').trim();
+    const finalCity = String(city || '').trim();
+    const finalState = String(state || '').trim();
+    const finalPincode = String(pincode || '').trim();
+    const finalShopNumber = String(shop_number || shop_no || '').trim();
+    const finalCategory = String(category || '').trim();
+    const pd = (typeof settings.payment_details === 'object' && settings.payment_details !== null) ? settings.payment_details : {};
+    const finalBankName = String(bank_name || pd.bank_name || '').trim();
+    const finalAccountNumber = String(account_number || bank_account_number || pd.account_number || pd.bank_account_number || '').trim();
+    const finalIfscCode = String(ifsc_code || ifsc || pd.ifsc_code || pd.ifsc || '').trim().toUpperCase();
+    const finalAccountHolderName = String(account_holder_name || pd.account_holder_name || '').trim();
+    const finalUpiId = String(upi_id || pd.upi_id || '').trim();
+    const finalWhatsappNumber = String(whatsapp_number || '').trim();
+
+    const finalGst = String(gst_number || gstin || gst || gstNumber || '').trim().toUpperCase();
+    const finalPan = String(pan_number || '').trim().toUpperCase();
+    const finalOpening = opening_time || opening_timing || '';
+    const finalClosing = closing_time || closing_timing || '';
+    const finalWorkingDays = working_days || '';
+    const finalBusinessType = business_type || '';
+    const finalVendorType = vendor_type || '';
+    const finalLocationType = location_type || '';
 
     // Check if new phone number is already taken by another vendor
-    if (phone_number) {
-      const existing = await query(`SELECT vendor_id FROM vendors WHERE phone_number = ? AND vendor_id != ?`, [phone_number, numId]);
+    if (finalPhone) {
+      const existing = await query(`SELECT vendor_id FROM vendors WHERE phone_number = ? AND vendor_id != ? AND public_id != ?`, [finalPhone, numId, rawIdStr]);
       if (existing.rows && existing.rows.length > 0) {
         throw new Error('This phone number is already registered to another vendor.');
+      }
+    }
+
+    // Check if new email is already taken by another vendor
+    if (finalEmail) {
+      const existingEmail = await query(`SELECT vendor_id FROM vendors WHERE LOWER(email) = LOWER(?) AND vendor_id != ? AND public_id != ?`, [finalEmail, numId, rawIdStr]);
+      if (existingEmail.rows && existingEmail.rows.length > 0) {
+        throw new Error('This email address is already registered to another vendor.');
       }
     }
 
@@ -212,8 +260,8 @@ class VendorService {
       }
     }
 
-    const defaultLogo = 'https://images.unsplash.com/photo-1534723452862-4c874018d66d?w=200&auto=format&fit=crop&q=80';
-    let logoUrl = logo && logo.trim() !== '' ? logo : defaultLogo;
+    const candidateLogo = logo || logo_url || shop_image;
+    let logoUrl = candidateLogo && candidateLogo.trim() !== '' ? candidateLogo : null;
 
     if (logoUrl && typeof logoUrl === 'string' && (logoUrl.startsWith('data:image') || logoUrl.length > 200) && !logoUrl.startsWith('http://') && !logoUrl.startsWith('https://')) {
       try {
@@ -252,33 +300,102 @@ class VendorService {
 
     await query(
       `UPDATE vendors 
-       SET store_name = COALESCE(NULLIF(?, ''), store_name), 
-           logo = ?, 
-           description = ?, 
-           phone_number = COALESCE(NULLIF(?, ''), phone_number), 
+       SET store_name = COALESCE(NULLIF(?, ''), store_name),
+           vendor_name = COALESCE(NULLIF(?, ''), vendor_name),
+           owner_name = COALESCE(NULLIF(?, ''), owner_name, vendor_name),
+           email = COALESCE(NULLIF(?, ''), email),
+           logo = COALESCE(NULLIF(?, ''), logo),
+           shop_image = COALESCE(NULLIF(?, ''), shop_image, logo),
+           description = COALESCE(NULLIF(?, ''), description),
+           phone_number = COALESCE(NULLIF(?, ''), phone_number),
+           whatsapp_number = COALESCE(NULLIF(?, ''), whatsapp_number),
            gst_number = COALESCE(NULLIF(?, ''), gst_number),
            gstin = COALESCE(NULLIF(?, ''), gstin),
            pan_number = COALESCE(NULLIF(?, ''), pan_number),
+           address = COALESCE(NULLIF(?, ''), address),
+           location_address = COALESCE(NULLIF(?, ''), location_address, address),
+           area = COALESCE(NULLIF(?, ''), area),
+           location = COALESCE(NULLIF(?, ''), location, area),
+           city = COALESCE(NULLIF(?, ''), city),
+           state = COALESCE(NULLIF(?, ''), state),
+           pincode = COALESCE(NULLIF(?, ''), pincode),
+           shop_number = COALESCE(NULLIF(?, ''), shop_number),
+           shop_no = COALESCE(NULLIF(?, ''), shop_no, shop_number),
+           category = COALESCE(NULLIF(?, ''), category),
+           bank_name = COALESCE(NULLIF(?, ''), bank_name),
+           account_number = COALESCE(NULLIF(?, ''), account_number),
+           bank_account_number = COALESCE(NULLIF(?, ''), bank_account_number, account_number),
+           ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
+           ifsc = COALESCE(NULLIF(?, ''), ifsc, ifsc_code),
+           account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
+           upi_id = COALESCE(NULLIF(?, ''), upi_id),
            opening_time = COALESCE(NULLIF(?, ''), opening_time),
            closing_time = COALESCE(NULLIF(?, ''), closing_time),
            opening_timing = COALESCE(NULLIF(?, ''), opening_timing), 
            closing_timing = COALESCE(NULLIF(?, ''), closing_timing), 
            working_days = COALESCE(NULLIF(?, ''), working_days),
            business_type = COALESCE(NULLIF(?, ''), business_type),
-           min_order_value = ?, 
-           max_quantity_limit = ?,
-           delivery_charge = ?, 
-           gst_percentage = ?, 
-           service_charge_percentage = ?
+           vendor_type = COALESCE(NULLIF(?, ''), vendor_type),
+           min_order_value = COALESCE(?, min_order_value), 
+           max_quantity_limit = COALESCE(?, max_quantity_limit),
+           delivery_charge = COALESCE(?, delivery_charge), 
+           gst_percentage = COALESCE(?, gst_percentage), 
+           service_charge_percentage = COALESCE(?, service_charge_percentage)
        WHERE vendor_id = ? OR public_id = ?`,
       [
-        store_name || '', logoUrl, description || '', phone_number || '', finalGst, finalGst, pan_number || '',
-        finalOpening, finalClosing, finalOpening, finalClosing, finalWorkingDays, finalBusinessType,
-        min_order_value || 0, max_quantity_limit || 10, delivery_charge || 0, gst_percentage || 5, service_charge_percentage || 0,
-        numId, rawIdStr
+        store_name ? String(store_name).trim() : '',
+        finalVendorName,
+        finalVendorName,
+        finalEmail,
+        logoUrl || '',
+        logoUrl || '',
+        description !== undefined ? String(description).trim() : '',
+        finalPhone,
+        finalWhatsappNumber,
+        finalGst,
+        finalGst,
+        finalPan,
+        finalAddress,
+        finalAddress,
+        finalArea,
+        finalLocation,
+        finalCity,
+        finalState,
+        finalPincode,
+        finalShopNumber,
+        finalShopNumber,
+        finalCategory,
+        finalBankName,
+        finalAccountNumber,
+        finalAccountNumber,
+        finalIfscCode,
+        finalIfscCode,
+        finalAccountHolderName,
+        finalUpiId,
+        finalOpening,
+        finalClosing,
+        finalOpening,
+        finalClosing,
+        finalWorkingDays,
+        finalBusinessType,
+        finalVendorType,
+        min_order_value !== undefined ? Number(min_order_value) : null,
+        max_quantity_limit !== undefined ? Number(max_quantity_limit) : null,
+        delivery_charge !== undefined ? Number(delivery_charge) : null,
+        gst_percentage !== undefined ? Number(gst_percentage) : null,
+        service_charge_percentage !== undefined ? Number(service_charge_percentage) : null,
+        numId,
+        rawIdStr
       ]
     );
-    return { logo: logoUrl };
+
+    const updatedRes = await query(`SELECT * FROM vendors WHERE vendor_id = ? OR public_id = ?`, [numId, rawIdStr]);
+    const updatedVendor = updatedRes.rows && updatedRes.rows.length > 0 ? updatedRes.rows[0] : {};
+    delete updatedVendor.password;
+    delete updatedVendor.password_hash;
+    updatedVendor.updated_at = new Date().toISOString();
+
+    return { logo: logoUrl || updatedVendor.logo, vendor: updatedVendor };
   }
 
   /**

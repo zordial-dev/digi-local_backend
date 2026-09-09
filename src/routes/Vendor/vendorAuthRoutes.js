@@ -82,6 +82,8 @@ router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
 router.put('/:vendorId/settings', vendorPanelController.updateSettings);
+router.post('/:vendorId/settings', vendorPanelController.updateSettings);
+router.patch('/:vendorId/settings', vendorPanelController.updateSettings);
 
 // Vendor Catalog / Items Specification Routes (/api/vendors/:vendorId/items)
 router.get('/:vendorId/items', storefrontController.getVendorStorefront);

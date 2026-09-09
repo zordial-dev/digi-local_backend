@@ -24,7 +24,7 @@ app.use(cors({
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Platform-Client', 'X-Request-ID', 'X-Idempotency-Key', 'Accept', 'Access-Control-Request-Private-Network']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Platform-Client', 'X-Request-ID', 'X-Idempotency-Key', 'Accept', 'Access-Control-Request-Private-Network', 'Cache-Control', 'Pragma', 'Expires', 'X-Requested-With', 'x-vendor-id', 'x-user-id']
 }));
 
 app.use((req, res, next) => {

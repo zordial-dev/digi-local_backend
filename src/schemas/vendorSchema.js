@@ -16,12 +16,43 @@ const addItemSchema = {
 const updateSettingsSchema = {
   body: z.object({
     store_name: z.string().trim().min(1, 'Store name is required').optional(),
+    vendor_name: z.string().trim().optional(),
+    contact_person: z.string().trim().optional(),
+    merchant_name: z.string().trim().optional(),
+    owner_name: z.string().trim().optional(),
+    email: z.string().trim().optional(),
     logo: z.string().trim().optional(),
+    logo_url: z.string().trim().optional(),
+    shop_image: z.string().trim().optional(),
     description: z.string().trim().optional(),
     phone_number: z.string().trim().optional(),
+    phone: z.string().trim().optional(),
+    whatsapp_number: z.string().trim().optional(),
     gst_number: z.string().trim().optional(),
+    gstin: z.string().trim().optional(),
+    gst: z.string().trim().optional(),
+    gstNumber: z.string().trim().optional(),
+    pan_number: z.string().trim().optional(),
     opening_timing: z.string().trim().optional(),
     closing_timing: z.string().trim().optional(),
+    opening_time: z.string().trim().optional(),
+    closing_time: z.string().trim().optional(),
+    working_days: z.string().trim().optional(),
+    business_type: z.string().trim().optional(),
+    category: z.string().trim().optional(),
+    address: z.string().trim().optional(),
+    area: z.string().trim().optional(),
+    city: z.string().trim().optional(),
+    state: z.string().trim().optional(),
+    pincode: z.string().trim().optional(),
+    location: z.string().trim().optional(),
+    shop_number: z.string().trim().optional(),
+    shop_no: z.string().trim().optional(),
+    bank_name: z.string().trim().optional(),
+    account_number: z.string().trim().optional(),
+    ifsc_code: z.string().trim().optional(),
+    account_holder_name: z.string().trim().optional(),
+    upi_id: z.string().trim().optional(),
     min_order_value: z.coerce.number().min(0).optional(),
     max_quantity_limit: z.coerce.number().min(1).optional(),
     delivery_charge: z.coerce.number().min(0).optional(),
@@ -32,7 +63,7 @@ const updateSettingsSchema = {
     is_global_coverage: z.boolean().optional(),
     delivery_radius_km: z.coerce.number().min(0).optional(),
     selected_zones: z.array(z.any()).optional()
-  })
+  }).passthrough()
 };
 
 const updateCoverageSchema = {
