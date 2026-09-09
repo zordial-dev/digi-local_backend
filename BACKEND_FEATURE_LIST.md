@@ -1,256 +1,376 @@
-# DigiLocal Backend Platform — Complete Feature Specification List
+# DigiLocal Backend Platform — Complete Feature Specification & Architecture Blueprint
 
 **Document Status:** Complete & Production Verified  
-**Target Audience:** Engineering Leadership, Product Managers, Frontend/Mobile Teams, QA Leads  
-**Architecture:** Node.js / Express, PostgreSQL / SQLite, Socket.IO Real-Time Engine, Cashfree Payments, MSG91 OTP, Firebase FCM & Expo Push Service, Nodemailer Queue  
+**Target Audience:** Engineering Leadership, Technical Leads, Backend/Frontend Developers, Mobile Engineers, QA, Product Managers  
+**System Architecture:** Node.js / Express, PostgreSQL (with PostGIS) / SQLite, Redis, Socket.IO Real-Time Engine, Cashfree Payments PG v3, MSG91 OTP Engine, Firebase FCM & Expo Push Service, Nodemailer Queue, Meta WhatsApp Cloud API  
 
 ---
 
 ## Executive Summary
 
-**DigiLocal** is a hyper-local e-commerce marketplace and delivery platform specifically engineered for residential gated communities and housing societies. It connects resident customers directly with nearby vendors (groceries, daily essentials, bakeries, pharmacies, services) through dedicated store interfaces, WhatsApp order dispatching, real-time audio-push notifications, and multi-tier subscription/payment handling.
+**DigiLocal** is an enterprise-grade, hyper-local e-commerce marketplace, on-demand services platform, and scheduled delivery engine engineered specifically for residential gated communities and housing societies. It bridges resident customers directly with approved nearby merchants, service providers, and residential association (RWA) governance.
 
-The backend service is structured into four primary operational pillars:
-1. **Super Admin Management Portal API** — Platform governance, RBAC, financial accounting, user/vendor moderation, CMS & support desk.
-2. **Vendor Panel & Mobile Application API** — Storefront configuration, real-time order desk, product catalog/stock management, payment details & push notifications.
-3. **Customer / Resident Storefront & App API** — Society & store discovery, catalog browsing, cart processing, order placement, order tracking & support tickets.
-4. **Integration Engine & Core Infrastructure** — Real-time WebSockets, Cashfree payment gateway, MSG91 SMS/WhatsApp OTP, FCM/Expo push notifications, background email queues, automated crons, and liveness/readiness probes.
+The platform architecture is built around **19 comprehensive domain subsystems**:
 
----
-
-## 1. Super Admin Portal & Platform Governance API
-
-The Admin API empowers platform administrators and sub-admins to govern the entire DigiLocal ecosystem, moderate residents and merchants, inspect financial performance, process refunds, and configure system-wide rules.
-
-### 1.1 Authentication & Security Controls
-* **Admin Secret & Master Login:** Secure authentication using master secret keys (`/api/admin/login` & `/api/v1/auth/login`).
-* **JWT Access & Refresh Token Management:** Token issuing with customizable expiry (`expiresIn`), token refresh cycle (`/api/v1/auth/refresh`), and current session verification (`/api/v1/auth/me`).
-* **Admin Profile & Credential Management:** Admin profile detail updates and secure password change endpoints with hash updates (`/api/settings/profile`, `/api/settings/change-password`).
-
-### 1.2 Sub-Admin & Role-Based Access Control (RBAC)
-* **Sub-Admin Provisioning:** Create, update, and list sub-admin accounts with assigned society boundaries (`/api/subadmins`, `/api/sub-admins`).
-* **Granular Permission Power Matrix:** Dynamic power assignment array including `MANAGE_USERS`, `MANAGE_VENDORS`, `FINANCIALS`, `SUPPORT`, `SETTINGS`, `CMS`, and `AUDIT_LOGS`.
-* **Account Status Toggles:** Instantly activate, suspend, or revoke sub-admin powers (`/api/subadmins/:id`).
-
-### 1.3 Resident User Directory & Moderation
-* **User Directory Listing:** Paginated user search and filter by name, phone, email, or society (`/api/people`, `/api/v1/admin/users`, `/api/users`).
-* **User Analytics & Demographic Metrics:** Aggregate resident join metrics, active vs blocked counts, flag statistics (`/api/people/analytics`).
-* **User Detail Inspection:** Full profile retrieval including society affiliation, flat number, joined date, order history, and flag count (`/api/people/:id`).
-* **User Moderation & Account Suspension:**
-  * Flag/Unflag user accounts for suspicious activities (`/api/people/:id/flag`, `/api/people/:id/unflag`).
-  * Block/Unblock user access across all storefronts (`/api/people/:id/block`, `/api/people/:id/unblock`, `/api/people/:id/status`).
-  * Soft delete / hard purge user records (`/api/people/:id`).
-
-### 1.4 Vendor Onboarding & Marketplace Moderation
-* **Vendor Master Directory:** View all onboarding & active vendors with society details, subscription tier, start/end dates, and payment history (`/api/admin/vendors`, `/api/vendors`).
-* **Pending Vendor Approval Workflow:**
-  * Inspect pending merchant applications with payment proof and GST validation (`/api/admin/requests`).
-  * Approve vendor request: Automatically sets status to `ACTIVE`, creates/extends 1-Year subscription plan, clears cache (`/api/admin/requests/:vendorId/approve`).
-  * Reject vendor request: Sets status to `REJECTED`, cancels subscription (`/api/admin/requests/:vendorId/reject`).
-* **Vendor Account Suspension & Reactivation:** Block, suspend, or reactivate vendor stores with custom reason messages sent via automated HTML email (`/api/admin/vendors/:vendorId/status`).
-
-### 1.5 Financial Management, Subscriptions & Payment Ledger
-* **Transaction Ledger:** Unified payment transaction stream logging Cashfree & Razorpay payments, transaction IDs, payment methods, timestamps, and order/subscription links (`/api/payments/transactions`).
-* **Executive Revenue Dashboard:** Real-time revenue aggregates, total volume, subscription collection breakdowns, and payment method stats (`/api/payments/revenue-dashboard`).
-* **Subscription Management:** Monitor vendor subscription tiers, annual plan start/end dates, renewal statuses (`/api/subscriptions`).
-* **Automated Refund Processing:** Initiate online payment refunds (full or partial) via Cashfree integration, auto-updating order and payment ledger statuses (`/api/payments/refund`, `/api/payments/:id/refund`).
-* **Financial Documents Generation:** Instant PDF/HTML layout download for payment receipts (`/api/payments/:id/receipt`) and tax invoices (`/api/payments/:id/invoice`).
-
-### 1.6 Promotions, Hero Banners & Marketing Engine
-* **Banner & Promotional Card Management:** CRUD endpoints for homepage marketing campaigns (`/api/promotions`).
-* **Placement & Targeting:** Configure target placement (`HERO_SLIDER`, `POPUP`, `CATEGORY_BANNER`), target category/store value, display ordering, and image URLs.
-* **Campaign Scheduling:** Set start and end dates with automated active/inactive status evaluation.
-
-### 1.7 Support Desk & Escalation Ticketing System
-* **Central Support Dashboard:** Filter, search, and list support tickets by status (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`), priority (`LOW`, `MEDIUM`, `HIGH`, `URGENT`), and category (`/api/support/tickets`).
-* **Ticket Messaging & Multi-Party Conversation:** View ticket timeline and post agent replies (`/api/support/tickets/:id/messages`, `/api/support/tickets/:id/reply`).
-* **Ticket Lifecycle & Escalation:**
-  * Escalate/De-escalate ticket priority levels (`/api/support/tickets/:id/escalate`, `/api/support/tickets/:id/deescalate`).
-  * Add internal ticket followers/assignees (`/api/support/tickets/:id/followers`).
-  * Merge duplicate tickets into a master thread or unmerge previously joined tickets (`/api/support/tickets/:id/merge`, `/api/support/tickets/:id/unmerge`).
-  * Update ticket status (`/api/support/tickets/:id/status`).
-
-### 1.8 System Audit Logging & Security Telemetry
-* **Audit Trail Inspection:** Comprehensive system log tracking admin/user actions, target entity types, IP addresses, and exact timestamps (`/api/audit-logs`, `/api/audit-logs/:id`).
-* **Audit Export:** Export filtered audit trail logs in CSV/JSON formats for compliance reviews (`/api/audit-logs/export`).
-
-### 1.9 Platform Configuration & Dynamic Settings
-* **Branding & Identity Config:** Dynamic updates for platform name, logo URL, currency symbol, and platform maintenance mode (`/api/config`, `/api/settings/branding`, `/api/settings`).
-* **Tax & Financial Settings:** Configure default platform GST percentage (e.g., 18.00%), service charges, and subscription tier pricing (`/api/settings/tax`, `/api/settings/subscription-plans`).
-* **Communication & SMTP Email Setup:** Configure Nodemailer SMTP credentials, email sender names, and trigger test emails (`/api/settings/email`, `/api/settings/email/send-test`).
-* **System & Notification Rules:** Configure system thresholds, notification rules, and broadcast push settings (`/api/settings/system`, `/api/settings/notifications`).
-
-### 1.10 Content Management System (CMS) & Legal Pages
-* **Dynamic Legal & Policy Pages:** API endpoints serving Markdown/HTML for Privacy Policy (`/api/privacy-policy`, `/api/cms/privacy-policy`), Terms & Conditions (`/api/terms-conditions`, `/api/cms/terms-conditions`), About Us (`/api/about-us`, `/api/cms/about-us`), and Help & Support (`/api/help-support`, `/api/cms/help-support`).
-* **CMS Content Editor:** Admin put endpoints to dynamically update legal text and support contacts (`/api/admin/cms/pages/:slug`, `/api/admin/cms/contacts`).
-
-### 1.11 Executive Telemetry & Reporting Engine
-* **Telemetry Tele-metrics:** High-level metrics for mobile app installs, active user sessions, order conversion rates, and gross merchandise value (GMV) (`/api/reports/telemetry`, `/api/reports/executive`).
-* **Data Export Engine:** Export platform reports to CSV or JSON formats (`/api/reports/export`).
+1. **Resident Profile & Account Engine** — Passwordless OTP authentication, profile management, society/flat unit tenancy binding, saved address geocoding, and account recovery.
+2. **Society & Community Management** — PostGIS spatial geofencing, society-level vendor visibility, delivery rules, community bulletin announcements, and RWA administrative controls.
+3. **Hyperlocal Digital Store & Catalog Engine** — Merchant digital storefronts, multi-tier categories, variants, dynamic operating hours, MOV rules, and instant Redis-backed stock toggles.
+4. **Resident Ordering & Shopping Cart Engine** — Atomic cart price/stock validation, tax/delivery calculation, row-locking checkout sessions, and complete order lifecycle management.
+5. **Real-Time Order Management & Alarm System** — Swiggy/Zomato-style continuous high-priority audio alarms (`order_alert_chime.wav`), WebSocket rooms (`vendor_{id}`), repetitive chime loops, and instant resident tracking broadcasts.
+6. **Delivery & Fleet Management Engine** — Automated driver dispatching, high-frequency GPS coordinate ingestion via Redis Geospatial (`GEOADD`), live map tracking streams, and cryptographic proof-of-delivery (POD) OTP handshakes.
+7. **Local Services & Freelancer Hub** — KYC onboarding for verified electricians, plumbers, house cleaners; dynamic rate cards; appointment booking slots; and reviews.
+8. **Payments, Finance & Vendor Earnings Engine** — Cashfree PG v3 API, HMAC SHA256 webhook cryptographic verification, double-entry merchant earnings ledger, and automated bank payouts.
+9. **Digital Wallet & Society Credit (Khatta) Engine** — Resident prepaid wallets, instant refunds, double-entry financial ledger integrity, and traditional neighborhood credit books ("Udhar / Khatta") with credit limits and automated payment reconciliation.
+10. **Subscription & Recurring Delivery Engine** — Daily and periodic recurring deliveries (milk, newspaper, groceries, water), automated 03:00 AM IST order generator cron, and vacation pause/resume.
+11. **Offers, Promotions & Digital Marketing Engine** — Rule-based coupon code engine (min cart, max discount, society targeting), dynamic home hero banners, and flash deals.
+12. **WhatsApp CRM & Customer Engagement Engine** — Meta WhatsApp Cloud API integration, automated receipt and tracking dispatches, direct `wa.me` merchant-customer click-to-chat links, and vendor CRM notes.
+13. **AI-Powered Inventory & Demand Forecasting** — Time-series demand prediction algorithms, SKU velocity classification (FMCG vs slow-moving), critical low-stock alerts, and smart reorder advice.
+14. **Regional Voice Commerce & Multilingual Experience** — Multi-language localization (English, Hindi, Marathi, Gujarati, etc.), Speech-to-Text audio processing pipeline, phonetic catalog matching, and 1-tap voice cart population.
+15. **Notifications & Multi-Channel Communications** — Unified dispatch router spanning FCM Push, Expo Push, MSG91 SMS, Meta WhatsApp, Nodemailer HTML emails, and in-app notification centers with Redis deduplication.
+16. **Search, Geospatial & Smart Discovery Engine** — Trigram fuzzy full-text search (`pg_trgm`), radial store proximity search, zero-result telemetry, and collaborative product recommendations.
+17. **Admin, Governance & Platform Management** — Multi-tier RBAC (Super Admin & Sub-Admin powers), merchant KYC approval workflows, global order intervention, and immutable compliance audit logs.
+18. **Analytics, Business Intelligence & Reporting** — Nightly rollup aggregation crons, merchant sales dashboards, society consumption metrics, platform GMV telemetry, and automated CSV/PDF exports.
+19. **Business Value Matrix & Architecture Blueprint** — Stakeholder value realization matrix (Residents, Vendors, RWAs, Delivery Drivers, Platform Operators) and technical infrastructure stack.
 
 ---
 
-## 2. Vendor Mobile App & Store Management Panel API
+## 1. Resident Profile & Account Backend Engine
 
-The Vendor API powers the mobile app for store owners (groceries, daily essentials, local services), enabling real-time store management, order execution, stock management, and customer messaging.
+### 1.1 Architecture & Engineering Design
+* **Stateless JWT with Blacklisting:** Employs asymmetric/HMAC JWT access tokens (15-minute TTL) paired with 30-day refresh tokens securely stored in `resident_sessions` with Redis-backed revocation lists.
+* **E.164 Phone Normalization & MSG91 OTP:** Phone inputs undergo strict normalization (`+91` prefix format). Integrates with MSG91 v5 OTP API with sliding-window rate limiting (max 3 requests per 10 minutes) and deterministic simulation tokens (`123456`) in test environments.
+* **Society Unit Tenancy Binding:** Connects residents to verified `societies.id` and validates `flat_number` / `tower_block` formats.
+* **GDPR Soft Deletion & Data Isolation:** Self-service account deactivation initiates soft deletion, revokes tokens, clears push credentials, and anonymizes PII while preserving financial ledger entries for taxation compliance.
 
-### 2.1 Vendor Onboarding & Authentication
-* **Multi-Step Registration:** Onboard new merchants with store name, owner details, GSTIN, society binding, and initial subscription fee payment (`/api/vendors/register`).
-* **Secure JWT Login:** Vendor login with email & password returning access token, refresh token, and vendor profile (`/api/vendors/login`).
-* **Session Refresh & Profile Inspection:** Token refresh endpoint (`/api/vendors/refresh-token`) and authenticated vendor profile fetch (`/api/vendors/me`, `/api/vendorPanel/:vendorId/profile`).
+### 1.2 Core API Endpoints
+* `POST /api/v1/auth/resident/otp/send` — Sends 6-digit verification code.
+* `POST /api/v1/auth/resident/otp/verify` — Verifies OTP, registers or logs in user, returns tokens.
+* `GET /api/v1/resident/profile` — Retrieves profile, current society binding, and preferences.
+* `PUT /api/v1/resident/profile` — Updates user profile, dietary preferences, and avatar.
+* `GET /api/v1/resident/addresses` — Lists all saved delivery addresses.
+* `POST /api/v1/resident/addresses` — Adds new delivery address with geocoded coordinates.
+* `DELETE /api/v1/resident/account` — Soft-deletes user account and revokes active sessions.
 
-### 2.2 Store Profile & Business Rules Customization
-* **Storefront Branding:** Customize store name, store description, logo image, avatar banner image, and public store ID (`/api/vendorPanel/:vendorId/profile`).
-* **Store Logo & Image Upload Engine:** Multipart image file upload endpoint saving store logo/banner to public static storage (`/api/vendors/:vendorId/logo`, `/api/vendorPanel/:vendorId/logo`).
-* **Operating Hours & Timing Controls:** Set daily opening time (e.g. `08:00 AM`) and closing time (e.g. `10:00 PM`) used by the storefront to display "OPEN" or "CLOSED" badges.
-* **Order Processing Thresholds:** Configure Minimum Order Value (MOV), maximum allowed order quantity per item, and flat/tiered delivery charge (`/api/vendorPanel/:vendorId/settings`).
-* **Accepted Payment Methods:** Toggle vendor payment acceptance (COD, UPI, Bank Transfer, QR Code).
-
-### 2.3 Vendor Payment & Banking Details
-* **Settlement Details Management:** Dedicated endpoint to configure bank account number, IFSC code, bank name, account holder name, and UPI ID (`/api/vendors/:vendorId/payment-details`, `/api/vendorPanel/:vendorId/payment-details`).
-* **UPI & QR Code Management:** Upload custom payment QR code image or generate dynamic UPI intent string/QR URL (`upi://pay?pa=...`).
-* **Custom Payment Instructions:** Provide store-specific payment instructions displayed to customers during checkout.
-
-### 2.4 Product Catalog & Stock Management
-* **Catalog Inventory Listing:** List all items with filter by category, search by item name, and stock status (`/api/vendorPanel/:vendorId/items`).
-* **Product Creation & Editing:** Add or update item details including item name, description, unit price, stock quantity, item category, unit (e.g. `kg`, `piece`, `pkt`, `liter`), and product image URL (`/api/vendorPanel/:vendorId/items`).
-* **Instant Stock & Availability Toggle:** One-click endpoint to toggle product availability (`is_available` / `in_stock`) instantly reflected on customer web apps (`/api/vendorPanel/:vendorId/items/:itemId/toggle`).
-* **Product Deletion:** Remove items from catalog (`/api/vendorPanel/:vendorId/items/:itemId`).
-
-### 2.5 Real-Time Order Processing & Lifecycle Management
-* **Incoming Order Stream:** View active, historical, and pending customer orders with customer name, phone, flat address, item breakdown, and total amount (`/api/vendorPanel/:vendorId/orders`).
-* **Order Status Transition Pipeline:** Advance order lifecycle states:
-  * `PLACED` → Order created by customer.
-  * `ACCEPTED` → Vendor accepts order and begins packing.
-  * `DISPATCHED` → Order handed over to delivery executive / resident pickup.
-  * `COMPLETED` → Order successfully delivered & paid.
-  * `CANCELLED` → Order rejected/cancelled with reason.
-* **Order Itemization:** Detailed view of customer items, item pricing, quantities, subtotal, GST, and delivery charges (`/api/vendorPanel/:vendorId/orders/:orderId`).
-
-### 2.6 Real-Time Audio Push Notifications & WebSockets
-* **Device FCM / Expo Token Registration:** Register or update device push token for Firebase Cloud Messaging (FCM Native) or Expo Push API (`/api/vendors/fcm-token`, `/api/vendors/register-push-token`).
-* **Zomato/Swiggy-Style Loud Order Alert:** High-priority push notifications with custom sound (`order_alert_chime.wav` / `new_order_alert_sound`), Android max priority channels, foreground alert displays, and action buttons (`ACCEPT`, `REJECT`, `MUTE`).
-* **Socket.IO Real-Time Alert Engine:** Instant Socket.IO event emission (`NEW_ORDER_ALERT` and `new_order_alert`) directly to `vendor_<vendor_id>` rooms for immediate dashboard audio chime without refresh.
-* **Token Cleanup on Logout:** Clear device push token on vendor logout to avoid phantom alerts (`/api/vendors/fcm-token/clear`).
-
-### 2.7 WhatsApp Order Integration & Notification Payload
-* **WhatsApp Order Notification Generator:** Formats structured itemized order summary, customer delivery address, total bill, and payment instructions formatted specifically for WhatsApp messaging (`/api/vendors/:vendorId/orders/:orderId/whatsapp-notification`).
-* **Direct WhatsApp Click-to-Chat Link:** Generates pre-filled `https://wa.me/<number>?text=...` links for instant 1-click vendor messaging to customers.
-
-### 2.8 Vendor Analytics & Subscription Health
-* **Vendor Dashboard Metrics:** Aggregate total revenue, lifetime orders count, active product count, and average order value (`/api/vendorPanel/:vendorId/dashboard`).
-* **Subscription Status & Renewal Tracking:** View current plan tier (`pro`, `starter`), start/end dates, subscription status (`ACTIVE`, `PENDING`, `EXPIRED`), and days remaining until renewal.
-
-### 2.9 Account Lifecycle & GDPR Compliance
-* **Vendor Account Deletion Request:** Endpoint for merchant self-service account deletion request with password verification, database soft deletion, catalog cleanup, and audit logging (`/api/vendors/:vendorId/account`, `/api/vendors/account/delete`).
+### 1.3 Database Schema Entities
+* `resident_users`: `id`, `phone`, `full_name`, `email`, `society_id`, `flat_number`, `tower_block`, `is_verified`, `is_blocked`, `created_at`
+* `resident_addresses`: `id`, `user_id`, `label`, `address_line`, `flat_no`, `latitude`, `longitude`, `is_default`
+* `resident_sessions`: `id`, `user_id`, `refresh_token_hash`, `device_info`, `expires_at`
 
 ---
 
-## 3. Customer / Resident Storefront & Mobile Application API
+## 2. Society & Community Management Backend
 
-The Storefront API powers the resident web and mobile app experience, enabling easy society lookup, vendor discovery, store catalog browsing, cart calculations, order placement, and support tickets.
+### 2.1 Architecture & Engineering Design
+* **PostGIS Spatial Geofencing:** Utilizes spatial polygons (`ST_Contains`, `ST_DWithin`) to automatically resolve a resident's physical coordinates to their registered residential gated society.
+* **Multi-Tenant Catalog Partitioning:** High-speed SQL queries join `society_vendor_mappings` to ensure that only approved merchants or universal hyperlocal vendors appear on a society's marketplace.
+* **Society-Level Delivery Rules:** Configurable security gate protocols (security guard entry pass requirement, delivery drop-off box vs doorstep access, evening entry cut-off hours).
+* **Community Bulletins:** Broadcast announcements with start and expiry timestamps displayed at the top of resident storefronts.
 
-### 3.1 Resident Authentication & Profile Management
-* **MSG91 Mobile OTP Login:** Request 6-digit OTP code to resident mobile number (`/api/otp/send`) and verify OTP (`/api/otp/verify`).
-* **User Profile Creation & Binding:** Register resident account with name, phone, email, society ID, and flat number (`/api/users/register`, `/api/users/profile`).
-* **Profile & Address Updates:** Update resident profile, profile avatar, and default delivery address (`/api/users/profile`).
-
-### 3.2 Society & Storefront Discovery Engine
-* **Society Directory Search:** Search and filter active societies by society name, city, location, or pincode (`/api/societies`, `/api/storefront/societies`).
-* **Society Details & Vendor Directory:** Fetch society profile along with all active vendors operating within the society (`/api/societies/:id`, `/api/stores`).
-* **Vendor Store Profile:** View detailed vendor information including opening/closing hours, store logo, description, MOV, delivery charges, accepted payment methods, and bank/UPI payment details (`/api/stores/:id`, `/api/vendorPanel/:vendorId/public`).
-
-### 3.3 Digital Product Catalog & Search
-* **Store Product Listing:** Fetch full item catalog for a store categorized by product type (`/api/stores/:id/items`, `/api/vendorPanel/:vendorId/public/items`).
-* **Product Search & Filtering:** Search products by keyword across society stores or within a specific vendor catalog.
-* **Real-time Availability Status:** Displays live stock indicators (`in_stock: true/false`, price, unit) preventing backorders.
-
-### 3.4 Cart Calculation & Order Placement
-* **Order Validation Engine:** Validates cart total against vendor's Minimum Order Value (MOV), checks item max quantity limits, verifies vendor active status and operating hours.
-* **Bill Breakdown Engine:** Calculates total order amount combining item line items, vendor GST percentage, and society delivery charge.
-* **Instant Order Placement:** Submits customer order with delivery flat/address, customer phone, selected vendor ID, line items, and payment method (`/api/orders`, `/api/users/orders`).
-* **Order Confirmation:** Returns unique timestamped order ID, status (`PLACED`), and formatted item summary.
-
-### 3.5 Customer Order Tracking & History
-* **Customer Order History:** List all historical orders placed by the authenticated resident (`/api/orders`, `/api/users/orders`).
-* **Live Order Tracking:** Inspect real-time status of active order (`PLACED` → `ACCEPTED` → `DISPATCHED` → `COMPLETED`) (`/api/orders/:id`).
-* **Order Cancellation:** Allow resident to cancel pending order if vendor has not yet accepted or dispatched it (`/api/orders/:id/cancel`).
-
-### 3.6 Resident Support & Assistance Desk
-* **Submit Support Ticket:** Resident endpoint to file a support query with subject, category, and message body (`/api/users/support/tickets`).
-* **View Resident Support History:** List tickets created by user with real-time status (`OPEN`, `IN_PROGRESS`, `RESOLVED`) and reply message history (`/api/users/support/tickets/:id`).
+### 2.2 Core API Endpoints
+* `GET /api/v1/societies` — Directory of active societies filtered by city, pincode, or name.
+* `GET /api/v1/societies/nearby?lat=&lng=&radius=` — Spatial query finding closest societies.
+* `GET /api/v1/societies/:id/vendors` — Lists verified merchants mapped to the society.
+* `GET /api/v1/societies/:id/announcements` — Active community notices and promotions.
+* `POST /api/v1/admin/societies` — [Admin] Registers society with boundary polygon and unit count.
+* `PUT /api/v1/admin/societies/:id/vendor-map` — Binds/revokes vendor permissions for a society.
 
 ---
 
-## 4. Integration Engine & Core Infrastructure
+## 3. Hyperlocal Digital Store & Catalog Engine
 
-The DigiLocal backend incorporates enterprise-grade integrations, background processing queues, and operational tools.
+### 3.1 Architecture & Engineering Design
+* **Dynamic Operating Hours & Status:** Evaluates opening/closing hours against Indian Standard Time (IST). Toggles "OPEN" / "CLOSED" indicators dynamically.
+* **Hierarchical SKU Taxonomy:** Multi-level categories, customizable metric units (`kg`, `gram`, `piece`, `liter`), and image optimization CDN delivery.
+* **Sub-Millisecond Availability Toggle:** One-click endpoint to toggle `in_stock` status with automated cache invalidation in Redis (`DEL store_catalog:{id}`).
+* **MOV & Delivery Rules:** Store-level settings for Minimum Order Value, delivery fees, free delivery thresholds, and maximum purchase limits per item.
 
-### 4.1 MSG91 SMS & WhatsApp OTP Gateway Engine
-* **v5 OTP API Integration:** Integrates MSG91 `https://control.msg91.com/api/v5/otp` API for high-deliverability SMS/WhatsApp OTP dispatch.
-* **Phone Number Normalization:** Automated formatting of Indian phone numbers (`+91` / `91` prefixing).
-* **Simulation Mode:** Development fallback mode allowing instant OTP verification (`123456` / `999999`) when MSG91 auth key is not configured.
-
-### 4.2 Cashfree Payment Gateway Engine (v3 API)
-* **Payment Session Initialization:** Creates Cashfree order payment sessions (`/pg/orders`) for vendor subscription onboarding fees and customer order checkouts (`createPaymentSession`, `createVendorRegistrationPayment`).
-* **Webhook Signature Verification:** HMAC SHA256 cryptographic verification of Cashfree webhook payloads (`verifyWebhookSignature`).
-* **Payment Callback & Sync:** Callback handler (`/api/vendors/cashfree/callback`) and webhook sync (`/api/vendors/cashfree/webhook`) updating vendor registration status to `ACTIVE`.
-* **Automated Refund API:** API integration to trigger refunds for cancelled orders or subscription adjustments.
-
-### 4.3 Firebase FCM & Expo Push Notification Engine
-* **Multi-Channel Push Router:** Automatically detects device token type (`ExponentPushToken` vs native FCM token) and dispatches via Expo Push API or Firebase Admin SDK.
-* **Foreground Sound & Channel Configuration:** Configures Android notification channel `order_alerts_channel` with custom sound file `order_alert_chime.wav`, max priority, and click action handlers.
-* **Deduplication Guard:** Built-in order notification deduplication keeping an in-memory set of recent order IDs to eliminate duplicate push dispatches.
-
-### 4.4 Async Email Notification & Queue System
-* **Nodemailer SMTP Integration:** Configured email transport supporting custom SMTP, HTML email templates, and inline assets.
-* **Background Email Queue:** Asynchronous job processing queue for sending transactional emails without blocking API request-response loops (`src/services/emailQueue.js`).
-* **Transactional Email Templates:** Pre-designed HTML email templates for:
-  * Vendor Registration & Onboarding Welcome.
-  * Vendor Account Status Updates (Approval, Rejection, Suspension).
-  * 7-Day Subscription Expiry Warning.
-  * Customer Order Receipt & Confirmation.
-  * Support Ticket Responses.
-  * Password Reset & Verification.
-
-### 4.5 Real-Time WebSocket Infrastructure (Socket.IO)
-* **Socket Server Initialization:** Multi-room Socket.IO server mounted on Express HTTP server.
-* **Vendor Notification Rooms:** Dual room subscriptions (`vendor_<vendor_id>` and `<vendor_id>`) for real-time order alerts.
-* **Event Dispatcher:** Fires `NEW_ORDER_ALERT`, `new_order_alert`, and `new_order` events to connected frontend clients.
-
-### 4.6 Scheduled Job Cron Engine
-* **Daily Subscription Expiry Monitor:** Node-cron scheduler running daily at 9:00 AM (`0 9 * * *`).
-* **Automated Expiry Alerts:** Queries vendors whose subscription end date is within 7 days and dispatches warning emails automatically (`src/cron/index.js`).
-
-### 4.7 Health, Observability & Environment Controls
-* **Liveness & Readiness Probes:** Operational endpoints for Kubernetes/Docker deployment:
-  * `/health` — Full system status report including database connectivity ping, environment, memory usage, uptime.
-  * `/health/live` — Liveness probe (HTTP 200 OK).
-  * `/health/ready` — Readiness probe verifying active database connection.
-  * `/version` & `/health/version` — Application version and environment metadata.
-* **Database Driver Support:** Unified database query abstraction layer supporting PostgreSQL (production) and SQLite (local testing) (`src/models/db.js`).
+### 3.2 Core API Endpoints
+* `GET /api/v1/vendor/store-profile` — Retrieves store metadata, operating hours, and policies.
+* `PUT /api/v1/vendor/store-profile` — Updates store details, MOV, and delivery fees.
+* `POST /api/v1/vendor/store/logo` — Multipart image upload with thumbnail generation.
+* `GET /api/v1/vendor/products` — Paginated merchant catalog with category/stock filters.
+* `POST /api/v1/vendor/products` — Creates product SKU with pricing, taxes, and stock levels.
+* `PATCH /api/v1/vendor/products/:id/stock` — Atomic toggle for product availability state.
+* `GET /api/v1/public/stores/:id/catalog` — Cached public store catalog for resident apps.
 
 ---
 
-## 5. Technology Stack & API Summary Matrix
+## 4. Resident Ordering & Shopping Cart Engine
 
-| Pillar / Service | Primary Technologies | Key Endpoints / Modules | Operational Features |
-| :--- | :--- | :--- | :--- |
-| **Super Admin Portal** | Node.js, Express, JWT, SQL | `/api/admin/*`, `/api/people/*`, `/api/payments/*`, `/api/support/*`, `/api/config` | RBAC, User/Vendor Moderation, Revenue Dashboard, Refunds, CMS, Audit Logs |
-| **Vendor App & Panel** | Node.js, Express, Socket.IO, FCM | `/api/vendorPanel/*`, `/api/vendors/*` | Store Config, Catalog/Stock CRUD, Real-Time Audio Push Alerts, WhatsApp Link Generator |
-| **Resident Storefront** | Node.js, Express, MSG91 | `/api/societies/*`, `/api/stores/*`, `/api/orders/*`, `/api/users/*` | OTP Auth, Society Search, Cart Calculation, MOV Validation, Order Tracking |
-| **Payment Engine** | Cashfree PG v3 API, HMAC SHA256 | `/api/vendors/cashfree/*`, `cashfreeService.js` | Subscription Fees, Checkout Sessions, Webhook Verification, Refund Processing |
-| **OTP Engine** | MSG91 v5 API | `/api/otp/*`, `msg91Service.js` | 6-Digit SMS/WhatsApp OTP, Phone Normalization, Dev Simulation Mode |
-| **Push & WebSockets** | Firebase FCM, Expo Push API, Socket.IO | `notificationService.js`, `socket/index.js` | Custom Audio Chime (`order_alert_chime.wav`), Foreground Chime, Deduplication |
-| **Email & Cron** | Nodemailer, Async Queue, node-cron | `emailService.js`, `emailQueue.js`, `cron/index.js` | Subscription 7-Day Expiry Warnings, Transactional HTML Emails |
-| **Observability** | Express | `/health`, `/health/ready`, `/health/live` | DB Ping, Uptime, Memory Usage, Docker/K8s Readiness Probes |
+### 4.1 Architecture & Engineering Design
+* **Price & Inventory Integrity Engine:** Validates cart items against live database records, rejects altered client pricing, validates vendor operational status, and verifies stock availability.
+* **Bill Breakdown Computation:** Accurately computes line-item subtotals, item-specific GST, delivery fees, platform convenience fees, and promo discounts.
+* **Atomic Row-Level Locking:** Uses `SELECT ... FOR UPDATE` during checkout to prevent double-allocation of limited stock.
+* **1-Click Reorder & Tracking:** Generates immutable order records and allows residents to rehydrate past orders into the active cart.
+
+### 4.2 Core API Endpoints
+* `POST /api/v1/cart/validate` — Validates cart items, verifies vendor open hours, stock, and MOV.
+* `POST /api/v1/cart/calculate-total` — Computes bill breakdown with taxes, delivery, and discounts.
+* `POST /api/v1/orders/checkout` — Initiates checkout session and locks inventory for 10 minutes.
+* `POST /api/v1/orders/place` — Confirms order placement for COD, Wallet, or verified Cashfree payment.
+* `GET /api/v1/resident/orders` — Historical order listing for authenticated resident.
+* `GET /api/v1/resident/orders/:id` — Full order detail, item breakdown, invoice, and status.
+* `POST /api/v1/resident/orders/:id/cancel` — Cancels order if not yet dispatched; initiates refund.
+
+---
+
+## 5. Real-Time Order Management & Alarm System
+
+### 5.1 Architecture & Engineering Design
+* **Swiggy/Zomato-Style Loud Order Alert:** High-priority Android notification channel `order_alerts_channel` using custom sound `order_alert_chime.wav` with full-screen foreground intent.
+* **Persistent Repetition Loop:** Server-side scheduler re-emits push and WebSocket notifications every 30 seconds until the merchant calls the acknowledgment endpoint.
+* **Socket.IO Room Isolation:** Merchants join `vendor_{vendor_id}` rooms on authentication; order events are emitted with sub-100ms latency.
+* **Strict Finite State Machine:** Enforces valid lifecycle transitions: `PLACED` &rarr; `ACCEPTED` &rarr; `PREPARING` &rarr; `READY_FOR_PICKUP` &rarr; `OUT_FOR_DELIVERY` &rarr; `DELIVERED`.
+
+### 5.2 Core API Endpoints & Events
+* `GET /api/v1/vendor/orders/active` — Active orders awaiting preparation or pickup.
+* `POST /api/v1/vendor/orders/:id/acknowledge` — Halts alarm chime and marks order acknowledged.
+* `PATCH /api/v1/vendor/orders/:id/status` — Advances order status through the pipeline.
+* `POST /api/v1/vendor/device-token` — Registers FCM/Expo push token with sound capabilities.
+* `WS emit: NEW_ORDER_ALERT` — Real-time event containing order payload.
+* `WS emit: ORDER_STATUS_CHANGED` — Real-time tracking event dispatched to resident.
 
 ---
 
-## 6. Verification & Quality Assurance
+## 6. Delivery & Fleet Management Backend
 
-* **OpenAPI 3.1.0 Specification:** Standardized OpenAPI JSON schema maintained at [`docs/openapi.json`](file:///c:/Users/LENOVO/Desktop/digilocal_backend_mock/docs/openapi.json).
-* **Automated Test Suite:** Complete test runner and integration test scripts under [`tests/testRunner.js`](file:///c:/Users/LENOVO/Desktop/digilocal_backend_mock/tests/testRunner.js) verifying admin auth, vendor lifecycle, order creation, payment callbacks, and notification dispatching.
+### 6.1 Architecture & Engineering Design
+* **Smart Fleet Allocation:** Dynamic assignment algorithm evaluating driver proximity, pending order queue, and delivery destination.
+* **Redis Geospatial Telemetry:** High-frequency driver GPS coordinates ingested into Redis (`GEOADD delivery_riders <lng> <lat> <driver_id>`), eliminating disk write bottlenecks.
+* **Live Resident Map Tracking:** Real-time coordinate streams piped to residents via WebSockets with dynamic ETA calculation.
+* **Proof of Delivery (POD) Verification:** Secure 4-digit handover OTP generated on resident app; required by driver app to complete delivery.
+
+### 6.2 Core API Endpoints
+* `POST /api/v1/delivery/auth/login` — Driver authentication and shift check-in.
+* `GET /api/v1/delivery/assigned-orders` — Lists active deliveries with pickup and drop addresses.
+* `PATCH /api/v1/delivery/orders/:id/accept` — Driver accepts delivery assignment.
+* `POST /api/v1/delivery/telemetry/location` — Ingests driver GPS coordinate ping into Redis.
+* `GET /api/v1/orders/:id/live-tracking` — Returns live driver coordinates and estimated ETA.
+* `POST /api/v1/delivery/orders/:id/verify-otp` — Verifies delivery OTP and finalizes order.
 
 ---
-*Document prepared for DigiLocal Engineering Team & Management Review.*
+
+## 7. Local Services & Freelancer Hub Backend
+
+### 7.1 Architecture & Engineering Design
+* **Freelancer KYC & Skill Matrix:** Verification workflows for electricians, plumbers, carpenters, and cleaners with identity and police verification tracking.
+* **Dynamic Tariff Rate Cards:** Configurable hourly rates, inspection fees, and task-based service pricing with society coverage zones.
+* **Slot-Based Scheduling Engine:** Time-slot calendar with double-booking prevention and provider availability windows.
+* **Ratings & Review Aggregator:** Background job recalculates running average ratings and updates provider search rankings.
+
+### 7.2 Core API Endpoints
+* `GET /api/v1/services/categories` — Lists all verified service categories.
+* `GET /api/v1/services/providers` — Lists providers operating within the resident's society.
+* `POST /api/v1/services/bookings` — Books a service with date, slot, problem notes, and address.
+* `PATCH /api/v1/services/bookings/:id/status` — Updates booking state (`CONFIRMED`, `COMPLETED`).
+* `POST /api/v1/services/bookings/:id/reviews` — Submits customer star rating and review.
+
+---
+
+## 8. Payments, Finance & Vendor Earnings Engine
+
+### 8.1 Architecture & Engineering Design
+* **Cashfree PG v3 API Integration:** Generates payment sessions with multi-channel support (UPI, Cards, NetBanking).
+* **HMAC SHA256 Webhook Verification:** Verifies signatures on incoming payment webhooks to prevent spoofing.
+* **Automated Ledger & Commissions:** Splits order totals into merchant earnings, delivery fee pools, and platform commission.
+* **Automated Bank Payouts:** Disburses settled balances to vendor bank accounts via Cashfree Payouts API / IMPS transfer.
+
+### 8.2 Core API Endpoints
+* `POST /api/v1/payments/cashfree/session` — Creates Cashfree payment session for checkout.
+* `POST /api/v1/payments/cashfree/webhook` — Webhook listener validating HMAC signature.
+* `GET /api/v1/vendor/finance/earnings` — Summary of gross sales, commissions, and balance.
+* `GET /api/v1/vendor/finance/settlements` — Historical payout bank transfer logs and UTRs.
+* `POST /api/v1/admin/finance/payouts/trigger` — [Admin] Executes bulk payout disbursement batch.
+
+---
+
+## 9. Digital Wallet & Society Credit (Khatta) Engine
+
+### 9.1 Architecture & Engineering Design
+* **Prepaid Resident Wallet:** Instant checkout and zero-delay automated refunds for cancelled orders.
+* **Double-Entry Ledger Engine:** Every credit and debit entry is recorded as an immutable balanced pair with cryptographic hash chaining.
+* **Society Khatta / Udhar Ledger:** Digitizes neighborhood credit accounts, allowing residents to purchase on credit within configured limits.
+* **Automated Due Reminders:** Automated calculation of outstanding balances with WhatsApp/SMS payment reminders with direct UPI payment links.
+
+### 9.2 Core API Endpoints
+* `GET /api/v1/resident/wallet` — Retrieves wallet balance and transaction ledger.
+* `POST /api/v1/resident/wallet/topup` — Creates payment session to add funds to wallet.
+* `GET /api/v1/vendor/khatta/customers` — Lists customers with credit balances and limits.
+* `POST /api/v1/vendor/khatta/entry` — Logs Udhar purchase or cash payment against ledger.
+* `POST /api/v1/vendor/khatta/send-reminder` — Dispatches WhatsApp payment reminder with UPI link.
+
+---
+
+## 10. Subscription & Recurring Delivery Backend
+
+### 10.1 Architecture & Engineering Design
+* **Recurring Cadence Engine:** Handles Daily, Weekdays, Weekends, and Custom day combinations for daily essentials (milk, bread, water, newspapers).
+* **Vacation Pause / Resume:** Allows residents to pause deliveries with a 10:00 PM previous-night cut-off.
+* **Nightly 03:00 AM IST Order Generator:** Scheduled cron (`0 3 * * *`) scans active subscriptions, checks wallet balances, and generates morning vendor dispatch orders.
+* **Delivery Schedule Preview:** Generates upcoming 7-day projected deliveries and billing forecasts.
+
+### 10.2 Core API Endpoints
+* `GET /api/v1/subscriptions/catalog` — Lists eligible recurring subscription products.
+* `POST /api/v1/subscriptions` — Creates subscription with frequency, quantity, and start date.
+* `PATCH /api/v1/subscriptions/:id/pause` — Sets pause window preventing order generation.
+* `PATCH /api/v1/subscriptions/:id/resume` — Resumes paused subscription.
+* `GET /api/v1/subscriptions/upcoming` — Returns 7-day projected deliveries and costs.
+
+---
+
+## 11. Offers, Promotions & Digital Marketing Engine
+
+### 11.1 Architecture & Engineering Design
+* **Rule-Based Coupon Engine:** Evaluates minimum spend, maximum discount limits, user redemption frequency, and society restrictions.
+* **Dynamic Hero Banners:** Admin/Vendor marketing banners categorized by placement (`HOME_HERO`, `POPUP`, `CATEGORY_HEADER`).
+* **Society-Exclusive Flash Deals:** Time-limited price drops available only to specific residential communities.
+* **Targeted Resident Vouchers:** Automatic issuance of promotional credits to win back dormant residents.
+
+### 11.2 Core API Endpoints
+* `POST /api/v1/promotions/coupons/validate` — Validates coupon against cart; returns discount.
+* `GET /api/v1/promotions/banners` — Fetches active banners for resident's society.
+* `POST /api/v1/admin/promotions/campaigns` — [Admin] Launches scheduled marketing campaign.
+* `GET /api/v1/vendor/promotions` — Vendor dashboard tracking coupon redemption metrics.
+
+---
+
+## 12. WhatsApp CRM & Customer Engagement Engine
+
+### 12.1 Architecture & Engineering Design
+* **Meta WhatsApp Cloud API Integration:** Automated delivery of templated order confirmations, invoices, and live tracking links.
+* **Direct Click-to-Chat Deeplinks:** Pre-formatted `https://wa.me/` URLs with complete order items and address for 1-click vendor messaging.
+* **Vendor CRM & Segmentation:** Customer insights for vendors: order frequency, lifetime spend, and top-ordered items.
+* **Customer Notes:** Internal merchant notes per resident profile (e.g. "Leave package at security gate").
+
+### 12.2 Core API Endpoints
+* `POST /api/v1/integrations/whatsapp/webhook` — Meta Cloud API listener for message delivery receipts.
+* `GET /api/v1/vendor/orders/:id/wa-link` — Generates formatted WhatsApp click-to-chat URL.
+* `GET /api/v1/vendor/crm/customers` — Lists top customers by spend, frequency, and recency.
+* `POST /api/v1/vendor/crm/customers/:id/notes` — Saves private operational notes for a customer.
+
+---
+
+## 13. AI-Powered Inventory & Demand Forecasting Engine
+
+### 13.1 Architecture & Engineering Design
+* **Time-Series Demand Prediction:** Analyzes 90-day purchase history, seasonal festivals, and society demographics to forecast 7-day and 14-day SKU demand.
+* **Automated Reorder Recommendations:** Evaluates current inventory against predicted velocity and alerts vendors before stockouts.
+* **Product Velocity Classification:** Labels catalog items as Fast-Moving (FMCG), Slow-Moving, or High-Margin.
+* **Stockout Early-Warning Worker:** Continuous background audit comparing order rate with remaining stock.
+
+### 13.2 Core API Endpoints
+* `GET /api/v1/vendor/ai/demand-forecast` — Predicted unit sales for top SKUs for the next 7 days.
+* `GET /api/v1/vendor/ai/reorder-advice` — Recommended purchase orders and suggested quantities.
+* `GET /api/v1/vendor/ai/product-velocity` — Categorizes catalog items by movement velocity.
+* `POST /api/v1/vendor/inventory/bulk-adjust` — Bulk update endpoint for inventory restocking.
+
+---
+
+## 14. Regional Voice Commerce & Multilingual Experience
+
+### 14.1 Architecture & Engineering Design
+* **Multi-Language Localization (i18n):** Supports English, Hindi, Marathi, Gujarati, Kannada, Tamil, and Telugu across product catalogs and notifications.
+* **Speech-to-Text Pipeline:** Ingests audio files, transcribes via Whisper/Speech API, and extracts shopping intent via an entity parsing model.
+* **Phonetic Fuzzy Matching:** Resolves regional spoken phrases (e.g. *"do packet amul taaza doodh"*) to exact SKU IDs using Levenshtein distance and embeddings.
+* **1-Tap Voice Cart Population:** Translates voice intents directly into active shopping cart items.
+
+### 14.2 Core API Endpoints
+* `POST /api/v1/voice/parse-intent` — Transcribes audio and returns recognized products and quantities.
+* `POST /api/v1/voice/smart-cart-populate` — Matches voice intent to catalog and injects items into cart.
+* `GET /api/v1/i18n/translations` — Fetches localized dictionary strings for the selected language.
+
+---
+
+## 15. Notifications & Multi-Channel Communications Engine
+
+### 15.1 Architecture & Engineering Design
+* **Omni-Channel Dispatch Router:** Routes notifications across Push (FCM/Expo), SMS (MSG91), WhatsApp, and Email (Nodemailer).
+* **Redis Key Deduplication:** Prevents duplicate pushes during concurrent webhook deliveries or network retries.
+* **Async Email Processing Queue:** Decouples SMTP email sending from HTTP API request threads via `src/services/emailQueue.js`.
+* **In-App Notification Center:** Synchronized notification history with unread count badges and deep-linking support.
+
+### 15.2 Core API Endpoints
+* `GET /api/v1/notifications` — Lists resident or vendor notification history.
+* `PATCH /api/v1/notifications/:id/read` — Marks notification as read and updates badge count.
+* `PATCH /api/v1/notifications/mark-all-read` — Marks all notifications as read.
+* `POST /api/v1/admin/notifications/broadcast` — [Admin] Broadcasts push alert to all registered users.
+
+---
+
+## 16. Search, Geospatial & Smart Discovery Engine
+
+### 16.1 Architecture & Engineering Design
+* **Typo-Tolerant Trigram Search:** Uses PostgreSQL `pg_trgm` and `tsvector` full-text search for instant matching across thousands of products.
+* **Radial Proximity Discovery:** Filters stores and services using PostGIS spherical distance functions relative to resident coordinates.
+* **Collaborative Recommendations:** Computes "Frequently Bought Together" bundles and trending items within the resident's specific housing society.
+* **Zero-Result Telemetry:** Logs unfulfilled search queries to inform vendors of unmet resident demand.
+
+### 16.2 Core API Endpoints
+* `GET /api/v1/discovery/search` — Unified search across products, stores, and services.
+* `GET /api/v1/discovery/trending` — Top 10 trending items ordered within the resident's society.
+* `GET /api/v1/discovery/recommended` — Personalized recommendations based on past 30-day purchases.
+
+---
+
+## 17. Admin, Governance & Platform Management Engine
+
+### 17.1 Architecture & Engineering Design
+* **Granular Role-Based Access Control (RBAC):** Sub-admin permissions matrix (`MANAGE_USERS`, `MANAGE_VENDORS`, `FINANCIALS`, `SUPPORT`, `SETTINGS`, `CMS`, `AUDIT_LOGS`).
+* **Merchant KYC Approval Workflow:** Multi-stage verification inspecting GSTIN, FSSAI, PAN, and banking details before activating 1-Year subscription.
+* **Order & Dispute Intervention:** Capability to cancel stuck orders, reassign drivers, or initiate instant refunds.
+* **Immutable Compliance Audit Trail:** Records every admin action, IP address, timestamp, and entity diff payload.
+
+### 17.2 Core API Endpoints
+* `GET /api/v1/admin/dashboard/metrics` — Platform-wide telemetry: GMV, active users, live vendors, orders.
+* `GET /api/v1/admin/vendors/pending` — Lists merchant applications awaiting KYC review.
+* `POST /api/v1/admin/vendors/:id/approve` — Approves vendor and activates 1-Year subscription.
+* `POST /api/v1/admin/vendors/:id/reject` — Rejects vendor with custom rejection reason.
+* `GET /api/v1/admin/audit-logs` — Paginated audit log search with date range filters.
+* `GET /api/v1/admin/audit-logs/export` — Exports audit trail logs to CSV/JSON format.
+
+---
+
+## 18. Analytics, Business Intelligence & Reporting Engine
+
+### 18.1 Architecture & Engineering Design
+* **Nightly Rollup Aggregation Crons:** Computes daily metric snapshots into summary tables (`daily_vendor_metrics`, `daily_society_metrics`) to keep OLTP queries fast.
+* **Vendor BI Dashboards:** Visualizes sales curves, gross revenue, average order value (AOV), and customer retention.
+* **Society Commerce Analytics:** Ranks housing societies by order volume, resident engagement, and popular categories.
+* **Automated Data Exports:** Asynchronous worker generating downloadable CSV and PDF reports.
+
+### 18.2 Core API Endpoints
+* `GET /api/v1/vendor/analytics/sales-overview` — Daily, weekly, and monthly revenue aggregates.
+* `GET /api/v1/vendor/analytics/top-products` — Ranks top-selling products by units and revenue.
+* `GET /api/v1/admin/analytics/platform-gmv` — Executive platform metrics, commission revenue, and growth.
+* `GET /api/v1/admin/analytics/society-metrics` — Comparative analytics ranking societies by activity.
+
+---
+
+## 19. Business Value Matrix & Architecture Blueprint
+
+### 19.1 Stakeholder Value Realization Matrix
+
+| Stakeholder | Core Value Proposition | Backend Architectural Enablers |
+| :--- | :--- | :--- |
+| **Residents** | Convenient doorstep shopping, 15-30 min delivery, trusted society vendors, recurring milk/essentials, regional voice ordering. | Sub-second catalog caching, PostGIS geofence isolation, cron subscription generation, double-entry wallet balance. |
+| **Merchants / Vendors** | Zero-setup digital store, access to captive gated community buyers, Swiggy-style loud audio alarms, automated bank payouts, Khatta credit tracking. | FCM max-priority push audio channels, Socket.IO rooms, Cashfree auto-settlement, immutable double-entry credit ledger. |
+| **Society RWAs** | Organized community marketplace, vetted external vendor access, security gate verification compliance, community announcements. | Multi-tenant society boundary policies, security gate delivery protocol flags, RWA admin audit logs. |
+| **Delivery Fleet** | Optimized route navigation, fair automated dispatching, verified OTP delivery proof, transparent earnings tracking. | Redis GEO spatial coordinate tracking, real-time ETA calculation, cryptographic POD OTP handshake. |
+| **Platform Operators** | Scalable multi-society marketplace, recurring subscription revenue, commission take-rates, complete audit & governance controls. | Modular monolith / microservice architecture, OpenAPI 3.1.0 specifications, strict database seed isolation, observability probes. |
+
+### 19.2 Technical Infrastructure Stack
+
+| Layer / Subsystem | Technology Selection | Implementation Details |
+| :--- | :--- | :--- |
+| **Runtime & Framework** | Node.js LTS, Express 4.x | Stateless async request handlers, Winston structured logging. |
+| **Database & Spatial** | PostgreSQL 15+ (PostGIS) / SQLite | Unified abstraction layer (`src/models/db.js`), connection pooling, ACID transactions. |
+| **Caching & In-Memory** | Redis 7.x | Sub-millisecond catalog caching, TTL key deduplication, Redis GEO for driver GPS. |
+| **Real-Time Engine** | Socket.IO 4.x with Redis Adapter | Vendor notification rooms (`vendor_{id}`), resident live tracking rooms. |
+| **Payments & Fintech** | Cashfree PG v3 API & Payouts Engine | HMAC SHA256 webhook signatures, automated refunds, bank settlement ledger. |
+| **SMS & WhatsApp OTP** | MSG91 v5 OTP API | E.164 phone formatting, developer simulation fallback (`123456`). |
+| **Push Notifications** | Firebase Admin SDK (FCM) & Expo Push | Custom sound channel (`order_alert_chime.wav`), Android max priority. |
+| **Background Workers** | node-cron, Async Email Queue | Nightly 3 AM subscription runner, 9 AM expiry warnings, Nodemailer queue. |
+| **Observability & Probes** | Docker, Kubernetes Probes | `/health` (system ping), `/health/live`, `/health/ready`, memory & uptime telemetry. |
+
+---
+*DigiLocal Backend Specification Document — Verified and Published.*

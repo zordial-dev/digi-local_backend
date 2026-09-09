@@ -1422,6 +1422,9 @@ async function updateSlaConfig(req, res) { return supportController.updateSlaCon
 async function getTags(req, res) { return supportController.getTags(req, res); }
 async function createTag(req, res) { return supportController.createTag(req, res); }
 async function deleteTag(req, res) { return supportController.deleteTag(req, res); }
+async function getOverdueTickets(req, res) { return supportController.getOverdueTickets(req, res); }
+async function getSlaSummary(req, res) { return supportController.getSlaSummary(req, res); }
+async function resetOrExtendSla(req, res) { return supportController.resetOrExtendSla(req, res); }
 async function uploadAttachment(req, res) { return supportController.uploadAttachment(req, res); }
 
 
@@ -1582,6 +1585,9 @@ module.exports = {
 
   // Module 9: Support Desk
   listSupportTickets,
+  getOverdueTickets,
+  getSlaSummary,
+  resetOrExtendSla,
   getTicketById,
   getTicketMessages,
   replyToTicket,

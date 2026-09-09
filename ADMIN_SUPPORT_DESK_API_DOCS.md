@@ -29,7 +29,10 @@ Content-Type: application/json
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/api/admin/support/tickets` | List all support tickets with status/category/search filters |
+| `GET` | `/api/admin/support/tickets` | List all support tickets with status/category/search/sla_status filters |
+| `GET` | `/api/admin/support/tickets/overdue` | Dedicated feed of SLA-breached & overdue tickets (never erased) |
+| `GET` | `/api/admin/support/tickets/sla-summary` | Live SLA compliance metrics and breach telemetry |
+| `PATCH` / `POST` | `/api/admin/support/tickets/:ticketId/reset-sla` | Extend SLA time (+mins) or reset countdown |
 | `GET` | `/api/admin/support/tickets/:ticketId` | Fetch single ticket details |
 | `GET` | `/api/support/tickets/:ticketId/messages` | Get ticket thread messages |
 | `POST` | `/api/support/tickets/:ticketId/reply` | Reply to ticket or add internal staff note |

@@ -94,6 +94,8 @@ router.delete(['/sub-admins/:id', '/subadmins/:id'], adminPanelController.delete
 
 // ── Support Desk ─────────────────────────────────────────────────────
 router.get('/support/tickets', adminPanelController.listSupportTickets);
+router.get('/support/tickets/overdue', adminPanelController.getOverdueTickets);
+router.get('/support/tickets/sla-summary', adminPanelController.getSlaSummary);
 router.get('/support/analytics', adminPanelController.getSupportAnalytics);
 router.get('/support/sla', adminPanelController.getSlaConfig);
 router.put('/support/sla', adminPanelController.updateSlaConfig);
@@ -101,6 +103,8 @@ router.get('/support/tags', adminPanelController.getTags);
 router.post('/support/tags', adminPanelController.createTag);
 router.delete('/support/tags/:tagId', adminPanelController.deleteTag);
 
+router.patch(['/support/tickets/:ticketId/reset-sla', '/support/tickets/:id/reset-sla'], adminPanelController.resetOrExtendSla);
+router.post(['/support/tickets/:ticketId/reset-sla', '/support/tickets/:id/reset-sla'], adminPanelController.resetOrExtendSla);
 router.get(['/support/tickets/:ticketId', '/support/tickets/:id'], adminPanelController.getTicketById);
 router.get(['/support/tickets/:ticketId/messages', '/support/tickets/:id/messages'], adminPanelController.getTicketMessages);
 router.post(['/support/tickets/:ticketId/reply', '/support/tickets/:id/reply'], adminPanelController.replyToTicket);

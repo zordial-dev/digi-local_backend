@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DigiLocal Backend Platform — Comprehensive Feature & Architecture Specification</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 14mm 12mm 14mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page);
+      font-size: 8pt;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #64748b;
+    }
+  }
+
+  *, *:before, *:after {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1e293b;
+    background-color: #ffffff;
+    font-size: 9.5pt;
+    line-height: 1.45;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .cover-page {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 30px 20px 20px 20px;
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .cover-header {
+    border-bottom: 3px solid #2563eb;
+    padding-bottom: 15px;
+  }
+
+  .brand-badge {
+    display: inline-block;
+    background: #1e1e38;
+    color: #ffffff;
+    font-size: 9pt;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 5px 12px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+  }
+
+  .cover-title {
+    font-size: 26pt;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.15;
+    margin: 0 0 10px 0;
+  }
+
+  .cover-subtitle {
+    font-size: 13pt;
+    color: #475569;
+    font-weight: 500;
+    margin: 0 0 20px 0;
+  }
+
+  .cover-summary {
+    background: #f8fafc;
+    border-left: 4px solid #2563eb;
+    padding: 14px 18px;
+    border-radius: 0 6px 6px 0;
+    font-size: 10pt;
+    color: #334155;
+    line-height: 1.5;
+  }
+
+  .cover-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin: 20px 0;
+  }
+
+  .cover-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+
+  .cover-card h4 {
+    margin: 0 0 6px 0;
+    font-size: 10pt;
+    color: #1e293b;
+    font-weight: 700;
+  }
+
+  .cover-card p {
+    margin: 0;
+    font-size: 8.5pt;
+    color: #64748b;
+  }
+
+  .cover-meta-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+    font-size: 8.5pt;
+  }
+
+  .cover-meta-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .cover-meta-table td:first-child {
+    font-weight: 600;
+    color: #475569;
+    width: 32%;
+  }
+
+  .cover-meta-table td:last-child {
+    color: #0f172a;
+  }
+
+  .cover-footer {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 12px;
+    font-size: 8pt;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* Table of Contents */
+  .toc-page {
+    page-break-after: always;
+    break-after: page;
+    padding: 20px 10px;
+  }
+
+  .toc-title {
+    font-size: 18pt;
+    font-weight: 800;
+    color: #0f172a;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 8px;
+    margin-bottom: 16px;
+  }
+
+  .toc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 18px;
+  }
+
+  .toc-item {
+    font-size: 8.5pt;
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px dotted #cbd5e1;
+    padding-bottom: 3px;
+  }
+
+  .toc-item span:first-child {
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .toc-item span:last-child {
+    color: #2563eb;
+    font-weight: 700;
+  }
+
+  /* Section Styles */
+  .section-container {
+    page-break-after: always;
+    break-after: page;
+    padding-top: 5px;
+  }
+
+  .section-container:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .section-header {
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .section-num {
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #2563eb;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 2px;
+  }
+
+  .section-title {
+    font-size: 15pt;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .section-badge {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border: 1px solid #bfdbfe;
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  .subsection-title {
+    font-size: 10.5pt;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 10px 0 5px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .subsection-title::before {
+    content: "";
+    display: inline-block;
+    width: 4px;
+    height: 12px;
+    background: #2563eb;
+    border-radius: 2px;
+  }
+
+  p {
+    margin: 0 0 6px 0;
+    color: #334155;
+  }
+
+  ul {
+    margin: 4px 0 8px 18px;
+    padding: 0;
+  }
+
+  li {
+    margin-bottom: 3px;
+    color: #334155;
+  }
+
+  li strong {
+    color: #0f172a;
+  }
+
+  /* Tables */
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px 0;
+    font-size: 8pt;
+  }
+
+  table.data-table th {
+    background: #f1f5f9;
+    color: #0f172a;
+    text-align: left;
+    padding: 5px 8px;
+    font-weight: 700;
+    border-top: 1px solid #cbd5e1;
+    border-bottom: 2px solid #94a3b8;
+  }
+
+  table.data-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+
+  table.data-table tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    font-size: 7pt;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-get { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .badge-post { background: #dbeafe; color: #1d4ed8; border: 1px solid #93c5fd; }
+  .badge-put { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+  .badge-patch { background: #f3e8ff; color: #6b21a8; border: 1px solid #d8b4fe; }
+  .badge-delete { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-ws { background: #e0e7ff; color: #3730a3; border: 1px solid #a5b4fc; }
+
+  .endpoint-code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 7.5pt;
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  .box-note {
+    background: #f8fafc;
+    border-left: 3px solid #0284c7;
+    padding: 6px 10px;
+    margin: 6px 0;
+    font-size: 8pt;
+    border-radius: 0 4px 4px 0;
+    color: #334155;
+  }
+
+  .box-note strong {
+    color: #0369a1;
+  }
+
+  .box-warning {
+    background: #fffbeb;
+    border-left: 3px solid #d97706;
+    padding: 6px 10px;
+    margin: 6px 0;
+    font-size: 8pt;
+    border-radius: 0 4px 4px 0;
+    color: #78350f;
+  }
+
+  .box-architecture {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin: 8px 0;
+    font-size: 8pt;
+  }
+
+  .tech-pill {
+    display: inline-block;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    font-size: 7pt;
+    padding: 1px 6px;
+    border-radius: 10px;
+    margin-right: 4px;
+    margin-bottom: 2px;
+  }
+
+  .schema-name {
+    font-family: monospace;
+    font-weight: 700;
+    color: #0369a1;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover-page">
+  <div class="cover-header">
+    <div class="brand-badge">DigiLocal Engineering & Architecture</div>
+    <h1 class="cover-title">DigiLocal Hyperlocal Platform</h1>
+    <div class="cover-subtitle">Complete Backend Features & Technical Architecture Specification</div>
+    <div class="cover-summary">
+      <strong>Enterprise-Grade Backend Specification Document:</strong> Comprehensive blueprint detailing the 19 core platform domains, high-concurrency Node.js/Express API contracts, PostGIS spatial queries, Socket.IO real-time order alert engines, Cashfree/Razorpay payment reconciliation, double-entry Khatta ledgers, AI demand forecasting, and sub-second fleet tracking.
+    </div>
+  </div>
+
+  <div class="cover-grid">
+    <div class="cover-card">
+      <h4>Platform Scope</h4>
+      <p>19 Core Modules, 120+ REST/WS Endpoints, 35 Database Schemas, Multi-tenant Society Boundary Isolation.</p>
+    </div>
+    <div class="cover-card">
+      <h4>Real-Time & Telemetry</h4>
+      <p>Continuous Socket.IO order alarms, Swiggy/Zomato audio push channels, GPS live driver telemetry.</p>
+    </div>
+    <div class="cover-card">
+      <h4>Fintech & Subscriptions</h4>
+      <p>Automated vendor payouts, double-entry Khatta credit ledger, prepaid wallets, daily cron subscriptions.</p>
+    </div>
+    <div class="cover-card">
+      <h4>AI & Multilingual Engine</h4>
+      <p>Time-series demand prediction, voice-based multilingual commerce (Whisper/LLM), automated reorder alerts.</p>
+    </div>
+  </div>
+
+  <table class="cover-meta-table">
+    <tr><td>Document Version:</td><td><strong>v3.4.0 (Production Blueprint)</strong></td></tr>
+    <tr><td>System Architecture:</td><td><strong>Node.js / Express, PostgreSQL / PostGIS / SQLite, Redis, Socket.IO</strong></td></tr>
+    <tr><td>External Integrations:</td><td><strong>Cashfree PG v3, MSG91 OTP, Firebase FCM, Expo Push, Meta WhatsApp API</strong></td></tr>
+    <tr><td>Compliance Standards:</td><td><strong>PCI-DSS Level 1 compliant gateway, strict seed data isolation, GDPR soft delete</strong></td></tr>
+    <tr><td>Target Audience:</td><td><strong>Backend Engineers, DevOps, Mobile/Frontend Leads, Product Managers, CTO</strong></td></tr>
+  </table>
+
+  <div class="cover-footer">
+    <span>DigiLocal Hyperlocal Technologies Pvt. Ltd. &copy; 2026</span>
+    <span>Confidential — Internal & Partner Engineering Use Only</span>
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="toc-page">
+  <div class="toc-title">Table of Contents & Domain Index</div>
+  <div class="toc-grid">
+    <div class="toc-item"><span>1. Resident Profile & Account Backend Engine</span><span>Page 3</span></div>
+    <div class="toc-item"><span>2. Society & Community Management Backend</span><span>Page 4</span></div>
+    <div class="toc-item"><span>3. Hyperlocal Digital Store & Catalog Engine</span><span>Page 5</span></div>
+    <div class="toc-item"><span>4. Resident Ordering & Shopping Cart Engine</span><span>Page 6</span></div>
+    <div class="toc-item"><span>5. Real-Time Order Management & Alarm System</span><span>Page 7</span></div>
+    <div class="toc-item"><span>6. Delivery & Fleet Management Backend</span><span>Page 8</span></div>
+    <div class="toc-item"><span>7. Local Services & Freelancer Hub Backend</span><span>Page 9</span></div>
+    <div class="toc-item"><span>8. Payments, Finance & Vendor Earnings Engine</span><span>Page 10</span></div>
+    <div class="toc-item"><span>9. Digital Wallet & Society Credit (Khatta) Engine</span><span>Page 11</span></div>
+    <div class="toc-item"><span>10. Subscription & Recurring Delivery Backend</span><span>Page 12</span></div>
+    <div class="toc-item"><span>11. Offers, Promotions & Digital Marketing Engine</span><span>Page 13</span></div>
+    <div class="toc-item"><span>12. WhatsApp CRM & Customer Engagement Engine</span><span>Page 14</span></div>
+    <div class="toc-item"><span>13. AI-Powered Inventory & Demand Forecasting</span><span>Page 15</span></div>
+    <div class="toc-item"><span>14. Regional Voice Commerce & Multilingual Engine</span><span>Page 16</span></div>
+    <div class="toc-item"><span>15. Notifications & Multi-Channel Communications</span><span>Page 17</span></div>
+    <div class="toc-item"><span>16. Search, Geospatial & Smart Discovery Engine</span><span>Page 18</span></div>
+    <div class="toc-item"><span>17. Admin, Governance & Platform Management</span><span>Page 19</span></div>
+    <div class="toc-item"><span>18. Analytics, Business Intelligence & Reporting</span><span>Page 20</span></div>
+    <div class="toc-item"><span>19. Business Value Matrix & Architecture Blueprint</span><span>Page 21</span></div>
+  </div>
+
+  <div class="box-architecture" style="margin-top: 25px;">
+    <strong>High-Level Architectural Topography:</strong>
+    <p style="margin-top: 4px; font-size: 8pt; color: #475569;">
+      The platform operates as a modular monolith / microservices-ready Node.js cluster with stateless API workers behind an Nginx reverse proxy. Redis handles transient caching, Pub/Sub channels for Socket.IO clustering, and live delivery GPS coordinates. PostgreSQL provides relational ACID integrity with PostGIS spatial indexing for high-precision society boundary containment. All background workloads (subscription cron, AI model inference batches, email queues) run via isolated async worker threads.
+    </p>
+  </div>
+</div>
+
+<!-- SECTION 1 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 01</div>
+      <h2 class="section-title">Resident Profile & Account Backend Engine</h2>
+    </div>
+    <div class="section-badge">Core Identity</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Resident Profile & Account engine governs customer identity, cryptographic session management, society unit tenancy verification, and persistent address books. It enforces stateless JWT authentication coupled with Redis-backed session token blacklisting and device fingerprinting.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>OTP-Based Passwordless Authentication:</strong> Integrates with MSG91 v5 OTP service with E.164 phone normalization, configurable rate limiting (max 3 OTP requests/10 min), and cryptographic OTP simulation bypass for automated testing.</li>
+    <li><strong>Society & Flat Association Engine:</strong> Binds resident profile to verified society IDs and unit/flat numbers with multi-tenant data partitioning.</li>
+    <li><strong>Saved Address Book:</strong> Multi-address support (`HOME`, `WORK`, `OTHER`) with geocoded coordinates, delivery instructions, and default address flag.</li>
+    <li><strong>Account Lifecycle & GDPR Soft Deletion:</strong> Self-service account deactivation and GDPR purge endpoint that retains anonymized financial audit records while scrubbing PII.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/auth/resident/otp/send</span></td><td>Dispatches 6-digit OTP via MSG91 SMS/WhatsApp to resident mobile number.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/auth/resident/otp/verify</span></td><td>Verifies OTP; returns signed JWT access token (15m) & refresh token (30d).</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/resident/profile</span></td><td>Retrieves authenticated resident details, flat info, and active society binding.</td></tr>
+      <tr><td><span class="badge badge-put">PUT</span></td><td><span class="endpoint-code">/api/v1/resident/profile</span></td><td>Updates resident name, email, dietary preferences, and avatar URL.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/resident/addresses</span></td><td>Fetches all saved delivery addresses with coordinates and delivery notes.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/resident/addresses</span></td><td>Creates a new delivery address; validates coordinate proximity to society boundary.</td></tr>
+      <tr><td><span class="badge badge-delete">DELETE</span></td><td><span class="endpoint-code">/api/v1/resident/account</span></td><td>Initiates account soft-delete, revokes active refresh tokens, and purges sessions.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">resident_users</span> (id, phone, full_name, email, society_id, flat_number, tower_block, is_verified, is_blocked, created_at), <span class="schema-name">resident_addresses</span> (id, user_id, label, address_line, flat_no, latitude, longitude, is_default), <span class="schema-name">resident_sessions</span> (id, user_id, refresh_token_hash, device_info, expires_at).
+  </div>
+</div>
+
+<!-- SECTION 2 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 02</div>
+      <h2 class="section-title">Society & Community Management Backend</h2>
+    </div>
+    <div class="section-badge">Hyperlocal Geofence</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Society Management engine enforces geofenced hyperlocal boundaries, restricting marketplace discovery, vendor catalog visibility, and delivery dispatching to approved residential gated communities.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Geofenced Society Indexing:</strong> Employs PostGIS polygons and spatial bounding boxes (`ST_Contains`, `ST_DWithin`) to automatically match resident coordinates to their respective registered society.</li>
+    <li><strong>Vendor-to-Society Mapping Matrix:</strong> Multi-tenant isolation ensuring only merchants explicitly approved by a society or designated as "Universal Hyperlocal" appear in that society's storefront.</li>
+    <li><strong>Society-Level Delivery Rules:</strong> Dedicated configuration per society: security gate verification protocols, delivery timing cut-offs, entry gate drop-off versus doorstep delivery flags.</li>
+    <li><strong>Community Announcements & Bulletins:</strong> High-priority administrative notices and society-specific promotions with scheduled publication windows.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/societies</span></td><td>Public directory listing active societies filtered by city, pincode, or name.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/societies/nearby</span></td><td>Spatial query resolving closest societies based on resident GPS lat/long coords.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/societies/:id/vendors</span></td><td>Lists all verified and operational merchants mapped to the specified society.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/societies/:id/announcements</span></td><td>Fetches active community announcements, notices, and society-wide discount campaigns.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/admin/societies</span></td><td>[Admin] Registers a new society with geofence polygon coords, gate rules, and unit count.</td></tr>
+      <tr><td><span class="badge badge-put">PUT</span></td><td><span class="endpoint-code">/api/v1/admin/societies/:id/vendor-map</span></td><td>[Admin/Society RWA] Binds or revokes vendor operating permissions for this community.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">societies</span> (id, name, registration_code, address, city, pincode, boundary_polygon, total_units, security_gate_policy, is_active), <span class="schema-name">society_vendor_mappings</span> (id, society_id, vendor_id, approval_status, commission_rate_override, is_exclusive), <span class="schema-name">society_announcements</span> (id, society_id, title, body, banner_url, valid_until).
+  </div>
+</div>
+
+<!-- SECTION 3 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 03</div>
+      <h2 class="section-title">Hyperlocal Digital Store & Catalog Engine</h2>
+    </div>
+    <div class="section-badge">Merchant Storefront</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Digital Store & Catalog engine provides merchants with instant digital storefront configuration, SKU management, multi-tier categorization, variant matrix definitions, and sub-millisecond stock availability toggles.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Storefront Configuration & Dynamic Timings:</strong> Daily opening/closing hours, lunch breaks, holiday schedules, and automated "Open/Closed" status computation based on server IST time.</li>
+    <li><strong>Hierarchical Catalog Management:</strong> Categories, subcategories, product attributes, custom unit measures (`kg`, `gram`, `piece`, `liter`, `pack`), and multi-resolution image asset optimization.</li>
+    <li><strong>Instant Stock & Availability Switch:</strong> Real-time toggle (`in_stock: boolean`, `stock_qty: integer`) with automated eviction of cached catalog entries in Redis.</li>
+    <li><strong>MOV & Delivery Policy Customization:</strong> Vendor-specific Minimum Order Value (MOV), flat delivery fees, free delivery thresholds, and maximum allowed order units per line item.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/store-profile</span></td><td>Retrieves vendor store details, operating hours, delivery rules, and logo URLs.</td></tr>
+      <tr><td><span class="badge badge-put">PUT</span></td><td><span class="endpoint-code">/api/v1/vendor/store-profile</span></td><td>Updates store description, contact numbers, delivery charges, and MOV limits.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/store/logo</span></td><td>Multipart image upload; processes image and generates CDN-hosted web-optimized URLs.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/products</span></td><td>Paginated merchant catalog with filters for category, stock status, and text search.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/products</span></td><td>Creates new product SKU with pricing, discount %, variants, GST rate, and stock qty.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/vendor/products/:id/stock</span></td><td>Atomic toggle for product availability state; emits cache invalidation event.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/public/stores/:id/catalog</span></td><td>High-speed public catalog endpoint for resident apps backed by Redis caching.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">vendors</span> (id, store_name, owner_name, email, phone, gst_number, logo_url, banner_url, opening_time, closing_time, min_order_value, delivery_charge, status), <span class="schema-name">products</span> (id, vendor_id, category_id, name, description, unit, base_price, sale_price, stock_quantity, is_available, image_url, hsn_code, tax_rate).
+  </div>
+</div>
+
+<!-- SECTION 4 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 04</div>
+      <h2 class="section-title">Resident Ordering & Shopping Cart Engine</h2>
+    </div>
+    <div class="section-badge">Transaction Processing</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Resident Ordering engine handles atomic shopping cart validation, complex bill calculations (line items, vendor taxes, delivery fees, dynamic coupon discounts), inventory lockouts, and order placement pipelines.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Cart Price & Availability Validation:</strong> Validates item pricing against live database values, rejects stale client prices, verifies stock availability, and checks vendor MOV requirements.</li>
+    <li><strong>Tax & Delivery Charge Computation:</strong> Calculates line-item GST, society-specific delivery surcharges, platform service fees, and validates coupon applicability before locking total bill.</li>
+    <li><strong>Atomic Order Placement:</strong> Uses SQL database transactions with row-level locking (`SELECT ... FOR UPDATE`) to prevent inventory overselling during peak concurrent flash orders.</li>
+    <li><strong>Order History & 1-Click Reorder:</strong> Comprehensive order audit history with line-item breakdowns, invoice generation, real-time tracking states, and 1-click cart rehydration for past orders.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/cart/validate</span></td><td>Validates client cart items, verifies vendor open hours, stock qty, and MOV.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/cart/calculate-total</span></td><td>Computes item subtotal, applicable taxes, delivery fee, and discount deductions.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/orders/checkout</span></td><td>Creates order intent, holds inventory lock for 10 minutes, returns checkout session.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/orders/place</span></td><td>Finalizes order placement for COD, Wallet, or verified Cashfree payment session.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/resident/orders</span></td><td>Retrieves paginated historical orders for authenticated resident.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/resident/orders/:id</span></td><td>Fetches order breakdown, itemized receipt, delivery address, and live status.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/resident/orders/:id/cancel</span></td><td>Cancels order if not yet accepted/dispatched; triggers automated refund flow.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">orders</span> (id, order_number, user_id, vendor_id, society_id, total_amount, subtotal, tax_amount, delivery_fee, discount_amount, payment_method, payment_status, order_status, created_at), <span class="schema-name">order_items</span> (id, order_id, product_id, product_name, unit_price, quantity, total_price).
+  </div>
+</div>
+
+<!-- SECTION 5 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 05</div>
+      <h2 class="section-title">Real-Time Order Management & Alarm System</h2>
+    </div>
+    <div class="section-badge">Swiggy/Zomato Alert Engine</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Real-Time Order Management system features a multi-tiered order alert pipeline emulating Swiggy/Zomato merchant devices. It synchronizes WebSocket room events, high-priority Firebase push notifications with custom audio chimes, and automatic repetition loops until merchant acknowledgment.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>WebSocket Event Multiplexing:</strong> Socket.IO server isolates vendors into dedicated rooms (`vendor_{vendor_id}`) and broadcasts instant `NEW_ORDER_ALERT` payloads upon order creation.</li>
+    <li><strong>Repetitive Audio Chime Notification Loop:</strong> When a new order arrives, the server dispatches a high-priority FCM payload targeting the Android channel `order_alerts_channel` configured with sound `order_alert_chime.wav`. A background worker repeats alerts every 30s until acknowledged.</li>
+    <li><strong>Order Status Transition Pipeline:</strong> Strictly validated status finite state machine: `PLACED` &rarr; `ACCEPTED` &rarr; `PREPARING` &rarr; `READY_FOR_PICKUP` &rarr; `OUT_FOR_DELIVERY` &rarr; `DELIVERED`.</li>
+    <li><strong>Live Resident Status Broadcast:</strong> Every status transition triggers an instantaneous WebSocket push to the resident's client connection, updating their active tracking interface.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/orders/active</span></td><td>Fetches all pending, accepted, and in-preparation orders for the vendor panel.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/orders/:id/acknowledge</span></td><td>Acknowledges order; stops repetitive audio alarm loop and marks merchant alerted.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/vendor/orders/:id/status</span></td><td>Advances order status (`ACCEPTED`, `PREPARING`, `READY`, `DISPATCHED`, `REJECTED`).</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/device-token</span></td><td>Registers FCM/Expo push notification token with device audio capabilities.</td></tr>
+      <tr><td><span class="badge badge-ws">WS</span></td><td><span class="endpoint-code">emit: NEW_ORDER_ALERT</span></td><td>Socket.IO push payload containing order ID, total bill, customer name, and items.</td></tr>
+      <tr><td><span class="badge badge-ws">WS</span></td><td><span class="endpoint-code">emit: ORDER_STATUS_CHANGED</span></td><td>Broadcasts live state updates to resident client tracking view.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">order_status_history</span> (id, order_id, previous_status, new_status, updated_by_user_id, updated_by_role, notes, timestamp), <span class="schema-name">vendor_device_tokens</span> (id, vendor_id, push_token, device_platform, is_active, last_seen_at), <span class="schema-name">alarm_acknowledgments</span> (id, order_id, vendor_id, acknowledged_at, latency_seconds).
+  </div>
+</div>
+
+<!-- SECTION 6 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 06</div>
+      <h2 class="section-title">Delivery & Fleet Management Backend</h2>
+    </div>
+    <div class="section-badge">Logistics & GPS Tracking</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Delivery & Fleet Management backend powers dynamic delivery assignment, driver dispatching, turn-by-turn navigation telemetry, sub-second GPS coordinate ingestion via Redis Geospatial, and cryptographically verified OTP delivery handshakes.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Smart Rider Allocation Engine:</strong> Automatically evaluates available delivery fleet members based on proximity to the vendor store and current active assignment load.</li>
+    <li><strong>High-Frequency GPS Ingestion Pipeline:</strong> Ingests rider latitude/longitude pings via lightweight UDP/HTTP endpoints into Redis GEO sets (`GEOADD delivery_riders`), enabling live map tracking without overloading relational databases.</li>
+    <li><strong>Real-Time Resident Tracking Stream:</strong> Pipes rider coordinate deltas over WebSockets directly to the resident order tracking map, calculating dynamic ETA based on distance and traffic.</li>
+    <li><strong>Proof of Delivery (POD) & OTP Verification:</strong> Secure 4-digit handover OTP generated on the resident's app that the driver must submit to mark the order `DELIVERED`.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/delivery/auth/login</span></td><td>Authenticates delivery personnel; establishes driver session and active duty status.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/delivery/assigned-orders</span></td><td>Lists active assigned deliveries with pickup store address and resident flat info.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/delivery/orders/:id/accept</span></td><td>Driver accepts order assignment; notifies vendor and resident.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/delivery/telemetry/location</span></td><td>Pushes high-frequency GPS ping (lat, lng, speed, heading) into Redis GEO store.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/orders/:id/live-tracking</span></td><td>Returns current delivery rider location, polyline route, and updated ETA.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/delivery/orders/:id/verify-otp</span></td><td>Verifies resident delivery OTP; marks delivery completed and credits driver payout.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">delivery_riders</span> (id, full_name, phone, vehicle_type, license_plate, is_online, current_lat, current_lng, rating), <span class="schema-name">delivery_assignments</span> (id, order_id, rider_id, assigned_at, accepted_at, picked_up_at, delivered_at, delivery_otp_hash, delivery_proof_image).
+  </div>
+</div>
+
+<!-- SECTION 7 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 07</div>
+      <h2 class="section-title">Local Services & Freelancer Hub Backend</h2>
+    </div>
+    <div class="section-badge">On-Demand Services</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Local Services & Freelancer Hub expands DigiLocal beyond physical goods into hyper-local on-demand home services (electricians, plumbers, house cleaners, appliance repair, tutoring, pet care) within residential societies.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Provider KYC & Profile Verification:</strong> Admin verification workflows for service freelancers with identity proof, background checks, skill certifications, and society clearance.</li>
+    <li><strong>Dynamic Rate Cards & Service Catalogs:</strong> Configurable service tariffs (fixed price inspection fee, hourly rates, or task-based pricing) with custom service area radius.</li>
+    <li><strong>Appointment Scheduling Engine:</strong> Slot availability calendar, booking time-slot reservations, conflict detection, and calendar synchronization.</li>
+    <li><strong>Two-Way Communication & Review Matrix:</strong> In-app messaging between resident and service provider, combined with post-service ratings and review aggregation.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/services/categories</span></td><td>Fetches all active service categories (e.g. Electrical, Plumbing, Cleaning).</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/services/providers</span></td><td>Lists verified providers operating within resident's society with ratings and pricing.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/services/bookings</span></td><td>Creates a service request with selected slot, problem description, and address.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/services/bookings/:id/status</span></td><td>Updates booking state (`REQUESTED`, `CONFIRMED`, `IN_PROGRESS`, `COMPLETED`).</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/services/bookings/:id/reviews</span></td><td>Submits customer rating (1-5 stars) and feedback; triggers rating recalculation.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">service_providers</span> (id, full_name, phone, category_id, experience_years, bio, hourly_rate, is_verified, average_rating), <span class="schema-name">service_bookings</span> (id, user_id, provider_id, scheduled_date, scheduled_slot, status, estimated_cost, final_cost, payment_status).
+  </div>
+</div>
+
+<!-- SECTION 8 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 08</div>
+      <h2 class="section-title">Payments, Finance & Vendor Earnings Engine</h2>
+    </div>
+    <div class="section-badge">Fintech & Settlement</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Payments, Finance & Earnings engine acts as DigiLocal's financial ledger. It coordinates Cashfree PG v3 payment gateway sessions, webhook signature validations, merchant commission deductions, and automated payout settlements.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Cashfree PG v3 Gateway Integration:</strong> Secure checkout session generation (`createPaymentSession`), handling UPI Intent, NetBanking, and credit/debit cards with automated payment status verification.</li>
+    <li><strong>HMAC SHA256 Webhook Verification:</strong> Cryptographic verification of incoming webhook payloads to eliminate man-in-the-middle payment spoofing.</li>
+    <li><strong>Vendor Earnings Ledger & Commission Deductions:</strong> Real-time financial accounting logging gross sales, platform commissions (e.g. 5%), delivery fee allocations, and net payable balances.</li>
+    <li><strong>Automated Bank Payouts:</strong> Automated settlement disbursements to vendor bank accounts via Cashfree Payouts API / IMPS transfer, with downloadable tax invoices and settlement reconciliation reports.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/payments/cashfree/session</span></td><td>Creates Cashfree PG checkout order session; returns encrypted payment session ID.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/payments/cashfree/webhook</span></td><td>Public webhook listener; verifies HMAC signature and updates order payment status.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/finance/earnings</span></td><td>Summary of total gross sales, platform commission fees, and available payout balance.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/finance/settlements</span></td><td>Historical list of automated bank transfers, IMPS UTR references, and dates.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/admin/finance/payouts/trigger</span></td><td>[Admin] Initiates bulk automated payout disbursement batch for eligible merchants.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">payment_transactions</span> (id, order_id, gateway, transaction_ref, amount, currency, status, payment_method, signature_verified, created_at), <span class="schema-name">vendor_settlements</span> (id, vendor_id, amount, platform_fee, net_settled, bank_utr, settlement_status, processed_at).
+  </div>
+</div>
+
+<!-- SECTION 9 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 09</div>
+      <h2 class="section-title">Digital Wallet & Society Credit (Khatta) Engine</h2>
+    </div>
+    <div class="section-badge">Ledger & Khatta (Udhar)</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Digital Wallet & Khatta system implements a double-entry ledger architecture. It manages prepaid resident balances, instant wallet checkouts, and digitizes traditional neighborhood credit books ("Udhar / Khatta") with credit limits and automated payment reconciliation.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Prepaid Resident Wallet:</strong> Instant 1-click checkouts, instant refund crediting for cancelled orders, and wallet top-up via UPI/Payment Gateway.</li>
+    <li><strong>Double-Entry Ledger Integrity:</strong> Every credit and debit transaction is recorded as balanced pairs in an immutable ledger table with cryptographic hash chaining to prevent tampering.</li>
+    <li><strong>Merchant Khatta / Udhar Ledger:</strong> Allows trusted society residents to purchase goods on credit within pre-configured credit limits set by the vendor or society association.</li>
+    <li><strong>Credit Settlement & Due Reminders:</strong> Automated calculation of outstanding balances, WhatsApp settlement reminders, and partial or full payment reconciliation.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/resident/wallet</span></td><td>Returns active wallet balance, promotional bonus balance, and transaction history.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/resident/wallet/topup</span></td><td>Creates a top-up payment session; credits wallet balance on gateway confirmation.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/khatta/customers</span></td><td>Lists customers with active credit accounts, credit limits, and outstanding balances.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/khatta/entry</span></td><td>Records an Udhar/Credit purchase or offline cash payment against customer ledger.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/khatta/send-reminder</span></td><td>Dispatches automated WhatsApp/SMS payment reminder with UPI payment link.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">resident_wallets</span> (id, user_id, current_balance, locked_balance, currency, is_active), <span class="schema-name">wallet_ledger_entries</span> (id, wallet_id, type [CREDIT/DEBIT], amount, reference_type [ORDER/TOPUP/REFUND], reference_id, balance_after), <span class="schema-name">khatta_accounts</span> (id, vendor_id, user_id, credit_limit, outstanding_balance, status), <span class="schema-name">khatta_ledger</span> (id, khatta_id, transaction_type, amount, balance_after, note).
+  </div>
+</div>
+
+<!-- SECTION 10 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 10</div>
+      <h2 class="section-title">Subscription & Recurring Delivery Backend</h2>
+    </div>
+    <div class="section-badge">Automated Daily Subscriptions</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Subscription engine automates daily and periodic delivery essentials (milk packets, morning newspapers, fresh bread, bottled drinking water, eggs) to residential society doors through cron-orchestrated order dispatchers.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Flexible Recurring Cadence Engine:</strong> Supports daily, alternate days, weekdays only, weekend only, and custom weekly day matrices (e.g. Mon-Wed-Fri).</li>
+    <li><strong>Vacation Pause & Instant Resume:</strong> Residents can pause subscriptions with a single tap before the 10:00 PM cut-off time without incurring charges during vacations.</li>
+    <li><strong>Automated Nightly Order Generation Cron:</strong> A scheduled background worker executes daily at 03:00 AM IST (`0 3 * * *`), queries active subscriptions, verifies wallet balances or flags COD, and spawns finalized morning delivery orders for vendors.</li>
+    <li><strong>Subscription Health & Predictive Delivery:</strong> Tracks recurring delivery history, missed delivery alerts, and upcoming 7-day schedule previews for residents.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/subscriptions/catalog</span></td><td>Lists eligible recurring products (milk, dairy, water, bread, newspapers).</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/subscriptions</span></td><td>Creates a recurring subscription plan with schedule frequency, quantity, and start date.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/subscriptions/:id/pause</span></td><td>Sets pause window (`start_date` to `end_date`) preventing order generation.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/subscriptions/:id/resume</span></td><td>Re-activates subscription ahead of schedule; resumes daily delivery cycle.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/subscriptions/upcoming</span></td><td>Generates a 7-day visual calendar forecast of expected daily deliveries and costs.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">subscriptions</span> (id, user_id, vendor_id, product_id, quantity, frequency [DAILY/WEEKDAYS/CUSTOM], custom_days_json, start_date, end_date, status [ACTIVE/PAUSED/CANCELLED], billing_type), <span class="schema-name">subscription_deliveries</span> (id, subscription_id, delivery_date, generated_order_id, status, notes).
+  </div>
+</div>
+
+<!-- SECTION 11 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 11</div>
+      <h2 class="section-title">Offers, Promotions & Digital Marketing Engine</h2>
+    </div>
+    <div class="section-badge">Growth & Marketing</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Promotions & Marketing engine drives consumer demand and merchant growth via dynamic rule-based coupon validation, society-exclusive flash sales, homepage hero banner carousels, and targeted promotional broadcasts.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Rule-Based Coupon Code Engine:</strong> Validates complex eligibility criteria: minimum cart value, maximum discount cap, user usage count (e.g. `FIRSTORDER`), and society-restricted promo codes.</li>
+    <li><strong>Hero Banners & Dynamic Placement:</strong> Admin/Merchant banner manager supporting placements (`HOME_HERO`, `POPUP`, `CATEGORY_HEADER`), target URLs, display ordering, and automated expiry.</li>
+    <li><strong>Society-Specific Flash Deals:</strong> Limited-time price drops restricted to specific residential communities, creating high-conversion community shopping frenzies.</li>
+    <li><strong>Personalized Resident Offers:</strong> Recommendation worker identifies dormant or frequent users and auto-issues targeted discount tokens.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/promotions/coupons/validate</span></td><td>Tests coupon code against cart payload; returns calculated discount or error reason.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/promotions/banners</span></td><td>Fetches active marketing banners filtered by resident society and device type.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/admin/promotions/campaigns</span></td><td>[Admin] Launches marketing campaign with schedule dates, target societies, and assets.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/promotions</span></td><td>Allows merchants to review redemption metrics, promo codes, and discount costs.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">coupons</span> (id, code, description, discount_type [PERCENTAGE/FLAT], discount_value, min_cart_value, max_discount, usage_limit_per_user, total_usage_limit, valid_from, valid_to, target_society_id, is_active), <span class="schema-name">promotional_banners</span> (id, title, image_url, target_type, target_id, placement, sort_order, is_active).
+  </div>
+</div>
+
+<!-- SECTION 12 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 12</div>
+      <h2 class="section-title">WhatsApp CRM & Customer Engagement Engine</h2>
+    </div>
+    <div class="section-badge">Meta Cloud WhatsApp</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The WhatsApp CRM integrates directly with the Meta WhatsApp Cloud API and webhooks. It enables automated transactional dispatches, two-way interactive chatbots, direct merchant-to-customer click-to-chat deeplinks, and lightweight merchant CRM segmentation.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Transactional WhatsApp Dispatches:</strong> Dispatches rich WhatsApp template messages for order confirmation, out-for-delivery alerts, bill PDFs, and daily milk delivery summaries.</li>
+    <li><strong>Direct 1-Click Merchant Chat:</strong> Generates pre-filled `https://wa.me/` deeplinks with formatted order summaries and items, allowing vendors to message customers without manual typing.</li>
+    <li><strong>Vendor CRM & Customer Segmentation:</strong> Aggregates customer profiles for merchants: lifetime spend, order frequency, favorite products, and overdue credit balances.</li>
+    <li><strong>Follow-Up Tasks & Customer Notes:</strong> Enables vendors to save internal notes against resident profiles (e.g. "prefers deliveries before 8 AM") and schedule follow-ups.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/integrations/whatsapp/webhook</span></td><td>Meta Cloud API webhook listener for incoming messages, delivery receipts, and reads.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/orders/:id/wa-link</span></td><td>Generates structured WhatsApp click-to-chat URL with complete itemized order details.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/crm/customers</span></td><td>Lists vendor's top customers with order frequency, total spend, and last order date.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/crm/customers/:id/notes</span></td><td>Saves private operational notes or preferences for a specific customer.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">whatsapp_message_logs</span> (id, recipient_phone, template_name, message_status [SENT/DELIVERED/READ/FAILED], external_message_id, sent_at), <span class="schema-name">vendor_crm_notes</span> (id, vendor_id, customer_user_id, note_text, created_at).
+  </div>
+</div>
+
+<!-- SECTION 13 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 13</div>
+      <h2 class="section-title">AI-Powered Inventory & Demand Forecasting Engine</h2>
+    </div>
+    <div class="section-badge">Predictive Analytics</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The AI-Powered Inventory engine utilizes time-series machine learning models and heuristic aggregation workers to analyze 90-day purchase patterns, seasonal festival demand spikes, and daily society consumption habits to optimize merchant stock levels.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Predictive Demand Forecasting:</strong> Processes historical daily velocity, weather data, and society demographic makeup to forecast SKU unit demand for the upcoming 7 and 14 days.</li>
+    <li><strong>Smart Automated Reorder Recommendations:</strong> Calculates safety stock thresholds, lead-time buffers, and alerts vendors when SKUs approach critical depletion levels.</li>
+    <li><strong>Merchandise Velocity Classification:</strong> Classifies store inventory into Fast-Moving Consumer Goods (FMCG), Slow-Moving, and High-Margin items to guide stocking decisions.</li>
+    <li><strong>Out-of-Stock Prevention Alerts:</strong> Automated background worker monitors current order run-rate against remaining inventory and triggers push notifications before stockouts occur.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/ai/demand-forecast</span></td><td>Returns forecasted unit sales for top 20 SKUs for the next 7 days with confidence score.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/ai/reorder-advice</span></td><td>Lists recommended purchase orders with suggested reorder quantities and supplier links.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/ai/product-velocity</span></td><td>Categorizes catalog into Fast-Moving, Steady, and Dead-Stock items.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/vendor/inventory/bulk-adjust</span></td><td>Atomically updates stock levels across multiple SKUs following warehouse delivery.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">inventory_snapshots</span> (id, vendor_id, product_id, snapshot_date, opening_stock, units_sold, closing_stock, stockout_flag), <span class="schema-name">ai_demand_predictions</span> (id, vendor_id, product_id, forecast_date, predicted_demand_units, confidence_interval, generated_at).
+  </div>
+</div>
+
+<!-- SECTION 14 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 14</div>
+      <h2 class="section-title">Regional Voice Commerce & Multilingual Experience</h2>
+    </div>
+    <div class="section-badge">Voice AI & Localization</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Voice Commerce & Multilingual engine lowers digital barriers for elderly residents, domestic staff, and non-English-speaking users by supporting regional Indian languages, speech-to-text NLP parsing, and automated phonetic catalog matching.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Multi-Language Localization Engine:</strong> Dynamic internationalization (i18n) supporting English, Hindi, Marathi, Gujarati, Kannada, Tamil, and Telugu across UI copy, categories, and receipts.</li>
+    <li><strong>Voice Audio Ingestion & STT Pipeline:</strong> Ingests short audio clips (`.m4a`, `.wav`, `.ogg`), transcribes via OpenAI Whisper / Google Speech API, and extracts shopping intent via an NLP entity parser.</li>
+    <li><strong>Fuzzy Phonetic SKU Resolution:</strong> Maps regional spoken phrases (e.g. <em>"do packet amul taaza doodh aur ek bread"</em>) to exact catalog product IDs and quantities using Levenshtein distance and embedding search.</li>
+    <li><strong>Voice-Assisted 1-Tap Cart Injection:</strong> Automatically populates the resident's cart with parsed voice items, returning structured confirmation dialogs for audio confirmation.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/voice/parse-intent</span></td><td>Ingests raw voice audio file; transcribes and returns extracted product names & quantities.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/voice/smart-cart-populate</span></td><td>Resolves voice intent against society vendor catalog; injects items directly into user cart.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/i18n/translations</span></td><td>Fetches localized dictionary strings for the client's selected regional language.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">voice_query_logs</span> (id, user_id, raw_audio_url, transcribed_text, language_code, detected_intent, matched_product_ids_json, execution_ms), <span class="schema-name">product_i18n</span> (id, product_id, language_code, localized_name, localized_desc).
+  </div>
+</div>
+
+<!-- SECTION 15 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 15</div>
+      <h2 class="section-title">Notifications & Multi-Channel Communications Engine</h2>
+    </div>
+    <div class="section-badge">Notification Matrix</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Notifications engine acts as an omni-channel dispatch router. It coordinates Push Notifications (Firebase FCM, Expo Push), SMS/WhatsApp (MSG91), Transactional HTML Emails (Nodemailer), and In-App notification inboxes with unified deduplication guards.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Multi-Channel Priority Dispatch Router:</strong> Directs critical alerts (Order Placed, OTP) through high-deliverability SMS/WhatsApp and push notifications simultaneously.</li>
+    <li><strong>Notification Deduplication & Rate Limiting:</strong> Redis key caching prevents phantom double-pushes when webhooks or retries fire concurrently.</li>
+    <li><strong>Transactional Email Queue:</strong> Asynchronous background email queue (`src/services/emailQueue.js`) prevents SMTP socket latency from blocking HTTP API response loops.</li>
+    <li><strong>Persistent In-App Notification Center:</strong> Resident and merchant in-app notification center with read/unread flags, deep-linking targets, and push badge counts.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/notifications</span></td><td>Fetches paginated user notifications with read status, timestamps, and action URLs.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/notifications/:id/read</span></td><td>Marks individual notification as read; decrements unread badge count.</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><span class="endpoint-code">/api/v1/notifications/mark-all-read</span></td><td>Marks all pending alerts as read for the authenticated session.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/admin/notifications/broadcast</span></td><td>[Admin] Broadcasts urgent society-wide push alert to all registered residents.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">notifications_inbox</span> (id, recipient_id, recipient_role [USER/VENDOR/DRIVER], title, body, icon, deep_link, is_read, created_at), <span class="schema-name">notification_dispatch_logs</span> (id, channel [FCM/SMS/EMAIL/WA], external_id, status, latency_ms).
+  </div>
+</div>
+
+<!-- SECTION 16 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 16</div>
+      <h2 class="section-title">Search, Geospatial & Smart Discovery Engine</h2>
+    </div>
+    <div class="section-badge">Full-Text & Discovery</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Search & Smart Discovery engine indexes products, stores, and services using PostgreSQL full-text search (`tsvector` / `pg_trgm`) and geospatial bounding boxes. It delivers typo-tolerant instant search and personalized product recommendations.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Typo-Tolerant Trigram Search:</strong> Handles spelling variations (e.g. "biscuit", "biskit", "parle-g") across thousands of SKUs in sub-15ms query times.</li>
+    <li><strong>Geospatial Store Proximity Search:</strong> Filters and sorts stores based on radial distance from resident coordinates using PostGIS spherical distance functions.</li>
+    <li><strong>Collaborative Recommendation Engine:</strong> Aggregates "Frequently Bought Together" items and trending purchases specific to the resident's residential society.</li>
+    <li><strong>Zero-Result Fallback & Search Telemetry:</strong> Logs search queries with zero matching products to inform vendors of unmet resident demand in their society.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/discovery/search</span></td><td>Unified search returning matching products, active stores, and available services.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/discovery/trending</span></td><td>Fetches top 10 trending items ordered within the resident's specific housing society.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/discovery/recommended</span></td><td>Personalized product recommendations based on user's past 30-day order history.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">search_analytics_logs</span> (id, user_id, society_id, query_term, matched_results_count, clicked_product_id, searched_at), <span class="schema-name">product_recommendation_cache</span> (id, product_id, recommended_product_id, score).
+  </div>
+</div>
+
+<!-- SECTION 17 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 17</div>
+      <h2 class="section-title">Admin, Governance & Platform Management Engine</h2>
+    </div>
+    <div class="section-badge">Super Admin & RBAC</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Admin & Governance platform provides administrators with centralized control, sub-admin role delegation, merchant KYC validation, user dispute mediation, and immutable audit logging for regulatory compliance.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Granular Role-Based Access Control (RBAC):</strong> Hierarchical sub-admin permissions (`MANAGE_USERS`, `MANAGE_VENDORS`, `FINANCIALS`, `SUPPORT`, `SETTINGS`, `CMS`, `AUDIT_LOGS`).</li>
+    <li><strong>Vendor Onboarding & Verification Workflow:</strong> Two-phase merchant review: document verification (GSTIN, FSSAI, PAN), bank detail approval, and 1-Year subscription activation.</li>
+    <li><strong>Order & Delivery Escalation Console:</strong> Real-time oversight over all platform orders; ability to cancel stuck orders, reassign riders, or initiate instant refunds.</li>
+    <li><strong>Immutable Audit Logging Trail:</strong> Automatically records every administrative action, IP address, timestamp, and entity diff for governance and security auditing.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/admin/dashboard/metrics</span></td><td>Platform-wide telemetry: total GMV, active users, live vendors, and order counts.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/admin/vendors/pending</span></td><td>Lists merchant onboarding applications awaiting administrative review and KYC approval.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/admin/vendors/:id/approve</span></td><td>Approves vendor; creates 1-year active subscription and sends welcome email.</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><span class="endpoint-code">/api/v1/admin/vendors/:id/reject</span></td><td>Rejects application with custom reason; triggers rejection email notification.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/admin/audit-logs</span></td><td>Fetches paginated audit logs with search by admin user, entity type, and date range.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/admin/audit-logs/export</span></td><td>Exports filtered audit logs into CSV/JSON for compliance review.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">admin_users</span> (id, username, email, password_hash, role [SUPER_ADMIN/SUB_ADMIN], permissions_array, is_active), <span class="schema-name">system_audit_logs</span> (id, actor_id, actor_role, action, target_entity, target_id, ip_address, user_agent, diff_payload, created_at).
+  </div>
+</div>
+
+<!-- SECTION 18 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 18</div>
+      <h2 class="section-title">Analytics, Business Intelligence & Reporting Engine</h2>
+    </div>
+    <div class="section-badge">BI & Data Pipelines</div>
+  </div>
+
+  <div class="subsection-title">Functional Overview & Architecture</div>
+  <p>The Analytics & Business Intelligence platform transforms raw transactional streams into actionable insights. It utilizes nightly rollup cron jobs, materialized views, and OLAP data structures to compute KPIs without impacting operational OLTP performance.</p>
+
+  <div class="subsection-title">Backend Features & Capabilities</div>
+  <ul>
+    <li><strong>Vendor Business Intelligence:</strong> Sales trends, gross revenue curves, average order value (AOV), repeat customer retention rates, and peak ordering time windows.</li>
+    <li><strong>Society-Level Commerce Analytics:</strong> Society gross consumption volume, resident penetration rate, top-performing product categories, and vendor order fulfillment rates.</li>
+    <li><strong>Platform Telemetry & Executive GMV Dashboards:</strong> Gross Merchandise Value (GMV), platform net revenue take-rate, customer acquisition trends, and logistics SLA compliance.</li>
+    <li><strong>Automated Report Export Pipeline:</strong> Generates formatted CSV and PDF financial and operational reports with asynchronous background job generation.</li>
+  </ul>
+
+  <div class="subsection-title">API Endpoint Contracts</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 14%;">Method</th><th style="width: 38%;">Endpoint Path</th><th style="width: 48%;">Functional Description & Auth</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/analytics/sales-overview</span></td><td>Daily, weekly, and monthly revenue aggregates, order volume, and average basket size.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/vendor/analytics/top-products</span></td><td>Ranks top-selling products by quantity sold and gross revenue contribution.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/admin/analytics/platform-gmv</span></td><td>Executive revenue metrics, platform commission collections, and growth percentages.</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><span class="endpoint-code">/api/v1/admin/analytics/society-metrics</span></td><td>Comparative analytics ranking societies by order frequency and active spending residents.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-note">
+    <strong>Data Entities & Schema Design:</strong> <span class="schema-name">daily_vendor_metrics</span> (id, vendor_id, metric_date, total_orders, completed_orders, cancelled_orders, gross_revenue, net_earnings, unique_customers), <span class="schema-name">daily_society_metrics</span> (id, society_id, metric_date, active_users_count, total_orders, total_spend).
+  </div>
+</div>
+
+<!-- SECTION 19 -->
+<div class="section-container">
+  <div class="section-header">
+    <div>
+      <div class="section-num">Domain 19</div>
+      <h2 class="section-title">Business Value Matrix & Architecture Blueprint</h2>
+    </div>
+    <div class="section-badge">Platform Value & Topology</div>
+  </div>
+
+  <div class="subsection-title">Stakeholder Value Realization Matrix</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 22%;">Stakeholder</th><th style="width: 38%;">Core Value Proposition</th><th style="width: 40%;">Backend Architectural Enablers</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Residents</strong></td>
+        <td>Doorstep hyperlocal shopping, 15-30 min deliveries, trusted society vendors, recurring milk/groceries, multi-language voice ordering.</td>
+        <td>Sub-second catalog caching, PostGIS geofence isolation, cron subscription generation, double-entry wallet balance.</td>
+      </tr>
+      <tr>
+        <td><strong>Merchants / Vendors</strong></td>
+        <td>Zero-setup digital store, access to captive gated community buyers, Swiggy-style loud audio alarms, automated bank payouts, Khatta credit tracking.</td>
+        <td>FCM max-priority push audio channels, Socket.IO rooms, Cashfree auto-settlement, immutable double-entry credit ledger.</td>
+      </tr>
+      <tr>
+        <td><strong>Society RWAs</strong></td>
+        <td>Organized community marketplace, vetted external vendor access, security gate verification compliance, community announcements.</td>
+        <td>Multi-tenant society boundary policies, security gate delivery protocol flags, RWA admin audit logs.</td>
+      </tr>
+      <tr>
+        <td><strong>Delivery Fleet</strong></td>
+        <td>Optimized route navigation, fair automated dispatching, verified OTP delivery proof, transparent earnings tracking.</td>
+        <td>Redis GEO spatial coordinate tracking, real-time ETA calculation, cryptographic POD OTP handshake.</td>
+      </tr>
+      <tr>
+        <td><strong>Platform Operators</strong></td>
+        <td>Scalable multi-society marketplace, recurring subscription revenue, commission take-rates, complete audit & governance controls.</td>
+        <td>Modular monolith / microservice architecture, OpenAPI 3.1.0 specifications, strict database seed isolation, observability probes.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="subsection-title">Core Backend Architecture & Technical Specifications</div>
+  <table class="data-table">
+    <thead>
+      <tr><th style="width: 25%;">Layer / Subsystem</th><th style="width: 35%;">Technology Selection</th><th style="width: 40%;">Key Implementation Attributes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Runtime & Framework</strong></td><td>Node.js LTS, Express 4.x</td><td>Stateless async/await request handlers, Winston structured logging.</td></tr>
+      <tr><td><strong>Database & Spatial</strong></td><td>PostgreSQL 15+ with PostGIS / SQLite</td><td>Unified abstraction layer (`src/models/db.js`), connection pooling, ACID transactions.</td></tr>
+      <tr><td><strong>Caching & In-Memory</strong></td><td>Redis 7.x</td><td>Sub-millisecond catalog caching, TTL key deduplication, Redis GEO for driver GPS.</td></tr>
+      <tr><td><strong>Real-Time Engine</strong></td><td>Socket.IO 4.x with Redis Adapter</td><td>Vendor notification rooms (`vendor_{id}`), resident live tracking rooms.</td></tr>
+      <tr><td><strong>Payments & Fintech</strong></td><td>Cashfree PG v3 API & Payouts Engine</td><td>HMAC SHA256 webhook signatures, automated refunds, bank settlement ledger.</td></tr>
+      <tr><td><strong>SMS & WhatsApp OTP</strong></td><td>MSG91 v5 OTP API</td><td>E.164 phone formatting, developer simulation fallback (`123456`).</td></tr>
+      <tr><td><strong>Push Notifications</strong></td><td>Firebase Admin SDK (FCM) & Expo Push</td><td>Custom sound channel (`order_alert_chime.wav`), Android max priority.</td></tr>
+      <tr><td><strong>Background Workers</strong></td><td>node-cron, Async Email Queue</td><td>Nightly 3 AM subscription order runner, 9 AM expiry warnings, Nodemailer.</td></tr>
+      <tr><td><strong>Observability & Probes</strong></td><td>Docker, Kubernetes Health Probes</td><td>`/health` (system ping), `/health/live`, `/health/ready`, memory & uptime telemetry.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="box-architecture">
+    <strong>Production Data & Testing Isolation Rule:</strong> All automated test suites and smoke runners strictly adhere to zero-mutation policies on production and seed records. Ephemeral dummy data with unique timestamped UUIDs is provisioned and cleaned up in `afterAll` test hooks.
+  </div>
+</div>
+
+</body>
+</html>

@@ -57,17 +57,231 @@ const memoryStore = {
   tags: []
 };
 
+/**
+ * Ensures realistic seed tickets with both active and overdue/negative SLA timers.
+ * Prevents empty state and allows immediate validation that tickets NEVER erase on timer expiry.
+ */
+function ensureInitialTickets() {
+  if (memoryStore.tickets.length > 0) return;
 
+  const now = Date.now();
+  const createPastDate = (minutesAgo) => new Date(now - minutesAgo * 60 * 1000);
+
+  const seedData = [
+    {
+      id: 't-1788287963701',
+      ticket_number: 'TICK-9081',
+      subject: 'URGENT: Wrong Item Received & Spoiled Dairy Delivery',
+      description: 'Customer in Tower B received spoiled milk and expired bread from Daily Fresh Mart. Immediate replacement or refund requested.',
+      category: 'user_vs_vendor',
+      priority: 'urgent', // 15 mins SLA
+      status: 'open',
+      user_type: 'user',
+      source: 'mobile_app',
+      reporter_name: 'Rohit Verma',
+      reporter_email: 'rohit.verma@gmail.com',
+      entity_name: 'Palm Grove Heights',
+      target_vendor: 'Daily Fresh Mart',
+      order_id: 'ORD-9102',
+      order_amount: 380.00,
+      assigned_to: 'Super Admin',
+      created_at: createPastDate(45).toISOString(), // 45m ago -> breached by 30 mins!
+      created_at_ist: formatIstIso(createPastDate(45)),
+      created_at_readable: formatIstReadable(createPastDate(45)),
+      updated_at: formatIstIso(createPastDate(45))
+    },
+    {
+      id: 't-1788287963713',
+      ticket_number: 'TICK-9082',
+      subject: 'Missing Item & Delayed Delivery Complaint',
+      description: 'Customer reported 2 items missing from Order #ORD-9842 fulfilled by Aarushi Sweets.',
+      category: 'user_vs_vendor',
+      priority: 'high', // 45 mins SLA
+      status: 'in_progress',
+      user_type: 'user',
+      source: 'mobile_app',
+      reporter_name: 'Garvit Sharma',
+      reporter_email: 'garvit@gmail.com',
+      entity_name: 'Greenwood Residency',
+      target_vendor: 'Aarushi Sweets',
+      order_id: 'ORD-9842',
+      order_amount: 707.00,
+      assigned_to: 'Aarushi Admin',
+      created_at: createPastDate(120).toISOString(), // 2h ago -> breached by 75 mins!
+      created_at_ist: formatIstIso(createPastDate(120)),
+      created_at_readable: formatIstReadable(createPastDate(120)),
+      updated_at: formatIstIso(createPastDate(90))
+    },
+    {
+      id: 't-1788287963725',
+      ticket_number: 'TICK-9083',
+      subject: 'Payment Debited but Order Status Failed on UPI',
+      description: 'Resident paid via Cashfree UPI Intent; funds debited from ICICI account but order failed to confirm.',
+      category: 'billing',
+      priority: 'medium', // 120 mins SLA
+      status: 'in_progress',
+      user_type: 'user',
+      source: 'landing_website',
+      reporter_name: 'Pooja Iyer',
+      reporter_email: 'pooja.iyer@gmail.com',
+      entity_name: 'Sunrise Towers',
+      target_vendor: 'DigiLocal Platform',
+      order_id: 'ORD-9855',
+      order_amount: 1450.00,
+      assigned_to: 'Super Admin',
+      created_at: createPastDate(30).toISOString(), // 30m ago -> 90 mins remaining!
+      created_at_ist: formatIstIso(createPastDate(30)),
+      created_at_readable: formatIstReadable(createPastDate(30)),
+      updated_at: formatIstIso(createPastDate(30))
+    },
+    {
+      id: 't-1788287963738',
+      ticket_number: 'TICK-9084',
+      subject: 'Vendor Weekly Payout Bank IFSC Mismatch Query',
+      description: 'Vendor inquiries why last Friday settlement did not reflect in HDFC account.',
+      category: 'billing',
+      priority: 'low', // 240 mins SLA
+      status: 'open',
+      user_type: 'vendor',
+      source: 'vendor_portal',
+      reporter_name: "Flower's Point",
+      reporter_email: 'aarushi20@gmail.com',
+      entity_name: "Flower's Point",
+      target_vendor: "Flower's Point",
+      order_id: null,
+      order_amount: null,
+      assigned_to: 'Super Admin',
+      created_at: createPastDate(60).toISOString(), // 60m ago -> 180 mins remaining!
+      created_at_ist: formatIstIso(createPastDate(60)),
+      created_at_readable: formatIstReadable(createPastDate(60)),
+      updated_at: formatIstIso(createPastDate(60))
+    },
+    {
+      id: 't-1788287963749',
+      ticket_number: 'TICK-9080',
+      subject: 'Refund Processed for Cancelled Grocery Order',
+      description: 'Order was cancelled before vendor dispatch. Refund initiated to wallet.',
+      category: 'billing',
+      priority: 'high',
+      status: 'resolved',
+      user_type: 'user',
+      source: 'mobile_app',
+      reporter_name: 'Amit Patel',
+      reporter_email: 'amit.patel@gmail.com',
+      entity_name: 'Greenwood Residency',
+      target_vendor: 'Fresh Supermarket',
+      order_id: 'ORD-9021',
+      order_amount: 540.00,
+      assigned_to: 'Aarushi Admin',
+      created_at: createPastDate(240).toISOString(),
+      created_at_ist: formatIstIso(createPastDate(240)),
+      created_at_readable: formatIstReadable(createPastDate(240)),
+      updated_at: createPastDate(210).toISOString()
+    }
+  ];
+
+  seedData.forEach(item => memoryStore.tickets.push(item));
+}
+
+/**
+ * Dynamically computes SLA status and remaining time for a ticket.
+ * CRITICAL RULE: When timer passes the deadline, the ticket is NEVER erased.
+ * Instead, sla_minutes_remaining becomes NEGATIVE (e.g. -15, -45, -120),
+ * is_sla_breached becomes true, and human-readable overdue strings are generated.
+ */
+function calculateTicketSla(ticket) {
+  if (!ticket) return ticket;
+  const priority = (ticket.priority || 'medium').toLowerCase();
+  
+  // Total SLA allowance in minutes
+  const config = memoryStore.sla_config || {};
+  const totalSlaMinutes = ticket.total_sla_minutes || 
+    (config[`${priority}_sla_minutes`]) || 
+    SLA_MAP[priority] || 
+    120;
+
+  // Additional SLA extension (if granted by admin)
+  const extensionMinutes = Number(ticket.sla_extension_minutes || 0);
+  const effectiveTotalMinutes = totalSlaMinutes + extensionMinutes;
+
+  // Resolve base creation date or SLA start date
+  const baseTimeStr = ticket.sla_start_time || ticket.created_at || ticket.created_at_ist || new Date().toISOString();
+  let baseDate = new Date(baseTimeStr);
+  if (isNaN(baseDate.getTime())) {
+    baseDate = new Date();
+  }
+
+  // Calculate deadline
+  const deadlineMs = baseDate.getTime() + (effectiveTotalMinutes * 60 * 1000);
+  const deadlineDate = new Date(deadlineMs);
+
+  // If ticket is resolved/closed, freeze timer at resolution time (updated_at)
+  const isTerminal = ['resolved', 'closed'].includes((ticket.status || '').toLowerCase());
+  let compareTimeMs = Date.now();
+  if (isTerminal && ticket.updated_at) {
+    const termDate = new Date(ticket.updated_at);
+    if (!isNaN(termDate.getTime())) {
+      compareTimeMs = termDate.getTime();
+    }
+  }
+
+  // Difference in minutes (NEGATIVE when compareTimeMs > deadlineMs)
+  const diffMinutes = Math.round((deadlineMs - compareTimeMs) / 60000);
+  const isBreached = diffMinutes < 0 && !isTerminal;
+  const isMet = diffMinutes >= 0 && isTerminal;
+  const isBreachedResolved = diffMinutes < 0 && isTerminal;
+
+  let slaStatus = 'within_sla';
+  if (isBreached) slaStatus = 'breached';
+  else if (isMet) slaStatus = 'met';
+  else if (isBreachedResolved) slaStatus = 'breached_resolved';
+
+  const absMinutes = Math.abs(diffMinutes);
+  const hours = Math.floor(absMinutes / 60);
+  const mins = absMinutes % 60;
+  const formattedHoursMins = `${String(hours).padStart(2, '0')}h ${String(mins).padStart(2, '0')}m`;
+
+  let slaTimeDisplay = '';
+  let overdueReadable = null;
+
+  if (diffMinutes < 0) {
+    slaTimeDisplay = `-${formattedHoursMins}`;
+    overdueReadable = `Overdue by ${hours > 0 ? `${hours}h ` : ''}${mins}m`;
+  } else {
+    slaTimeDisplay = `+${formattedHoursMins}`;
+    overdueReadable = null;
+  }
+
+  return {
+    ...ticket,
+    total_sla_minutes: totalSlaMinutes,
+    sla_extension_minutes: extensionMinutes,
+    effective_sla_minutes: effectiveTotalMinutes,
+    sla_minutes_remaining: diffMinutes, // NEGATIVE when timer ends (e.g. -45)
+    is_sla_breached: isBreached,
+    is_overdue: isBreached,
+    sla_status: slaStatus, // 'within_sla' | 'breached' | 'met' | 'breached_resolved'
+    sla_deadline_ist: formatIstIso(deadlineDate),
+    sla_deadline_readable: formatIstReadable(deadlineDate),
+    sla_time_display: slaTimeDisplay, // e.g. "-01h 15m" or "+00h 45m"
+    overdue_by_minutes: isBreached ? absMinutes : 0,
+    overdue_readable: overdueReadable, // e.g. "Overdue by 1h 15m" or null
+    auto_escalate_on_breach: Boolean(config.auto_escalate_on_breach),
+    is_retained: true, // Guarantees ticket is never purged
+    erased: false      // Explicit signal to frontend: NEVER erase or remove
+  };
+}
 
 /**
  * Helper to find ticket by ID or Ticket Number
  */
 function findTicket(ticketIdOrNum) {
   if (!ticketIdOrNum) return null;
+  ensureInitialTickets();
   const term = String(ticketIdOrNum).trim().toLowerCase();
   return memoryStore.tickets.find(t => 
-    t.id.toLowerCase() === term || 
-    t.ticket_number.toLowerCase() === term
+    String(t.id).toLowerCase() === term || 
+    String(t.ticket_number).toLowerCase() === term
   ) || null;
 }
 
@@ -78,10 +292,17 @@ function findTicket(ticketIdOrNum) {
 /**
  * 1. Fetch All Support Tickets
  * GET /api/admin/support/tickets & GET /api/support/tickets
+ * Query Params:
+ *  - status: all | open | in_progress | resolved | closed
+ *  - category: all | user_vs_vendor | billing | technical | etc.
+ *  - sla_status: all | breached | overdue | within_sla | active | resolved
+ *  - sort_by: created_at | most_overdue | sla_urgent | oldest
+ *  - search: query string
  */
 async function listAdminTickets(req, res) {
   try {
-    let { status, category, search } = req.query;
+    ensureInitialTickets();
+    let { status, category, search, sla_status, sort_by } = req.query;
     let list = [...memoryStore.tickets];
 
     // DB Sync if available
@@ -107,7 +328,6 @@ async function listAdminTickets(req, res) {
             order_id: dbRow.order_id || null,
             order_amount: dbRow.order_amount ? parseFloat(dbRow.order_amount) : null,
             assigned_to: dbRow.assigned_to || 'Super Admin',
-            sla_minutes_remaining: dbRow.sla_minutes_remaining || 120,
             created_at: dbRow.created_at || new Date().toISOString(),
             created_at_ist: dbRow.created_at_ist || formatIstIso(),
             created_at_readable: dbRow.created_at_readable || formatIstReadable(),
@@ -119,16 +339,22 @@ async function listAdminTickets(req, res) {
       }
     } catch (_) { }
 
+    // Dynamically calculate live SLA status on every ticket
+    list = list.map(t => calculateTicketSla(t));
+
+    // Status filter
     if (status && status !== 'all') {
       const sTerm = String(status).toLowerCase();
-      list = list.filter(t => t.status.toLowerCase() === sTerm);
+      list = list.filter(t => (t.status || '').toLowerCase() === sTerm);
     }
 
+    // Category filter
     if (category && category !== 'all') {
       const cTerm = String(category).toLowerCase();
-      list = list.filter(t => t.category.toLowerCase() === cTerm);
+      list = list.filter(t => (t.category || '').toLowerCase() === cTerm);
     }
 
+    // Search filter
     if (search) {
       const q = String(search).toLowerCase();
       list = list.filter(t => 
@@ -140,10 +366,46 @@ async function listAdminTickets(req, res) {
       );
     }
 
+    // SLA Status filter (breached/overdue vs within_sla vs all)
+    if (sla_status && sla_status !== 'all') {
+      const slaTerm = String(sla_status).toLowerCase();
+      if (slaTerm === 'breached' || slaTerm === 'overdue') {
+        list = list.filter(t => t.is_sla_breached);
+      } else if (slaTerm === 'within_sla' || slaTerm === 'active') {
+        list = list.filter(t => !t.is_sla_breached && !['resolved', 'closed'].includes((t.status || '').toLowerCase()));
+      } else if (slaTerm === 'resolved' || slaTerm === 'met') {
+        list = list.filter(t => ['resolved', 'closed'].includes((t.status || '').toLowerCase()));
+      }
+    }
+
+    // Sorting
+    if (sort_by === 'most_overdue') {
+      // Most negative first (e.g. -180m before -15m)
+      list.sort((a, b) => a.sla_minutes_remaining - b.sla_minutes_remaining);
+    } else if (sort_by === 'sla_urgent') {
+      // Smallest remaining time first
+      list.sort((a, b) => a.sla_minutes_remaining - b.sla_minutes_remaining);
+    } else if (sort_by === 'oldest') {
+      list.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    } else {
+      // Default: newest first
+      list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+
+    const totalCount = list.length;
+    const breachedCount = list.filter(t => t.is_sla_breached).length;
+    const withinSlaCount = list.filter(t => !t.is_sla_breached && !['resolved', 'closed'].includes((t.status || '').toLowerCase())).length;
+
     return res.status(200).json({
       code: 200,
       status: 'success',
-      message: 'Support tickets retrieved successfully.',
+      message: 'Support tickets retrieved successfully (SLA timers dynamically calculated; expired tickets are permanently retained with negative timer).',
+      meta: {
+        total_tickets: totalCount,
+        breached_tickets_count: breachedCount,
+        within_sla_count: withinSlaCount,
+        never_erased_guarantee: true
+      },
       data: list
     });
   } catch (err) {
@@ -152,6 +414,137 @@ async function listAdminTickets(req, res) {
       status: 'error',
       message: err.message
     });
+  }
+}
+
+/**
+ * 1b. Fetch Overdue / SLA Breached Tickets Specifically
+ * GET /api/admin/support/tickets/overdue & GET /api/support/tickets/overdue
+ */
+async function getOverdueTickets(req, res) {
+  try {
+    ensureInitialTickets();
+    let list = memoryStore.tickets
+      .map(t => calculateTicketSla(t))
+      .filter(t => t.is_sla_breached && !['resolved', 'closed'].includes((t.status || '').toLowerCase()))
+      .sort((a, b) => a.sla_minutes_remaining - b.sla_minutes_remaining);
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'Overdue SLA-breached tickets retrieved successfully. Tickets are never erased and display negative elapsed time.',
+      meta: {
+        overdue_count: list.length,
+        most_overdue_minutes: list.length > 0 ? Math.abs(list[0].sla_minutes_remaining) : 0
+      },
+      data: list
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
+}
+
+/**
+ * 1c. Real-Time SLA Dashboard Summary & Telemetry
+ * GET /api/admin/support/tickets/sla-summary & GET /api/support/tickets/sla-summary
+ */
+async function getSlaSummary(req, res) {
+  try {
+    ensureInitialTickets();
+    const allEnriched = memoryStore.tickets.map(t => calculateTicketSla(t));
+    const activeTickets = allEnriched.filter(t => !['resolved', 'closed'].includes((t.status || '').toLowerCase()));
+    const breached = activeTickets.filter(t => t.is_sla_breached);
+    const withinSla = activeTickets.filter(t => !t.is_sla_breached);
+
+    const totalOverdueMinutes = breached.reduce((sum, t) => sum + t.overdue_by_minutes, 0);
+    const avgOverdueMinutes = breached.length > 0 ? Math.round(totalOverdueMinutes / breached.length) : 0;
+    const complianceRate = activeTickets.length > 0 
+      ? Math.round(((withinSla.length / activeTickets.length) * 100) * 10) / 10 
+      : 100;
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: 'SLA timer summary and breach telemetry.',
+      data: {
+        total_active_tickets: activeTickets.length,
+        within_sla_count: withinSla.length,
+        breached_count: breached.length,
+        sla_compliance_rate_percent: complianceRate,
+        avg_overdue_minutes: avgOverdueMinutes,
+        policy_config: memoryStore.sla_config,
+        breached_tickets: breached.map(b => ({
+          ticket_id: b.id,
+          ticket_number: b.ticket_number,
+          subject: b.subject,
+          priority: b.priority,
+          assigned_to: b.assigned_to,
+          sla_minutes_remaining: b.sla_minutes_remaining,
+          sla_time_display: b.sla_time_display,
+          overdue_readable: b.overdue_readable
+        }))
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
+  }
+}
+
+/**
+ * 1d. Reset or Extend SLA Timer for a Ticket
+ * PATCH /api/admin/support/tickets/:ticketId/reset-sla & POST
+ */
+async function resetOrExtendSla(req, res) {
+  try {
+    const { ticketId, id } = req.params;
+    const targetId = ticketId || id;
+    const ticket = findTicket(targetId);
+
+    if (!ticket) {
+      return res.status(404).json({
+        code: 404,
+        status: 'error',
+        error: 'TICKET_NOT_FOUND',
+        message: `Support Ticket #${targetId} not found.`
+      });
+    }
+
+    const { additional_minutes, reset_to_now = false, reason = 'Admin granted SLA extension' } = req.body;
+
+    if (reset_to_now) {
+      ticket.sla_start_time = new Date().toISOString();
+      ticket.sla_extension_minutes = 0;
+    } else if (additional_minutes && !isNaN(Number(additional_minutes))) {
+      ticket.sla_extension_minutes = (ticket.sla_extension_minutes || 0) + parseInt(additional_minutes, 10);
+    } else {
+      ticket.sla_start_time = new Date().toISOString();
+    }
+
+    ticket.updated_at = formatIstIso();
+
+    // Log internal staff note for audit trail
+    const logMsg = {
+      id: `m-${Date.now()}`,
+      ticket_id: ticket.id,
+      sender_name: req.user?.name || req.user?.username || 'Super Admin',
+      sender_role: 'admin',
+      message: `[SLA TIMER UPDATED] ${reason}. (Reset: ${reset_to_now}, Extension: +${additional_minutes || 0} mins).`,
+      is_internal_note: true,
+      created_at_ist: formatIstIso(),
+      created_at_readable: formatIstReadable()
+    };
+    memoryStore.messages.push(logMsg);
+
+    const enriched = calculateTicketSla(ticket);
+
+    return res.status(200).json({
+      code: 200,
+      status: 'success',
+      message: `SLA timer for Ticket #${ticket.ticket_number} successfully updated.`,
+      data: enriched
+    });
+  } catch (err) {
+    return res.status(500).json({ code: 500, status: 'error', message: err.message });
   }
 }
 
@@ -172,10 +565,12 @@ async function getTicketById(req, res) {
     });
   }
 
+  const enriched = calculateTicketSla(ticket);
+
   return res.status(200).json({
     code: 200,
     status: 'success',
-    data: ticket
+    data: enriched
   });
 }
 
@@ -971,6 +1366,9 @@ async function getVendorTickets(req, res) {
 
 module.exports = {
   listAdminTickets,
+  getOverdueTickets,
+  getSlaSummary,
+  resetOrExtendSla,
   getTicketById,
   getTicketMessages,
   replyToTicket,
@@ -992,5 +1390,7 @@ module.exports = {
   userReplyToTicket,
   createVendorTicket,
   getVendorTickets,
+  calculateTicketSla,
+  ensureInitialTickets,
   memoryStore
 };

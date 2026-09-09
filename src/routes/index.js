@@ -131,6 +131,8 @@ const supportUpload = multer({
 
 // ── Admin Panel Support Desk (adminMock) ─────────────────────────────────
 router.get(['/api/admin/support/tickets', '/api/support/tickets'], supportController.listAdminTickets);
+router.get(['/api/admin/support/tickets/overdue', '/api/support/tickets/overdue'], supportController.getOverdueTickets);
+router.get(['/api/admin/support/tickets/sla-summary', '/api/support/tickets/sla-summary'], supportController.getSlaSummary);
 router.get(['/api/admin/support/analytics', '/api/support/analytics'], supportController.getAnalytics);
 router.get(['/api/admin/support/sla', '/api/support/sla'], supportController.getSlaConfig);
 router.put(['/api/admin/support/sla', '/api/support/sla'], supportController.updateSlaConfig);
@@ -138,6 +140,8 @@ router.get(['/api/admin/support/tags', '/api/support/tags'], supportController.g
 router.post(['/api/admin/support/tags', '/api/support/tags'], supportController.createTag);
 router.delete(['/api/admin/support/tags/:tagId', '/api/support/tags/:tagId'], supportController.deleteTag);
 
+router.patch(['/api/admin/support/tickets/:ticketId/reset-sla', '/api/support/tickets/:ticketId/reset-sla', '/api/admin/support/tickets/:id/reset-sla', '/api/support/tickets/:id/reset-sla'], supportController.resetOrExtendSla);
+router.post(['/api/admin/support/tickets/:ticketId/reset-sla', '/api/support/tickets/:ticketId/reset-sla', '/api/admin/support/tickets/:id/reset-sla', '/api/support/tickets/:id/reset-sla'], supportController.resetOrExtendSla);
 router.get(['/api/admin/support/tickets/:ticketId', '/api/admin/support/tickets/:id', '/api/support/tickets/:ticketId', '/api/support/tickets/:id'], supportController.getTicketById);
 router.get(['/api/admin/support/tickets/:ticketId/messages', '/api/admin/support/tickets/:id/messages', '/api/support/tickets/:ticketId/messages', '/api/support/tickets/:id/messages'], supportController.getTicketMessages);
 router.post(['/api/admin/support/tickets/:ticketId/reply', '/api/admin/support/tickets/:id/reply', '/api/support/tickets/:ticketId/reply', '/api/support/tickets/:id/reply', '/api/support/tickets/:id/messages'], supportController.replyToTicket);
