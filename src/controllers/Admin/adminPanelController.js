@@ -295,12 +295,13 @@ async function listVendors(req, res) {
     const targetSociety = society_id || societyId;
     if (targetSociety) {
       const rawSocStr = String(targetSociety).trim();
-      if (/^d+$/.test(rawSocStr)) {
+      if (/^\d+$/.test(rawSocStr)) {
         conditions.push(`v.society_id = ?`);
         params.push(parseInt(rawSocStr, 10));
       } else {
         conditions.push(`(LOWER(s.society_name) LIKE ? OR LOWER(s.location) LIKE ?)`);
         const q = `%${rawSocStr.toLowerCase()}%`;
+        params.push(q, q);
       }
     }
 
@@ -317,9 +318,18 @@ async function listVendors(req, res) {
       params.push(q, q, q, q, q);
     }
 
-    if (status && status !== 'all') {
-      conditions.push(`LOWER(COALESCE(v.status, 'active')) = ?`);
-      params.push(status.toLowerCase());
+    const reqUrl = String(req.originalUrl || req.baseUrl || req.url || '');
+    const isAdminPath = reqUrl.includes('/api/admin') || reqUrl.includes('/api/v1/admin');
+    const isAdminClient = req.headers['x-platform-client'] === 'admin_dashboard';
+    const isAdminAuth = req.user && ['super_admin', 'admin', 'sub_admin'].includes(String(req.user.role).toLowerCase());
+    const isExplicitAdminCall = isAdminPath || isAdminClient || isAdminAuth;
+
+    if (!isExplicitAdminCall) {
+      // Regular resident users and storefront clients can ONLY see ACTIVE vendors
+      conditions.push(`UPPER(v.status) = 'ACTIVE'`);
+    } else if (status && status !== 'all') {
+      conditions.push(`UPPER(COALESCE(v.status, 'ACTIVE')) = ?`);
+      params.push(status.toUpperCase());
     }
 
     if (tier && tier !== 'all') {
@@ -702,7 +712,8 @@ async function updateUserAdmin(req, res) {
     const newFlat = b.flat !== undefined ? String(b.flat).trim() : (u.flat || '');
     const newArea = (b.area !== undefined ? b.area : (b.location !== undefined ? b.location : b.society_name)) !== undefined ? String(b.area || b.location || b.society_name).trim() : (u.area || u.society_name || '');
     const newCity = b.city !== undefined ? String(b.city).trim() : (u.city || '');
-    const newPincode = b.pincode !== undefined ? String(b.pincode).trim() : (u.pincode || '');
+    const newState = b.state !== undefined ? String(b.state).trim() : (u.state || '');
+    const newPincode = (b.pincode !== undefined ? b.pincode : (b.pin_code !== undefined ? b.pin_code : b.pinCode)) !== undefined ? String(b.pincode || b.pin_code || b.pinCode).trim() : (u.pincode || '');
     const newAddress = (b.address !== undefined ? b.address : b.full_address) !== undefined ? String(b.address || b.full_address).trim() : (u.address || '');
     const newStatus = b.status !== undefined ? String(b.status).toUpperCase() : (u.status || 'ACTIVE');
 
@@ -715,16 +726,17 @@ async function updateUserAdmin(req, res) {
           area = ?,
           society_name = ?,
           city = ?,
+          state = ?,
           pincode = ?,
           address = ?,
           status = ?
       WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
-    `, [newName, newEmail, newPhone, newFlat, newArea, newArea, newCity, newPincode, newAddress, newStatus, String(targetId), String(targetId), String(targetId)]).catch(async () => {
+    `, [newName, newEmail, newPhone, newFlat, newArea, newArea, newCity, newState, newPincode, newAddress, newStatus, String(targetId), String(targetId), String(targetId)]).catch(async () => {
       return query(`
         UPDATE users 
-        SET name = ?, email = ?, phone = ?, flat = ?, society_name = ?, status = ?
+        SET name = ?, email = ?, phone = ?, flat = ?, society_name = ?, city = ?, pincode = ?, status = ?
         WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
-      `, [newName, newEmail, newPhone, newFlat, newArea, newStatus, String(targetId), String(targetId), String(targetId)]);
+      `, [newName, newEmail, newPhone, newFlat, newArea, newCity, newPincode, newStatus, String(targetId), String(targetId), String(targetId)]);
     });
 
     const updatedUserObj = {
@@ -732,11 +744,15 @@ async function updateUserAdmin(req, res) {
       name: newName,
       email: newEmail,
       phone: newPhone,
+      country_code: '+91',
+      phone_number: get10DigitPhone(newPhone),
       area: newArea,
       society_name: newArea,
       flat: newFlat,
       city: newCity,
+      state: newState,
       pincode: newPincode,
+      pin_code: newPincode,
       address: newAddress,
       status: newStatus.toLowerCase(),
       is_blocked: newStatus.toUpperCase() === 'BLOCKED' || newStatus.toUpperCase() === 'SUSPENDED'
@@ -779,32 +795,61 @@ async function listUsers(req, res) {
     const limitNum = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
     const offset = (pageNum - 1) * limitNum;
 
-    let sql = `SELECT * FROM users`;
+    let sql = `
+      SELECT u.*, 
+             s.city AS soc_city, 
+             s.state AS soc_state, 
+             s.pincode AS soc_pincode, 
+             s.society_name AS soc_name
+      FROM users u
+      LEFT JOIN societies s ON u.society_id = s.society_id
+    `;
     const params = [];
     if (search) {
-      sql += ` WHERE name LIKE ? OR phone LIKE ? OR email LIKE ? OR user_id = ? OR society_name LIKE ? OR area LIKE ?`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`, `%${search}%`);
+      sql += ` WHERE u.name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR u.user_id = ? OR u.society_name LIKE ? OR u.area LIKE ? OR u.city LIKE ? OR u.state LIKE ? OR u.pincode LIKE ?`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
-    sql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    sql += ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`;
     params.push(limitNum, offset);
 
-    const result = await query(sql, params).catch(() => ({ rows: [] }));
+    let result = await query(sql, params).catch(async () => {
+      let fbSql = `SELECT * FROM users`;
+      const fbParams = [];
+      if (search) {
+        fbSql += ` WHERE name LIKE ? OR phone LIKE ? OR email LIKE ? OR user_id = ? OR society_name LIKE ? OR area LIKE ?`;
+        fbParams.push(`%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`, `%${search}%`);
+      }
+      fbSql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+      fbParams.push(limitNum, offset);
+      return query(fbSql, fbParams).catch(() => ({ rows: [] }));
+    });
 
-    const users = (result.rows || []).map(u => ({
-      user_id: String(u.user_id),
-      name: u.name || '',
-      email: u.email || '',
-      country_code: '+91',
-      phone_number: get10DigitPhone(u.phone),
-      area: u.area || u.society_name || '',
-      society_name: u.society_name || u.area || '',
-      flat: u.flat || '',
-      status: (u.status || 'ACTIVE').toLowerCase(),
-      is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
-      created_at: formatUTCISO(u.created_at),
-      created_at_ist: formatKolkataISO(u.created_at),
-      created_at_readable: formatKolkataReadable(u.created_at)
-    }));
+    const users = (result.rows || []).map(u => {
+      const city = u.city || u.soc_city || '';
+      const state = u.state || u.soc_state || '';
+      const pincode = u.pincode || u.soc_pincode || '';
+      return {
+        user_id: String(u.user_id),
+        name: u.name || '',
+        email: u.email || '',
+        country_code: '+91',
+        phone_number: get10DigitPhone(u.phone),
+        phone: get10DigitPhone(u.phone),
+        area: u.area || u.society_name || u.soc_name || '',
+        society_name: u.society_name || u.soc_name || u.area || '',
+        flat: u.flat || '',
+        city: city,
+        state: state,
+        pincode: pincode,
+        pin_code: pincode,
+        address: u.address || [u.flat, u.area || u.society_name || u.soc_name, city, state, pincode].filter(Boolean).join(', ') || '',
+        status: (u.status || 'ACTIVE').toLowerCase(),
+        is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
+        created_at: formatUTCISO(u.created_at),
+        created_at_ist: formatKolkataISO(u.created_at),
+        created_at_readable: formatKolkataReadable(u.created_at)
+      };
+    });
     return respond(res, 200, users, 'Users directory retrieved successfully.');
   } catch (err) {
     return sendStandardError(res, 500, 'Failed to retrieve users directory.');
@@ -815,20 +860,42 @@ async function getUserById(req, res) {
   try {
     const { userId, id } = req.params;
     const targetId = userId || id;
-    const result = await query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]).catch(() => ({ rows: [] }));
+    const result = await query(
+      `SELECT u.*, 
+              s.city AS soc_city, 
+              s.state AS soc_state, 
+              s.pincode AS soc_pincode, 
+              s.society_name AS soc_name
+       FROM users u
+       LEFT JOIN societies s ON u.society_id = s.society_id
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
+      [targetId, String(targetId), String(targetId)]
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]);
+    }).catch(() => ({ rows: [] }));
+
     if (!result.rows || result.rows.length === 0) {
       return sendStandardError(res, 404, `User "${targetId}" not found.`);
     }
     const u = result.rows[0];
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
+    const pincode = u.pincode || u.soc_pincode || '';
     const userObj = {
       user_id: String(u.user_id),
       name: u.name || '',
       email: u.email || '',
       country_code: '+91',
       phone_number: get10DigitPhone(u.phone),
-      area: u.area || u.society_name || '',
-      society_name: u.society_name || u.area || '',
+      phone: get10DigitPhone(u.phone),
+      area: u.area || u.society_name || u.soc_name || '',
+      society_name: u.society_name || u.soc_name || u.area || '',
       flat: u.flat || '',
+      city: city,
+      state: state,
+      pincode: pincode,
+      pin_code: pincode,
+      address: u.address || [u.flat, u.area || u.society_name || u.soc_name, city, state, pincode].filter(Boolean).join(', ') || '',
       status: (u.status || 'ACTIVE').toLowerCase(),
       is_blocked: String(u.status || '').toUpperCase() === 'BLOCKED' || String(u.status || '').toUpperCase() === 'SUSPENDED',
       created_at: formatUTCISO(u.created_at),
@@ -866,9 +933,18 @@ async function enrichOrderWithDetails(ord) {
 
   // 3. Fetch user info if missing
   const userRes = await query(
-    `SELECT name, phone, email, flat, area, city, state, pincode, address FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+    `SELECT u.name, u.phone, u.email, u.flat, u.area, u.society_name,
+            COALESCE(NULLIF(u.city, ''), s.city, '') AS city,
+            COALESCE(NULLIF(u.state, ''), s.state, '') AS state,
+            COALESCE(NULLIF(u.pincode, ''), s.pincode, '') AS pincode,
+            u.address
+     FROM users u
+     LEFT JOIN societies s ON u.society_id = s.society_id
+     WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ?`,
     [ord.user_id, String(ord.user_id)]
-  ).catch(() => ({ rows: [] }));
+  ).catch(async () => {
+    return query(`SELECT name, phone, email, flat, area, city, state, pincode, address FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [ord.user_id, String(ord.user_id)]);
+  }).catch(() => ({ rows: [] }));
 
   const uInfo = userRes.rows[0] || {};
 
@@ -919,6 +995,13 @@ async function enrichOrderWithDetails(ord) {
     vendor_id: Number(ord.vendor_id),
     customer_name: ord.customer_name || uInfo.name || 'Resident Customer',
     customer_phone: ord.customer_phone || ord.phone || uInfo.phone || '',
+    customer_city: cityVal,
+    customer_state: stateVal,
+    customer_pincode: pincodeVal,
+    customer_pin_code: pincodeVal,
+    user_city: cityVal,
+    user_state: stateVal,
+    user_pincode: pincodeVal,
     phone: ord.phone || ord.customer_phone || uInfo.phone || '',
     store_name: ord.store_name || vInfo.store_name || 'Partner Store',
     vendor_name: vInfo.vendor_name || 'Store Owner',
@@ -932,6 +1015,7 @@ async function enrichOrderWithDetails(ord) {
     city: cityVal,
     state: stateVal,
     pincode: pincodeVal,
+    pin_code: pincodeVal,
     delivery_address: formattedFullAddress,
     full_address: formattedFullAddress,
     subtotal: calculatedSubtotal,
@@ -1039,24 +1123,41 @@ async function getUserAddressesAdmin(req, res) {
   try {
     const { userId, id } = req.params;
     const targetId = userId || id;
-    const userRes = await query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]).catch(() => ({ rows: [] }));
+    const userRes = await query(
+      `SELECT u.*, 
+              s.city AS soc_city, 
+              s.state AS soc_state, 
+              s.pincode AS soc_pincode, 
+              s.society_name AS soc_name
+       FROM users u
+       LEFT JOIN societies s ON u.society_id = s.society_id
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
+      [targetId, String(targetId), String(targetId)]
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]);
+    }).catch(() => ({ rows: [] }));
+
     if (!userRes.rows || userRes.rows.length === 0) {
       return sendStandardError(res, 404, `User "${targetId}" not found.`);
     }
     const u = userRes.rows[0];
-    const hasAddress = Boolean(u.flat || u.area || u.society_name || u.address || u.city || u.pincode);
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
+    const pincode = u.pincode || u.soc_pincode || '';
+    const hasAddress = Boolean(u.flat || u.area || u.society_name || u.address || city || state || pincode);
     const addresses = hasAddress ? [
       {
         address_id: `addr_primary_${u.user_id}`,
         user_id: String(u.user_id),
         type: 'Primary Residence',
         flat: u.flat || '',
-        area: u.area || u.society_name || '',
-        society_name: u.society_name || u.area || '',
-        city: u.city || '',
-        state: u.state || '',
-        pincode: u.pincode || '',
-        full_address: u.address || [u.flat, u.area || u.society_name, u.city, u.pincode].filter(Boolean).join(', ') || '',
+        area: u.area || u.society_name || u.soc_name || '',
+        society_name: u.society_name || u.soc_name || u.area || '',
+        city: city,
+        state: state,
+        pincode: pincode,
+        pin_code: pincode,
+        full_address: u.address || [u.flat, u.area || u.society_name || u.soc_name, city, state, pincode].filter(Boolean).join(', ') || '',
         is_default: true
       }
     ] : [];
@@ -1108,15 +1209,23 @@ async function strikeUser(req, res) {
     const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
 
     const userRes = await query(
-      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+      `SELECT u.*, s.city AS soc_city, s.state AS soc_state, s.pincode AS soc_pincode 
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ? OR u.phone LIKE ?`,
       [targetId, String(targetId), targetId, `%${last10}`]
-    );
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`, [targetId, String(targetId), targetId, `%${last10}`]);
+    });
 
     if (!userRes.rows || userRes.rows.length === 0) {
       return sendStandardError(res, 404, `Resident user "${targetId}" not found.`);
     }
 
     const u = userRes.rows[0];
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
+    const pincode = u.pincode || u.soc_pincode || '';
     const currentStrikes = Number(u.strikes || 0);
     const newStrikes = currentStrikes + 1;
     const isAutoBanned = newStrikes >= 3;
@@ -1165,11 +1274,20 @@ async function strikeUser(req, res) {
       user_id: String(u.user_id),
       name: u.name || '',
       phone: u.phone || '',
+      phone_number: get10DigitPhone(u.phone),
+      city: city,
+      state: state,
+      pincode: pincode,
+      pin_code: pincode,
       strikes: newStrikes,
+      flags_count: newStrikes,
       max_strikes_allowed: 3,
-      status: newStatus.toLowerCase(),
+      status: (req.path?.includes('/flag') || req.originalUrl?.includes('/flag'))
+        ? (isAutoBanned ? 'banned' : (newStrikes === 1 ? 'warned' : newStatus.toLowerCase()))
+        : newStatus.toLowerCase(),
       is_blocked: isAutoBanned || String(newStatus).toUpperCase() === 'BLOCKED',
       is_auto_banned: isAutoBanned,
+      auto_banned: isAutoBanned,
       show_second_strike_warning,
       show_strike_warning,
       warning_title: newStrikes === 2 ? 'Second Strike Warning' : (newStrikes === 1 ? 'First Strike Warning' : 'Account Blocked'),
@@ -1199,15 +1317,23 @@ async function unstrikeUser(req, res) {
     const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
 
     const userRes = await query(
-      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+      `SELECT u.*, s.city AS soc_city, s.state AS soc_state, s.pincode AS soc_pincode 
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ? OR u.phone LIKE ?`,
       [targetId, String(targetId), targetId, `%${last10}`]
-    );
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`, [targetId, String(targetId), targetId, `%${last10}`]);
+    });
 
     if (!userRes.rows || userRes.rows.length === 0) {
       return sendStandardError(res, 404, `Resident user "${targetId}" not found.`);
     }
 
     const u = userRes.rows[0];
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
+    const pincode = u.pincode || u.soc_pincode || '';
     const currentStrikes = Number(u.strikes || 0);
     const newStrikes = resetAll ? 0 : Math.max(0, currentStrikes - 1);
     const newStatus = (newStrikes < 3 && String(u.status).toUpperCase() === 'BLOCKED') ? 'ACTIVE' : u.status;
@@ -1239,7 +1365,13 @@ async function unstrikeUser(req, res) {
       user_id: String(u.user_id),
       name: u.name || '',
       phone: u.phone || '',
+      phone_number: get10DigitPhone(u.phone),
+      city: city,
+      state: state,
+      pincode: pincode,
+      pin_code: pincode,
       strikes: newStrikes,
+      flags_count: newStrikes,
       max_strikes_allowed: 3,
       status: newStatus.toLowerCase(),
       is_blocked: String(newStatus).toUpperCase() === 'BLOCKED',
@@ -1251,6 +1383,342 @@ async function unstrikeUser(req, res) {
   } catch (err) {
     console.error('Error removing strike from user:', err);
     return sendStandardError(res, 500, 'Failed to remove strike from user.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+/**
+ * GET /api/admin/users/:id/strike or /api/admin/users/:id/strikes
+ * Retrieve strike details, strike history logs, and calculations for a specific resident user.
+ */
+async function getUserStrikesAdmin(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id || req.query?.user_id || req.query?.id;
+
+    if (!targetId) {
+      return sendStandardError(res, 400, 'User ID is required to retrieve strike details.');
+    }
+
+    const cleanPhone = String(targetId).trim().replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+    const userRes = await query(
+      `SELECT u.*, s.society_name AS soc_name, s.city AS soc_city, s.state AS soc_state, s.pincode AS soc_pincode 
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ? OR u.phone LIKE ?`,
+      [targetId, String(targetId), targetId, `%${last10}`]
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`, [targetId, String(targetId), targetId, `%${last10}`]);
+    });
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return sendStandardError(res, 404, `Resident user "${targetId}" not found.`);
+    }
+
+    const u = userRes.rows[0];
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
+    const pincode = u.pincode || u.soc_pincode || '';
+    const strikes = Number(u.strikes || 0);
+    const maxStrikes = 3;
+    const strikesRemaining = Math.max(0, maxStrikes - strikes);
+    const percentageToBan = Math.min(100, Math.round((strikes / maxStrikes) * 100));
+    const statusLower = String(u.status || 'active').toLowerCase();
+    const isAutoBanned = strikes >= maxStrikes;
+    const isBlocked = isAutoBanned || statusLower === 'blocked' || statusLower === 'suspended';
+
+    const strikesRes = await query(
+      `SELECT strike_id, strike_number, reason, admin_id, created_at 
+       FROM user_strikes 
+       WHERE user_id = ? OR CAST(user_id AS TEXT) = ? 
+       ORDER BY strike_number ASC, created_at ASC`,
+      [String(u.user_id), String(u.user_id)]
+    ).catch(() => ({ rows: [] }));
+
+    const strike_reasons = (strikesRes.rows || []).map(r => ({
+      strike_id: r.strike_id || null,
+      strike_number: Number(r.strike_number),
+      reason: r.reason || '',
+      admin_id: r.admin_id || null,
+      created_at: r.created_at ? formatKolkataISO(r.created_at) : formatKolkataISO()
+    }));
+    const strike_reasons_list = strike_reasons.map(r => r.reason);
+
+    const show_second_strike_warning = strikes === 2;
+    const show_strike_warning = strikes >= 1 && strikes < 3;
+
+    let warning_title = '';
+    let warning_message = '';
+    let strike_level = 'CLEAN';
+
+    if (strikes >= 3 || isBlocked) {
+      strike_level = 'BLOCKED';
+      warning_title = 'Account Blocked';
+      warning_message = 'Account has reached 3 strikes and is automatically blocked.';
+    } else if (strikes === 2) {
+      strike_level = 'WARNING_2';
+      warning_title = 'Second Strike Warning';
+      warning_message = 'Warning: User has received 2 strikes. Receiving a 3rd strike will automatically block the account!';
+    } else if (strikes === 1) {
+      strike_level = 'WARNING_1';
+      warning_title = 'First Strike Warning';
+      warning_message = 'Warning: User has received 1 strike for policy violation.';
+    }
+
+    const calculation = {
+      current_strikes: strikes,
+      max_strikes_allowed: maxStrikes,
+      strikes_remaining: strikesRemaining,
+      percentage_to_ban: percentageToBan,
+      is_at_risk: strikes >= 1 && strikes < maxStrikes,
+      is_auto_banned: isAutoBanned,
+      next_action_on_strike: strikes === 0 ? 'FIRST_WARNING' : strikes === 1 ? 'SECOND_WARNING' : 'ACCOUNT_AUTO_BLOCK',
+      can_issue_strike: strikes < maxStrikes,
+      can_remove_strike: strikes > 0,
+      can_reset: strikes > 0
+    };
+
+    return respond(res, 200, {
+      user_id: String(u.user_id),
+      name: u.name || '',
+      email: u.email || '',
+      phone: u.phone || '',
+      phone_number: get10DigitPhone(u.phone),
+      society_id: u.society_id ? String(u.society_id) : '',
+      society_name: u.society_name || u.soc_name || u.area || '',
+      area: u.area || u.society_name || u.soc_name || '',
+      flat: u.flat || '',
+      city: city,
+      state: state,
+      pincode: pincode,
+      pin_code: pincode,
+      address: u.address || '',
+      strikes: strikes,
+      flags_count: strikes,
+      max_strikes_allowed: maxStrikes,
+      strikes_remaining: strikesRemaining,
+      percentage_to_ban: percentageToBan,
+      strike_level: strike_level,
+      status: statusLower,
+      is_blocked: isBlocked,
+      is_auto_banned: isAutoBanned,
+      auto_banned: isAutoBanned,
+      show_second_strike_warning: show_second_strike_warning,
+      show_strike_warning: show_strike_warning,
+      warning_title: warning_title,
+      warning_message: warning_message,
+      can_strike: strikes < maxStrikes,
+      can_unstrike: strikes > 0,
+      can_reset: strikes > 0,
+      total_strikes_recorded: strike_reasons.length,
+      strike_reasons: strike_reasons,
+      strike_reasons_list: strike_reasons_list,
+      calculation: calculation
+    }, `User strike details retrieved successfully.`);
+  } catch (err) {
+    console.error('Error fetching user strikes (admin):', err);
+    return sendStandardError(res, 500, 'Failed to retrieve user strikes.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
+/**
+ * GET /api/admin/users/strikes
+ * Calculate and list strikes across users on the platform with aggregate statistics.
+ */
+async function listAllUserStrikesAdmin(req, res) {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const offset = (page - 1) * limit;
+    const filter = String(req.query.filter || req.query.level || '').trim().toLowerCase();
+    const search = String(req.query.search || req.query.q || '').trim();
+    const minStrikes = req.query.min_strikes !== undefined ? parseInt(req.query.min_strikes, 10) : (req.query.all === 'true' ? 0 : 1);
+
+    // Compute platform-wide strike calculation metrics
+    const statsRes = await query(`
+      SELECT 
+        COUNT(*) AS total_users,
+        COUNT(CASE WHEN strikes = 0 OR strikes IS NULL THEN 1 END) AS clean_users_count,
+        COUNT(CASE WHEN strikes = 1 THEN 1 END) AS warning_1_count,
+        COUNT(CASE WHEN strikes = 2 THEN 1 END) AS warning_2_count,
+        COUNT(CASE WHEN strikes >= 3 OR UPPER(status) = 'BLOCKED' THEN 1 END) AS banned_count,
+        COUNT(CASE WHEN strikes > 0 THEN 1 END) AS total_users_with_strikes,
+        COALESCE(SUM(strikes), 0) AS total_strikes_issued
+      FROM users
+    `).catch(() => ({ rows: [{ total_users: 0, clean_users_count: 0, warning_1_count: 0, warning_2_count: 0, banned_count: 0, total_users_with_strikes: 0, total_strikes_issued: 0 }] }));
+
+    const stats = statsRes.rows[0] || {};
+    const totalUsers = parseInt(stats.total_users || 0, 10);
+    const cleanUsersCount = parseInt(stats.clean_users_count || 0, 10);
+    const warning1Count = parseInt(stats.warning_1_count || 0, 10);
+    const warning2Count = parseInt(stats.warning_2_count || 0, 10);
+    const bannedCount = parseInt(stats.banned_count || 0, 10);
+    const totalUsersWithStrikes = parseInt(stats.total_users_with_strikes || 0, 10);
+    const totalStrikesIssued = parseInt(stats.total_strikes_issued || 0, 10);
+
+    // Build filter query for user strike list
+    let whereClauses = [];
+    let params = [];
+
+    if (minStrikes > 0) {
+      whereClauses.push(`u.strikes >= ?`);
+      params.push(minStrikes);
+    }
+
+    if (filter === 'warning' || filter === 'warning_1' || filter === '1') {
+      whereClauses.push(`u.strikes = 1`);
+    } else if (filter === 'second_warning' || filter === 'warning_2' || filter === '2') {
+      whereClauses.push(`u.strikes = 2`);
+    } else if (filter === 'banned' || filter === 'blocked' || filter === '3') {
+      whereClauses.push(`(u.strikes >= 3 OR UPPER(u.status) = 'BLOCKED')`);
+    } else if (filter === 'clean' || filter === '0') {
+      whereClauses.push(`(u.strikes = 0 OR u.strikes IS NULL)`);
+    }
+
+    if (search) {
+      const cleanPhone = search.replace(/[^0-9]/g, '');
+      whereClauses.push(`(u.name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR CAST(u.user_id AS TEXT) = ? ${cleanPhone ? 'OR u.phone LIKE ?' : ''})`);
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, search);
+      if (cleanPhone) params.push(`%${cleanPhone}%`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const countRes = await query(
+      `SELECT COUNT(*) AS total FROM users u ${whereSql}`,
+      params
+    ).catch(() => ({ rows: [{ total: 0 }] }));
+    const filteredTotal = parseInt(countRes.rows[0]?.total || 0, 10);
+
+    const listQuery = `
+      SELECT u.*, s.society_name AS soc_name, s.city AS soc_city, s.state AS soc_state, s.pincode AS soc_pincode 
+      FROM users u 
+      LEFT JOIN societies s ON u.society_id = s.society_id 
+      ${whereSql}
+      ORDER BY u.strikes DESC, u.user_id DESC
+      LIMIT ? OFFSET ?
+    `;
+    const usersRes = await query(listQuery, [...params, limit, offset]).catch(() => ({ rows: [] }));
+
+    // Fetch strike reasons for these users
+    const userIds = usersRes.rows.map(u => String(u.user_id));
+    let strikesByUser = {};
+    if (userIds.length > 0) {
+      const placeholders = userIds.map(() => '?').join(',');
+      const strikesRes = await query(
+        `SELECT strike_id, user_id, strike_number, reason, admin_id, created_at 
+         FROM user_strikes 
+         WHERE user_id IN (${placeholders}) OR CAST(user_id AS TEXT) IN (${placeholders})
+         ORDER BY strike_number ASC, created_at ASC`,
+        [...userIds, ...userIds]
+      ).catch(() => ({ rows: [] }));
+
+      (strikesRes.rows || []).forEach(r => {
+        const uid = String(r.user_id);
+        if (!strikesByUser[uid]) strikesByUser[uid] = [];
+        strikesByUser[uid].push({
+          strike_id: r.strike_id || null,
+          strike_number: Number(r.strike_number),
+          reason: r.reason || '',
+          admin_id: r.admin_id || null,
+          created_at: r.created_at ? formatKolkataISO(r.created_at) : formatKolkataISO()
+        });
+      });
+    }
+
+    const users = usersRes.rows.map(u => {
+      const city = u.city || u.soc_city || '';
+      const state = u.state || u.soc_state || '';
+      const pincode = u.pincode || u.soc_pincode || '';
+      const strikes = Number(u.strikes || 0);
+      const strikesRemaining = Math.max(0, 3 - strikes);
+      const percentageToBan = Math.min(100, Math.round((strikes / 3) * 100));
+      const statusLower = String(u.status || 'active').toLowerCase();
+      const isAutoBanned = strikes >= 3;
+      const isBlocked = isAutoBanned || statusLower === 'blocked' || statusLower === 'suspended';
+      const userStrikesList = strikesByUser[String(u.user_id)] || [];
+      const lastStrike = userStrikesList.length > 0 ? userStrikesList[userStrikesList.length - 1] : null;
+
+      return {
+        user_id: String(u.user_id),
+        name: u.name || '',
+        email: u.email || '',
+        phone: u.phone || '',
+        phone_number: get10DigitPhone(u.phone),
+        city: city,
+        state: state,
+        pincode: pincode,
+        pin_code: pincode,
+        society_name: u.society_name || u.soc_name || u.area || '',
+        area: u.area || u.society_name || u.soc_name || '',
+        flat: u.flat || '',
+        address: u.address || '',
+        strikes: strikes,
+        flags_count: strikes,
+        max_strikes_allowed: 3,
+        strikes_remaining: strikesRemaining,
+        percentage_to_ban: percentageToBan,
+        strike_level: strikes === 0 ? 'CLEAN' : strikes === 1 ? 'WARNING_1' : strikes === 2 ? 'WARNING_2' : 'BLOCKED',
+        status: statusLower,
+        is_blocked: isBlocked,
+        is_auto_banned: isAutoBanned,
+        show_second_strike_warning: strikes === 2,
+        show_strike_warning: strikes >= 1 && strikes < 3,
+        warning_title: strikes === 2 ? 'Second Strike Warning' : (strikes === 1 ? 'First Strike Warning' : (strikes >= 3 ? 'Account Blocked' : '')),
+        warning_message: strikes === 2
+          ? 'Warning: User has received 2 strikes. Receiving a 3rd strike will automatically block the account!'
+          : (strikes === 1
+            ? 'Warning: User has received 1 strike for policy violation.'
+            : (strikes >= 3 ? 'Account has reached 3 strikes and is automatically blocked.' : '')),
+        can_strike: strikes < 3,
+        can_unstrike: strikes > 0,
+        strike_reasons: userStrikesList,
+        strike_reasons_list: userStrikesList.map(r => r.reason),
+        last_strike_date: lastStrike ? lastStrike.created_at : null,
+        calculation: {
+          current_strikes: strikes,
+          max_strikes_allowed: 3,
+          strikes_remaining: strikesRemaining,
+          percentage_to_ban: percentageToBan,
+          is_at_risk: strikes >= 1 && strikes < 3,
+          is_auto_banned: isAutoBanned,
+          next_action_on_strike: strikes === 0 ? 'FIRST_WARNING' : strikes === 1 ? 'SECOND_WARNING' : 'ACCOUNT_AUTO_BLOCK'
+        }
+      };
+    });
+
+    const summary = {
+      total_users: totalUsers,
+      clean_users_count: cleanUsersCount,
+      total_users_with_strikes: totalUsersWithStrikes,
+      warning_1_count: warning1Count,
+      warning_2_count: warning2Count,
+      banned_count: bannedCount,
+      total_strikes_issued: totalStrikesIssued,
+      max_strikes_allowed: 3,
+      policy: {
+        max_strikes_allowed: 3,
+        strike_1_consequence: 'First warning issued to user',
+        strike_2_consequence: 'Second strike critical warning issued before auto-ban',
+        strike_3_consequence: 'Automatic account block from placing orders'
+      }
+    };
+
+    const pagination = {
+      page,
+      limit,
+      total: filteredTotal,
+      total_pages: Math.ceil(filteredTotal / limit) || 1
+    };
+
+    return respond(res, 200, {
+      summary,
+      users
+    }, 'Strike calculations and list retrieved successfully.', pagination);
+  } catch (err) {
+    console.error('Error listing user strikes (admin):', err);
+    return sendStandardError(res, 500, 'Failed to retrieve strikes calculation list.', 'INTERNAL_SERVER_ERROR');
   }
 }
 
@@ -1271,10 +1739,31 @@ async function updateUserStatus(req, res) {
       [targetStatus, targetId, String(targetId), String(targetId)]
     );
 
+    const userRes = await query(
+      `SELECT u.*, s.city AS soc_city, s.state AS soc_state, s.pincode AS soc_pincode 
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
+      [targetId, String(targetId), String(targetId)]
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]);
+    }).catch(() => ({ rows: [] }));
+    const u = userRes.rows[0] || {};
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
+    const pincode = u.pincode || u.soc_pincode || '';
+
     return respond(res, 200, {
       user_id: String(targetId),
+      name: u.name || '',
+      phone: u.phone || '',
+      phone_number: get10DigitPhone(u.phone),
+      city: city,
+      state: state,
+      pincode: pincode,
+      pin_code: pincode,
       status: targetStatus.toLowerCase(),
-      is_blocked: targetStatus === 'BLOCKED',
+      is_blocked: targetStatus === 'BLOCKED' || targetStatus === 'SUSPENDED' || targetStatus === 'BANNED',
       reason: reasonText
     }, `User account status updated to ${targetStatus}.`);
   } catch (err) {
@@ -1606,6 +2095,8 @@ module.exports = {
   unflagUser,
   strikeUser,
   unstrikeUser,
+  getUserStrikesAdmin,
+  listAllUserStrikesAdmin,
   updateUserStatus,
   blockUser,
   unblockUser,

@@ -79,11 +79,13 @@ router.get('/api/vendors/:id/payments', adminPanelController.getVendorPayments);
 
 router.all('/api/v1/auth/login', adminPanelController.login);
 router.all('/api/v1/auth/me', adminPanelController.getMe);
+router.all('/api/v1/admin/users/strikes', adminPanelController.listAllUserStrikesAdmin);
 router.all('/api/v1/admin/users', adminPanelController.listUsers);
 router.all('/api/v1/config', adminPanelController.getPlatformConfig);
 
 router.get('/api/people', adminPanelController.listUsers);
 router.get('/api/people/analytics', adminPanelController.getUserAnalytics);
+router.get('/api/people/strikes', adminPanelController.listAllUserStrikesAdmin);
 router.get('/api/people/:id', adminPanelController.getUserById);
 router.get('/api/people/:id/orders', adminPanelController.getUserOrdersAdmin);
 router.get('/api/people/:id/payments', adminPanelController.getUserPaymentsAdmin);
@@ -91,6 +93,8 @@ router.get('/api/people/:id/timeline', adminPanelController.getUserTimelineAdmin
 router.get('/api/people/:id/addresses', adminPanelController.getUserAddressesAdmin);
 router.get('/api/people/:id/notifications', adminPanelController.getUserNotificationsAdmin);
 router.get('/api/people/:id/audit-logs', adminPanelController.getUserAuditLogsAdmin);
+router.get('/api/people/:id/strike', adminPanelController.getUserStrikesAdmin);
+router.get('/api/people/:id/strikes', adminPanelController.getUserStrikesAdmin);
 router.post('/api/people', adminPanelController.listUsers);
 router.post('/api/people/:id/flag', adminPanelController.flagUser);
 router.delete('/api/people/:id/flag', adminPanelController.unflagUser);
@@ -102,6 +106,13 @@ router.post('/api/people/:id/block', adminPanelController.updateUserStatus);
 router.post('/api/people/:id/unblock', adminPanelController.unblockUser);
 router.put('/api/people/:id/status', adminPanelController.updateUserStatus);
 router.patch('/api/people/:id/status', adminPanelController.updateUserStatus);
+router.get(['/api/v1/admin/users/:id/strike', '/api/v1/admin/users/:id/strikes'], adminPanelController.getUserStrikesAdmin);
+router.post(['/api/v1/admin/users/:id/strike'], adminPanelController.strikeUser);
+router.delete(['/api/v1/admin/users/:id/strike'], adminPanelController.unstrikeUser);
+router.post(['/api/v1/admin/users/:id/unstrike'], adminPanelController.unstrikeUser);
+router.all(['/api/v1/admin/users/:id', '/api/v1/users/:id'], adminPanelController.getUserById);
+router.put(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
+router.patch(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
 router.delete('/api/people/:id', adminPanelController.deleteUser);
 
 const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');

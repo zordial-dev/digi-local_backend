@@ -43,13 +43,8 @@ router.put('/:societyId/status', (req, res, next) => {
     return societiesController.approveSociety(req, res, next);
 });
 
-// 3.5 Get Society Onboarded Merchants
-router.get('/:id/vendors', (req, res, next) => {
-    if (req.headers.authorization) {
-        return adminPanelController.getSocietyVendors(req, res, next);
-    }
-    return societiesController.getSocietyVendors(req, res, next);
-});
+// 3.5 Get Society Onboarded Merchants (Active Vendors)
+router.get('/:id/vendors', societiesController.getSocietyVendors);
 
 // A2. Get Society Details by ID
 router.get('/:id', societiesController.getSocietyById);

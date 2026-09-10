@@ -282,7 +282,9 @@ async function loginUser(req, res) {
         area: user.area || user.society_name || '',
         flat: user.flat || '',
         city: user.city || '',
+        state: user.state || '',
         pincode: user.pincode || '',
+        pin_code: user.pincode || '',
         address: user.address || ''
       }
     });
@@ -298,7 +300,7 @@ async function loginUser(req, res) {
  */
 async function registerUser(req, res) {
   try {
-    const { name, email, phone, mobile, phone_number, mobile_number, identifier, password, society_id, flat, area, location, city, pincode, address, otp, code, otp_code } = req.body;
+    const { name, email, phone, mobile, phone_number, mobile_number, identifier, password, society_id, flat, area, location, city, state, pincode, pin_code, pinCode, address, otp, code, otp_code } = req.body;
     const inputOtp = otp || code || otp_code;
 
     let userPhone = String(phone || mobile || phone_number || mobile_number || identifier || '').trim();
@@ -335,21 +337,28 @@ async function registerUser(req, res) {
     const userArea = String(area || location || req.body.society_name || '').trim();
     const userFlat = String(flat || req.body.unit || req.body.house_number || '').trim();
     const userCity = String(city || '').trim();
-    const userPincode = String(pincode || '').trim();
+    const userState = String(state || req.body.state_name || '').trim();
+    const userPincode = String(pincode || pin_code || pinCode || '').trim();
     const userAddress = String(address || '').trim();
     const userEmail = String(email || '').trim();
 
     await query(
-      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, pincode, address, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userPincode, userAddress]
+      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, state, pincode, address, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userState, userPincode, userAddress]
     ).catch(async () => {
-      // Fallback if city/pincode/address columns missing in Postgres schema
+      // Fallback if state/city/pincode/address columns missing in older Postgres schema
       return query(
-        `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
-      );
+        `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, city, pincode, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat, userCity, userPincode]
+      ).catch(() => {
+        return query(
+          `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+          [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
+        );
+      });
     });
 
     let societyName = userArea;
@@ -395,7 +404,9 @@ async function registerUser(req, res) {
         area: userArea,
         flat: userFlat,
         city: userCity,
+        state: userState,
         pincode: userPincode,
+        pin_code: userPincode,
         address: userAddress
       }
     });
@@ -525,7 +536,11 @@ async function getUserProfile(req, res) {
     if (!userId) return res.status(401).json({ error: 'Unauthorized user' });
 
     const userRes = await query(
-      `SELECT u.*, s.society_name 
+      `SELECT u.*, 
+              s.society_name AS soc_name,
+              COALESCE(NULLIF(u.city, ''), s.city, '') AS resolved_city,
+              COALESCE(NULLIF(u.state, ''), s.state, '') AS resolved_state,
+              COALESCE(NULLIF(u.pincode, ''), s.pincode, '') AS resolved_pincode
        FROM users u 
        LEFT JOIN societies s ON u.society_id = s.society_id 
        WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ?`,
@@ -573,6 +588,10 @@ async function getUserProfile(req, res) {
       warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
     }
 
+    const finalCity = user.city || user.resolved_city || '';
+    const finalState = user.state || user.resolved_state || '';
+    const finalPincode = user.pincode || user.resolved_pincode || '';
+
     res.status(200).json({
       user_id: String(user.user_id),
       name: user.name || '',
@@ -589,11 +608,13 @@ async function getUserProfile(req, res) {
       strike_reasons,
       strike_reasons_list,
       society_id: user.society_id ? String(user.society_id) : '',
-      society_name: user.society_name || user.area || '',
-      area: user.area || user.society_name || '',
+      society_name: user.society_name || user.soc_name || user.area || '',
+      area: user.area || user.society_name || user.soc_name || '',
       flat: user.flat || '',
-      city: user.city || '',
-      pincode: user.pincode || '',
+      city: finalCity,
+      state: finalState,
+      pincode: finalPincode,
+      pin_code: finalPincode,
       address: user.address || '',
       created_at: formatISTISO(user.created_at)
     });
@@ -623,9 +644,18 @@ async function getUserStatus(req, res) {
     if (!userId) return res.status(400).json({ error: 'User ID or Authorization Bearer token is required to fetch status.' });
 
     const result = await query(
-      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
+      `SELECT u.*, 
+              s.society_name AS soc_name,
+              COALESCE(NULLIF(u.city, ''), s.city, '') AS resolved_city,
+              COALESCE(NULLIF(u.state, ''), s.state, '') AS resolved_state,
+              COALESCE(NULLIF(u.pincode, ''), s.pincode, '') AS resolved_pincode
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
       [userId, String(userId), String(userId)]
-    );
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [userId, String(userId), String(userId)]);
+    });
 
     if (!result.rows || result.rows.length === 0) {
       return res.status(404).json({ error: `User ID "${userId}" not found.` });
@@ -670,6 +700,10 @@ async function getUserStatus(req, res) {
       warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
     }
 
+    const finalCity = u.city || u.resolved_city || '';
+    const finalState = u.state || u.resolved_state || '';
+    const finalPincode = u.pincode || u.resolved_pincode || '';
+
     return res.status(200).json({
       success: true,
       user_id: String(u.user_id),
@@ -687,11 +721,13 @@ async function getUserStatus(req, res) {
       strike_reasons,
       strike_reasons_list,
       society_id: u.society_id ? String(u.society_id) : '',
-      society_name: u.society_name || u.area || '',
-      area: u.area || u.society_name || '',
+      society_name: u.society_name || u.soc_name || u.area || '',
+      area: u.area || u.society_name || u.soc_name || '',
       flat: u.flat || '',
-      city: u.city || '',
-      pincode: u.pincode || '',
+      city: finalCity,
+      state: finalState,
+      pincode: finalPincode,
+      pin_code: finalPincode,
       address: u.address || '',
       message: userStrikes === 2 ? warning_message : 'User account is active.',
       recommended_ui_text: userStrikes === 2 ? warning_message : 'Your account is active.'
@@ -719,154 +755,162 @@ async function getUserStrikes(req, res) {
       } catch (_) {}
     }
 
-    if (!userId) return res.status(400).json({ error: 'User ID or Authorization Bearer token is required.' });
-
-    const result = await query(
-      `SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
-      [userId, String(userId), String(userId)]
-    );
-
-    if (!result.rows || result.rows.length === 0) {
-      return res.status(404).json({ error: `User "${userId}" not found.` });
+    if (!userId) {
+      return res.status(400).json({ error: 'User identifier is required to check user strikes.' });
     }
 
-    const u = result.rows[0];
-    const userStrikes = Number(u.strikes || 0);
+    const cleanDigits = String(userId).replace(/\D/g, '');
+    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+
+    const userRes = await query(
+      `SELECT u.*, 
+              s.society_name AS soc_name,
+              COALESCE(NULLIF(u.city, ''), s.city, '') AS resolved_city,
+              COALESCE(NULLIF(u.state, ''), s.state, '') AS resolved_state,
+              COALESCE(NULLIF(u.pincode, ''), s.pincode, '') AS resolved_pincode
+       FROM users u 
+       LEFT JOIN societies s ON u.society_id = s.society_id 
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ? OR u.phone LIKE ?`,
+      [userId, String(userId), userId, `%${last10}`]
+    ).catch(async () => {
+      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`, [userId, String(userId), userId, `%${last10}`]);
+    });
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return res.status(404).json({ error: `Resident user "${userId}" not found.` });
+    }
+
+    const u = userRes.rows[0];
+    const strikes = Number(u.strikes || 0);
+    const maxStrikes = 3;
+    const strikesRemaining = Math.max(0, maxStrikes - strikes);
+    const percentageToBan = Math.min(100, Math.round((strikes / maxStrikes) * 100));
     const statusLower = String(u.status || 'active').toLowerCase();
-    const isBlocked = statusLower === 'blocked' || statusLower === 'suspended' || userStrikes >= 3;
+    const is_blocked = statusLower === 'blocked' || statusLower === 'suspended' || strikes >= maxStrikes;
 
     const { strike_reasons, strike_reasons_list } = await fetchStrikeDetailsForUser(u.user_id);
 
-    const show_second_strike_warning = userStrikes === 2;
-    const show_strike_warning = userStrikes >= 1 && userStrikes < 3;
+    const show_second_strike_warning = strikes === 2;
+    const show_strike_warning = strikes >= 1 && strikes < 3;
 
     let warning_title = '';
     let warning_message = '';
+    let strike_level = 'CLEAN';
 
-    if (isBlocked) {
-      warning_title = 'Account Blocked (3 Strikes)';
-      warning_message = 'Your user account has been blocked due to reaching 3 policy strikes. Please contact support.';
-    } else if (userStrikes === 2) {
+    if (strikes >= 3 || is_blocked) {
+      strike_level = 'BLOCKED';
+      warning_title = 'Account Blocked';
+      warning_message = 'Account has reached 3 strikes and is automatically blocked.';
+    } else if (strikes === 2) {
+      strike_level = 'WARNING_2';
       warning_title = 'Second Strike Warning';
       warning_message = 'Warning: You have received 2 strikes on your account due to policy violations. Receiving a 3rd strike will result in your account being automatically blocked!';
-    } else if (userStrikes === 1) {
+    } else if (strikes === 1) {
+      strike_level = 'WARNING_1';
       warning_title = 'First Strike Warning';
       warning_message = 'Warning: You have received 1 strike on your account due to policy violation.';
-    } else {
-      warning_title = 'Account in Good Standing';
-      warning_message = 'No active policy strikes on your account.';
     }
 
-    return res.status(isBlocked ? 403 : 200).json({
-      success: !isBlocked,
+    const finalCity = u.city || u.resolved_city || '';
+    const finalState = u.state || u.resolved_state || '';
+    const finalPincode = u.pincode || u.resolved_pincode || '';
+
+    const calculation = {
+      current_strikes: strikes,
+      max_strikes_allowed: maxStrikes,
+      strikes_remaining: strikesRemaining,
+      percentage_to_ban: percentageToBan,
+      is_at_risk: strikes >= 1 && strikes < maxStrikes,
+      is_auto_banned: is_blocked,
+      next_action_on_strike: strikes === 0 ? 'FIRST_WARNING' : strikes === 1 ? 'SECOND_WARNING' : 'ACCOUNT_AUTO_BLOCK'
+    };
+
+    return res.status(200).json({
+      success: true,
       user_id: String(u.user_id),
       name: u.name || '',
       phone: u.phone || '',
-      status: isBlocked ? 'blocked' : 'active',
-      is_blocked: isBlocked,
-      is_auto_banned: isBlocked,
-      strikes: userStrikes,
-      max_strikes_allowed: 3,
+      city: finalCity,
+      state: finalState,
+      pincode: finalPincode,
+      pin_code: finalPincode,
+      strikes,
+      max_strikes_allowed: maxStrikes,
+      strikes_remaining: strikesRemaining,
+      percentage_to_ban: percentageToBan,
+      strike_level,
+      status: statusLower,
+      is_blocked,
+      is_auto_banned: is_blocked,
       show_second_strike_warning,
       show_strike_warning,
       warning_title,
       warning_message,
       strike_reasons,
       strike_reasons_list,
-      message: warning_message
+      calculation
     });
   } catch (err) {
-    console.error('Error fetching user strikes:', err);
-    return res.status(500).json({ error: 'Failed to fetch user strikes details.' });
+    console.error('Error fetching user strikes info:', err);
+    return res.status(500).json({ error: 'Failed to retrieve user strikes details.' });
   }
 }
 
 /**
- * DELETE /api/users/profile, /api/users/me, or /api/users/:userId - Delete Resident User Account
+ * B2.1 Delete / Revoke Resident User Profile
+ * DELETE /api/users/profile or DELETE /api/users/:userId
  */
 async function deleteAccount(req, res) {
   try {
-    const target = req.params.userId || req.params.id || req.user?.id || req.user?.user_id || req.user?.phone || req.query.userId || req.query.id || req.query.phone || req.body?.user_id || req.body?.userId || req.body?.phone || req.body?.mobile;
+    const rawUserId = req.params.userId || req.body?.user_id || req.query?.user_id;
+    const authUserId = req.user?.id || req.user?.user_id;
+    const targetUserId = rawUserId || authUserId;
 
-    let user = null;
-
-    if (target) {
-      const cleanTarget = String(target).trim();
-      const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
-      const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
-      const cleanEmail = cleanTarget.toLowerCase();
-
-      const userRes = await query(
-        `SELECT user_id, name, phone, email FROM users 
-         WHERE user_id = ? 
-            OR CAST(user_id AS TEXT) = ? 
-            OR phone = ? 
-            OR phone = ? 
-            OR phone LIKE ? 
-            OR (LOWER(email) = ? AND email != '')`,
-        [cleanTarget, cleanTarget, cleanTarget, cleanPhoneDigits, `%${last10}`, cleanEmail]
-      );
-      user = userRes.rows[0];
+    if (!targetUserId) {
+      return res.status(400).json({ error: 'User ID is required for profile deletion.' });
     }
 
-    // Fallback: Check req.user authenticated user profile if target parameter wasn't explicitly provided
-    if (!user && req.user) {
-      const authUserId = req.user.id || req.user.user_id;
-      const authPhone = req.user.phone || req.user.phone_number;
-      if (authUserId || authPhone) {
-        const userRes = await query(
-          `SELECT user_id, name, phone, email FROM users 
-           WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
-          [String(authUserId), String(authUserId), String(authPhone)]
-        );
-        user = userRes.rows[0];
-      }
-    }
+    const cleanDigits = String(targetUserId).replace(/\D/g, '');
+    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User account not found or already deleted.'
-      });
-    }
-
-    const userIdStr = String(user.user_id);
-
-    // 1. Delete associated dependent records to avoid Foreign Key constraint errors
-    await query(`DELETE FROM enquiries WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [user.user_id, userIdStr]).catch(() => {});
-    await query(`DELETE FROM orders WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [user.user_id, userIdStr]).catch(() => {});
-    await query(`DELETE FROM push_tokens WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [user.user_id, userIdStr]).catch(() => {});
-
-    // 2. Permanently delete user account record from database
-    await query(
-      `DELETE FROM users 
-       WHERE user_id = ? 
-          OR CAST(user_id AS TEXT) = ? 
-          OR phone = ? 
-          OR (LOWER(email) = ? AND email != '')`,
-      [user.user_id, userIdStr, user.phone, (user.email || '').toLowerCase()]
+    const findRes = await query(
+      `SELECT user_id, name, phone, email FROM users 
+       WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+      [targetUserId, String(targetUserId), targetUserId, `%${last10}`]
     );
 
-    // Clear memory cache
-    const memoryCache = require('../../utils/cache');
-    memoryCache.clear();
+    if (!findRes.rows || findRes.rows.length === 0) {
+      return res.status(404).json({ error: `User profile "${targetUserId}" not found.` });
+    }
 
-    logger.auth(`User account permanently deleted: ${user.name} (ID: ${user.user_id}, Phone: ${user.phone})`, { userId: user.user_id });
+    const userToDelete = findRes.rows[0];
+    const userIdStr = String(userToDelete.user_id);
+
+    // 1. Delete associated dependent records to avoid Foreign Key constraint errors
+    await query(`DELETE FROM enquiries WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userToDelete.user_id, userIdStr]).catch(() => {});
+    await query(`DELETE FROM orders WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userToDelete.user_id, userIdStr]).catch(() => {});
+    await query(`DELETE FROM push_tokens WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userToDelete.user_id, userIdStr]).catch(() => {});
+    await query(`DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [userToDelete.user_id, userIdStr]).catch(() => {});
+
+    await query(
+      `DELETE FROM users 
+       WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+      [userIdStr, userIdStr]
+    );
 
     return res.status(200).json({
       success: true,
-      message: `Resident user account for "${user.name}" (ID: ${user.user_id}, Phone: ${user.phone}) deleted permanently.`,
+      message: `User account "${userToDelete.name || userToDelete.user_id}" deleted successfully.`,
       user_id: userIdStr,
       deleted_at: new Date().toISOString()
     });
   } catch (err) {
     console.error('Error deleting user account:', err);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to delete user account: ' + (err.message || 'Database error')
-    });
+    return res.status(500).json({ error: 'Failed to delete user account.' });
   }
 }
+
+const deleteUserProfile = deleteAccount;
 
 /**
  * B2.3 Update Resident User Profile & Address
@@ -879,7 +923,7 @@ async function updateUserProfile(req, res) {
       return res.status(400).json({ error: 'User ID or authenticated session is required to update profile/address.' });
     }
 
-    const { name, email, flat, house_number, unit, area, location, society_name, city, pincode, address, full_address } = req.body;
+    const { name, email, flat, house_number, unit, area, location, society_name, city, state, pincode, pin_code, pinCode, address, full_address } = req.body;
 
     const rawIdentifier = String(userId || '').trim();
     const cleanDigits = rawIdentifier.replace(/\D/g, '');
@@ -907,8 +951,9 @@ async function updateUserProfile(req, res) {
     const newFlat = (flat !== undefined ? flat : (house_number !== undefined ? house_number : unit)) !== undefined ? String(flat || house_number || unit).trim() : (existingUser.flat || '');
     const newArea = (area !== undefined ? area : (location !== undefined ? location : society_name)) !== undefined ? String(area || location || society_name).trim() : (existingUser.area || existingUser.society_name || '');
     const newCity = city !== undefined ? String(city).trim() : (existingUser.city || '');
-    const newPincode = pincode !== undefined ? String(pincode).trim() : (existingUser.pincode || '');
-    const newFullAddress = (address !== undefined ? address : full_address) !== undefined ? String(address || full_address).trim() : (existingUser.address || [newFlat, newArea, newCity, newPincode].filter(Boolean).join(', '));
+    const newState = state !== undefined ? String(state).trim() : (existingUser.state || '');
+    const newPincode = (pincode !== undefined ? pincode : (pin_code !== undefined ? pin_code : pinCode)) !== undefined ? String(pincode || pin_code || pinCode).trim() : (existingUser.pincode || '');
+    const newFullAddress = (address !== undefined ? address : full_address) !== undefined ? String(address || full_address).trim() : (existingUser.address || [newFlat, newArea, newCity, newState, newPincode].filter(Boolean).join(', '));
 
     await query(`
       UPDATE users 
@@ -918,16 +963,17 @@ async function updateUserProfile(req, res) {
           area = ?,
           society_name = ?,
           city = ?,
+          state = ?,
           pincode = ?,
           address = ?
       WHERE user_id = ? OR CAST(user_id AS TEXT) = ?
-    `, [newName, newEmail, newFlat, newArea, newArea, newCity, newPincode, newFullAddress, String(existingUser.user_id), String(existingUser.user_id)]).catch(async () => {
-      // Fallback if city/pincode/address columns missing in older Postgres instances
+    `, [newName, newEmail, newFlat, newArea, newArea, newCity, newState, newPincode, newFullAddress, String(existingUser.user_id), String(existingUser.user_id)]).catch(async () => {
+      // Fallback if city/pincode/state/address columns missing in older Postgres instances
       return query(`
         UPDATE users 
-        SET name = ?, email = ?, flat = ?, society_name = ?
+        SET name = ?, email = ?, flat = ?, society_name = ?, city = ?, pincode = ?
         WHERE user_id = ? OR CAST(user_id AS TEXT) = ?
-      `, [newName, newEmail, newFlat, newArea, String(existingUser.user_id), String(existingUser.user_id)]);
+      `, [newName, newEmail, newFlat, newArea, newCity, newPincode, String(existingUser.user_id), String(existingUser.user_id)]);
     });
 
     const updatedUser = {
@@ -941,7 +987,9 @@ async function updateUserProfile(req, res) {
       society_name: newArea || '',
       flat: newFlat || '',
       city: newCity || '',
+      state: newState || '',
       pincode: newPincode || '',
+      pin_code: newPincode || '',
       address: newFullAddress || ''
     };
 

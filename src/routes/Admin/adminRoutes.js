@@ -42,6 +42,7 @@ router.post('/requests/:id/block', adminPanelController.blockVendor);
 // ── Users & People Directory ──────────────────────────────────────────
 router.get('/users', adminPanelController.listUsers);
 router.get('/users/analytics', adminPanelController.getUserAnalytics);
+router.get('/users/strikes', adminPanelController.listAllUserStrikesAdmin);
 router.get('/users/:id', adminPanelController.getUserById);
 router.put('/users/:id', adminPanelController.updateUserAdmin);
 router.patch('/users/:id', adminPanelController.updateUserAdmin);
@@ -51,6 +52,8 @@ router.get('/users/:id/timeline', adminPanelController.getUserTimelineAdmin);
 router.get('/users/:id/addresses', adminPanelController.getUserAddressesAdmin);
 router.get('/users/:id/notifications', adminPanelController.getUserNotificationsAdmin);
 router.get('/users/:id/audit-logs', adminPanelController.getUserAuditLogsAdmin);
+router.get('/users/:id/strike', adminPanelController.getUserStrikesAdmin);
+router.get('/users/:id/strikes', adminPanelController.getUserStrikesAdmin);
 router.post('/users/:id/flag', adminPanelController.flagUser);
 router.delete('/users/:id/flag', adminPanelController.unflagUser);
 router.post('/users/:id/strike', adminPanelController.strikeUser);

@@ -213,14 +213,13 @@ async function getSocietyVendors(req, res) {
       SELECT v.*, s.society_name
       FROM vendors v
       LEFT JOIN societies s ON v.society_id = s.society_id
-      WHERE v.status = 'ACTIVE'
+      WHERE UPPER(v.status) = 'ACTIVE'
     `;
     const params = [];
 
     if (!isAll) {
-      const socIdStr = String(id);
-      sql += ` AND (v.society_id = ? OR (v.is_global_coverage = TRUE AND (v.selected_zones::text LIKE ? OR v.selected_zones::text LIKE ?)))`;
-      params.push(id, `%"zone_id":${socIdStr}%`, `%"zone_id":"${socIdStr}"%`);
+      sql += ` AND v.society_id = ?`;
+      params.push(id);
     }
 
     if (search) {

@@ -23,9 +23,9 @@ async function getSocietyVendorsStorefront(req, res) {
                           v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
                           v.vendor_type, v.can_add_items,
                           v.area, s.society_name 
-                   FROM vendors v
-                   LEFT JOIN societies s ON v.society_id = s.society_id
-                   WHERE v.status = 'ACTIVE'`;
+                    FROM vendors v
+                    LEFT JOIN societies s ON v.society_id = s.society_id
+                    WHERE UPPER(v.status) = 'ACTIVE'`;
         const params = [];
 
         if (!isAll) {
@@ -82,7 +82,7 @@ async function getSocietyVendorsStorefront(req, res) {
 }
 
 /**
- * GET /api/vendors/:vendorId - Vendor storefront details & items
+ * GET /api/vendors/:vendorId - Vendor storefront details & items (ACTIVE vendors only for users)
  */
 async function getVendorStorefront(req, res) {
     try {
@@ -90,29 +90,18 @@ async function getVendorStorefront(req, res) {
         if (!vendorIdParam) return res.status(400).json({ error: 'Vendor ID is required' });
 
         const startTime = performance.now();
-        let vendorResult = await query(
+        const vendorResult = await query(
             `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location, s.latitude as society_latitude, s.longitude as society_longitude 
              FROM vendors v 
              LEFT JOIN societies s ON v.society_id = s.society_id 
-             WHERE (CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)) AND LOWER(COALESCE(v.status, 'active')) IN ('active', 'approved')`,
+             WHERE (CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)) AND UPPER(v.status) = 'ACTIVE'`,
             [String(vendorIdParam), String(vendorIdParam), String(vendorIdParam)]
         );
-
-        if (!vendorResult.rows || vendorResult.rows.length === 0) {
-            // Fallback query if vendor status is pending/hold/blocked or numerical lookup
-            vendorResult = await query(
-                `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location 
-                 FROM vendors v 
-                 LEFT JOIN societies s ON v.society_id = s.society_id 
-                 WHERE CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ? OR LOWER(v.email) = LOWER(?)`,
-                [String(vendorIdParam), String(vendorIdParam), String(vendorIdParam)]
-            );
-        }
 
         const endTime = performance.now();
 
         if (!vendorResult.rows || vendorResult.rows.length === 0) {
-            return res.status(404).json({ error: `Vendor ID "${vendorIdParam}" not found.` });
+            return res.status(404).json({ error: `Vendor "${vendorIdParam}" not found or is currently inactive.` });
         }
 
         const vendor = vendorResult.rows[0];
@@ -194,7 +183,7 @@ async function getVendorStorefront(req, res) {
 async function getCategories(req, res) {
     try {
         const vendorCatResult = await query(
-            `SELECT DISTINCT category FROM vendors WHERE LOWER(COALESCE(status, 'active')) = 'active' AND category IS NOT NULL AND category != ''`
+            `SELECT DISTINCT category FROM vendors WHERE UPPER(status) = 'ACTIVE' AND category IS NOT NULL AND category != ''`
         ).catch(() => ({ rows: [] }));
 
         const itemCatResult = await query(
@@ -260,11 +249,11 @@ async function searchVendorsLocationAware(req, res) {
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code_url, v.upi_qr_code, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
                           v.vendor_type, v.can_add_items, v.location_address, v.location, v.city, v.state, v.pincode,
-                          v.latitude, v.longitude, v.area,
+                          s.latitude, s.longitude, v.area,
                           s.society_name, s.location as society_location
                    FROM vendors v
                    LEFT JOIN societies s ON v.society_id = s.society_id
-                   WHERE LOWER(COALESCE(v.status, 'active')) IN ('active', 'approved')`;
+                   WHERE UPPER(v.status) = 'ACTIVE'`;
         const params = [];
 
         if (targetType === 'product' || targetType === 'service') {

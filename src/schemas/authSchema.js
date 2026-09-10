@@ -40,6 +40,7 @@ const registerSchema = {
     shop_address: z.string().optional(),
     shopAddress: z.string().optional(),
     city: z.string().optional(),
+    state: z.string().optional(),
     pincode: z.union([z.number(), z.string()]).optional(),
     pin_code: z.union([z.number(), z.string()]).optional(),
     pinCode: z.union([z.number(), z.string()]).optional(),

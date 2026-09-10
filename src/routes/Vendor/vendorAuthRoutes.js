@@ -19,15 +19,36 @@ const {
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
  */
 
-// 1. Static Storefront & Search Endpoints
-router.get('/', adminPanelController.listVendors);
+// Helper middleware: enforce ACTIVE status for resident user / public storefront requests
+function enforceActiveVendorsForUser(req, res, next) {
+  const isAdminClient = req.headers['x-platform-client'] === 'admin_dashboard';
+  if (!isAdminClient && (!req.headers.authorization || !req.headers.authorization.includes('Bearer '))) {
+    req.query.status = 'ACTIVE';
+  } else if (!isAdminClient) {
+    try {
+      const { verifyJwt } = require('../../utils/auth');
+      const authConfig = require('../../config/auth');
+      const token = req.headers.authorization.replace('Bearer ', '').trim();
+      const decoded = verifyJwt(token, authConfig.jwt.secret);
+      if (!decoded || !['super_admin', 'admin', 'sub_admin'].includes(String(decoded.role || '').toLowerCase())) {
+        req.query.status = 'ACTIVE';
+      }
+    } catch (_) {
+      req.query.status = 'ACTIVE';
+    }
+  }
+  next();
+}
+
+// 1. Static Storefront & Search Endpoints (Active Vendors Only for Users)
+router.get('/', enforceActiveVendorsForUser, adminPanelController.listVendors);
 router.get('/search', storefrontController.searchVendorsLocationAware);
-router.get('/all', adminPanelController.listVendors);
-router.get('/list', adminPanelController.listVendors);
-router.get('/public', adminPanelController.listVendors);
-router.get('/nearby', adminPanelController.listVendors);
-router.get('/storefront', adminPanelController.listVendors);
-router.get('/society/:societyId', (req, res, next) => {
+router.get('/all', enforceActiveVendorsForUser, adminPanelController.listVendors);
+router.get('/list', enforceActiveVendorsForUser, adminPanelController.listVendors);
+router.get('/public', enforceActiveVendorsForUser, adminPanelController.listVendors);
+router.get('/nearby', enforceActiveVendorsForUser, adminPanelController.listVendors);
+router.get('/storefront', enforceActiveVendorsForUser, adminPanelController.listVendors);
+router.get('/society/:societyId', enforceActiveVendorsForUser, (req, res, next) => {
   req.query.society_id = req.params.societyId;
   return adminPanelController.listVendors(req, res, next);
 });

@@ -16,6 +16,9 @@ class OrderService {
       if (vendorRes.rows.length === 0) {
         throw new Error('Vendor not found');
       }
+      if (vendorRes.rows[0].status && String(vendorRes.rows[0].status).toUpperCase() !== 'ACTIVE') {
+        throw new Error('Vendor is currently not active');
+      }
 
       // 2. Fetch all requested items from DB to perform authoritative price calculation & stock checks
       const itemIds = items.map(i => i.item_id);
