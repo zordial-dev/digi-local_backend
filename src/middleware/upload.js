@@ -20,13 +20,16 @@ function resolveExtension(file) {
     const mimeToExt = {
         'image/jpeg': '.jpg', 'image/jpg': '.jpg',
         'image/png': '.png', 'image/webp': '.webp',
-        'image/gif': '.gif', 'image/heic': '.heic',
-        'image/heif': '.heif', 'image/bmp': '.bmp', 'image/tiff': '.tiff',
+        'image/gif': '.gif', 'image/heic': '.jpg',
+        'image/heif': '.jpg', 'image/avif': '.jpg', 'image/bmp': '.bmp', 'image/tiff': '.tiff',
     };
     if (file.mimetype && mimeToExt[file.mimetype.toLowerCase()]) {
         return mimeToExt[file.mimetype.toLowerCase()];
     }
     const extFromName = path.extname(file.originalname || '').toLowerCase();
+    if (extFromName === '.avif' || extFromName === '.heic' || extFromName === '.heif') {
+        return '.jpg';
+    }
     return extFromName || '.jpg';
 }
 

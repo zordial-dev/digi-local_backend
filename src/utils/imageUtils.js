@@ -125,12 +125,17 @@ function normalizeImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.co
             return url;
         }
 
-        // 5. Fix missing protocol
+        // 5. Upgrade insecure Render HTTP URLs to HTTPS
+        if (typeof url === 'string' && url.startsWith('http://') && url.includes('onrender.com')) {
+            url = url.replace(/^http:\/\//i, 'https://');
+        }
+
+        // 6. Fix missing protocol
         if (!/^https?:\/\//i.test(url) && !url.startsWith('data:') && !url.startsWith('blob:')) {
             url = `https://${url}`;
         }
 
-        // 6. Validate URL syntax
+        // 7. Validate URL syntax
         new URL(url);
         return url;
     } catch (err) {

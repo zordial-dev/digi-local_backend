@@ -7,6 +7,16 @@ const fs = require('fs');
 const path = require('path');
 
 /**
+ * Helper: Resolve backend base URL, strictly enforcing HTTPS on Render / Production
+ */
+function getBaseUrl(req) {
+    const host = req.get('host') || '';
+    const isHttps = req.secure || req.headers['x-forwarded-proto'] === 'https' || host.includes('onrender.com');
+    const proto = isHttps ? 'https' : (req.protocol || 'http');
+    return `${proto}://${host}`;
+}
+
+/**
  * Helper: Save Base64 Image payload to public/uploads directory and return hosted image URL
  */
 function processBase64Upload(req) {
@@ -45,9 +55,9 @@ function processBase64Upload(req) {
         }
     }
 
-    // Sanitize extension
-    const validExts = ['jpg', 'jpeg', 'png', 'webp', 'avif', 'heic', 'heif', 'gif'];
-    if (!validExts.includes(ext)) {
+    // Sanitize extension - React Native natively supports jpg, png, webp, gif. Map avif/heic/heif to jpg
+    const validExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+    if (ext === 'avif' || ext === 'heic' || ext === 'heif' || !validExts.includes(ext)) {
         ext = 'jpg';
     }
     if (ext === 'jpeg') ext = 'jpg';
@@ -56,7 +66,7 @@ function processBase64Upload(req) {
     const randomSuffix = Math.floor(Math.random() * 10000);
     const savedFilename = `upload-${timestamp}-${randomSuffix}.${ext}`;
 
-    const uploadDir = path.join(__dirname, '../../public/uploads');
+    const uploadDir = path.join(__dirname, '../../../public/uploads');
     if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -65,7 +75,7 @@ function processBase64Upload(req) {
     const buffer = Buffer.from(cleanBase64, 'base64');
     fs.writeFileSync(filePath, buffer);
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getBaseUrl(req);
     const imageUrl = `${baseUrl}/uploads/${savedFilename}`;
 
     return {
@@ -90,7 +100,7 @@ function uploadImage(req, res) {
     // 1. Check multipart form-data file
     const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
     if (file) {
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const baseUrl = getBaseUrl(req);
         const imageUrl = `${baseUrl}/uploads/${file.filename}`;
         return res.json({
             success: true,
@@ -145,7 +155,7 @@ async function updateVendorLogo(req, res) {
         let logoUrl = null;
 
         if (file) {
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const baseUrl = getBaseUrl(req);
             logoUrl = `${baseUrl}/uploads/${file.filename}`;
         } else {
             const base64Result = processBase64Upload(req);
@@ -244,7 +254,7 @@ async function addItem(req, res) {
         const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
         let uploadedUrl = null;
         if (file) {
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const baseUrl = getBaseUrl(req);
             uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
         } else {
             const base64Result = processBase64Upload(req);
@@ -293,7 +303,7 @@ async function updateItem(req, res) {
         const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
         let uploadedUrl = null;
         if (file) {
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const baseUrl = getBaseUrl(req);
             uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
         } else {
             const base64Result = processBase64Upload(req);
@@ -382,7 +392,7 @@ async function updateItemImage(req, res) {
         let imageUrl = null;
 
         if (file) {
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const baseUrl = getBaseUrl(req);
             imageUrl = `${baseUrl}/uploads/${file.filename}`;
         } else {
             const base64Result = processBase64Upload(req);
@@ -469,7 +479,7 @@ async function updateSettings(req, res) {
         const { vendorId } = req.params;
         const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
         if (file) {
-            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const baseUrl = getBaseUrl(req);
             const uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
             req.body = req.body || {};
             req.body.logo = uploadedUrl;

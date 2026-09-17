@@ -188,6 +188,9 @@ class VendorService {
     vendor.selected_zones = typeof vendor.selected_zones === 'string' ? (JSON.parse(vendor.selected_zones || '[]')) : (vendor.selected_zones || []);
     vendor.shop_number = vendor.shop_number || vendor.shop_no || '';
     vendor.shop_no = vendor.shop_number || vendor.shop_no || '';
+    if (vendor.logo) vendor.logo = normalizeImageUrl(vendor.logo);
+    if (vendor.shop_image) vendor.shop_image = normalizeImageUrl(vendor.shop_image);
+    vendor.logo_url = vendor.logo || vendor.shop_image || '';
 
     return {
       vendor,
@@ -282,6 +285,11 @@ class VendorService {
     const candidateLogo = logo || logo_url || store_logo || shop_image || image_url || image || photo || avatar || avatar_url;
     let logoUrl = candidateLogo && typeof candidateLogo === 'string' && candidateLogo.trim() !== '' ? candidateLogo.trim() : null;
 
+    // Upgrade insecure Render URLs to HTTPS
+    if (logoUrl && typeof logoUrl === 'string' && logoUrl.startsWith('http://') && logoUrl.includes('onrender.com')) {
+      logoUrl = logoUrl.replace(/^http:\/\//i, 'https://');
+    }
+
     if (logoUrl && typeof logoUrl === 'string' && (logoUrl.startsWith('data:image') || logoUrl.length > 200) && !logoUrl.startsWith('http://') && !logoUrl.startsWith('https://')) {
       try {
         const fs = require('fs');
@@ -292,7 +300,7 @@ class VendorService {
         if (dataUriMatch) {
           cleanBase64 = dataUriMatch[2];
           ext = dataUriMatch[1].split('/')[1] || 'jpg';
-          if (ext === 'jpeg') ext = 'jpg';
+          if (ext === 'jpeg' || ext === 'avif' || ext === 'heic' || ext === 'heif') ext = 'jpg';
         }
         const timestamp = Date.now();
         const savedFilename = `upload-${timestamp}-${Math.floor(Math.random() * 10000)}.${ext}`;
@@ -413,8 +421,11 @@ class VendorService {
     delete updatedVendor.password;
     delete updatedVendor.password_hash;
     updatedVendor.updated_at = new Date().toISOString();
+    if (updatedVendor.logo) updatedVendor.logo = normalizeImageUrl(updatedVendor.logo);
+    if (updatedVendor.shop_image) updatedVendor.shop_image = normalizeImageUrl(updatedVendor.shop_image);
+    const finalLogo = updatedVendor.logo || (logoUrl ? normalizeImageUrl(logoUrl) : null);
 
-    return { logo: logoUrl || updatedVendor.logo, vendor: updatedVendor };
+    return { logo: finalLogo, vendor: updatedVendor };
   }
 
   /**

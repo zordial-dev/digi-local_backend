@@ -19,6 +19,9 @@ const routes = require('./src/routes');
 // ── App Setup ────────────────────────────────────────────────
 const app = express();
 
+// Trust proxy for Render / Cloudflare SSL termination (ensures req.secure & req.protocol are https)
+app.set('trust proxy', 1);
+
 // ── OWASP Security & CORS Configuration ──────────────────────
 app.use(cors({
     origin: true,
@@ -41,6 +44,24 @@ app.use(express.json({ limit: '10mb' }));
 // ── Attach Performance Compression & Logging Middlewares ──────
 app.use(compressionMiddleware);
 app.use(loggerMiddleware);
+
+// ── Explicitly Mount Uploads & Static Directories ─────────────
+const publicUploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(publicUploadsDir)) {
+    fs.mkdirSync(publicUploadsDir, { recursive: true });
+}
+const rootUploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(rootUploadsDir)) {
+    fs.mkdirSync(rootUploadsDir, { recursive: true });
+}
+
+// Serve /uploads from public/uploads as primary, src/public/uploads and root ./uploads as fallbacks
+app.use('/uploads', express.static(publicUploadsDir, { maxAge: '1d', etag: true }));
+const srcPublicUploadsDir = path.join(__dirname, 'src', 'public', 'uploads');
+if (fs.existsSync(srcPublicUploadsDir)) {
+    app.use('/uploads', express.static(srcPublicUploadsDir, { maxAge: '1d', etag: true }));
+}
+app.use('/uploads', express.static(rootUploadsDir, { maxAge: '1d', etag: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 5000;
