@@ -107,20 +107,20 @@ router.put('/:vendorId/settings', vendorPanelController.updateSettings);
 router.post('/:vendorId/settings', vendorPanelController.updateSettings);
 router.patch('/:vendorId/settings', vendorPanelController.updateSettings);
 
-// Vendor Catalog / Items Specification Routes (/api/vendors/:vendorId/items)
-router.get('/:vendorId/items', storefrontController.getVendorStorefront);
-router.post('/:vendorId/items', upload.any(), handleMulterError, vendorPanelController.addItem);
-router.put('/:vendorId/items/:itemId', upload.any(), handleMulterError, vendorPanelController.updateItem);
-router.patch('/:vendorId/items/:itemId', upload.any(), handleMulterError, vendorPanelController.updateItem);
-router.post('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
-router.put('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
-router.patch('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
-router.post('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
-router.put('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
-router.patch('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
-router.delete('/:vendorId/items/:itemId', vendorPanelController.deleteItem);
-router.patch('/:vendorId/items/:itemId/availability', vendorPanelController.toggleAvailability);
-router.put('/:vendorId/items/:itemId/availability', vendorPanelController.toggleAvailability);
+// Vendor Catalog / Items & Products Routes (/api/vendors/:vendorId/items & /products)
+router.get(['/:vendorId/items', '/:vendorId/products'], storefrontController.getVendorStorefront);
+router.post(['/:vendorId/items', '/:vendorId/products'], upload.any(), handleMulterError, vendorPanelController.addItem);
+router.put(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], upload.any(), handleMulterError, vendorPanelController.updateItem);
+router.patch(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], upload.any(), handleMulterError, vendorPanelController.updateItem);
+router.post(['/:vendorId/items/:itemId/image', '/:vendorId/products/:itemId/image'], upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.put(['/:vendorId/items/:itemId/image', '/:vendorId/products/:itemId/image'], upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.patch(['/:vendorId/items/:itemId/image', '/:vendorId/products/:itemId/image'], upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.post(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo'], upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.put(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo'], upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.patch(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo'], upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], vendorPanelController.deleteItem);
+router.patch(['/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], vendorPanelController.toggleAvailability);
+router.put(['/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], vendorPanelController.toggleAvailability);
 
 // Vendor Orders Specification Routes (/api/vendors/:vendorId/orders)
 router.get('/:vendorId/orders', ordersController.getVendorOrders);

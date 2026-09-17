@@ -23,6 +23,8 @@ const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
 const { authenticateToken } = require('../middleware/auth');
+const { upload, handleMulterError } = require('../middleware/upload');
+const { query } = require('../models/db');
 
 
 // ── Health & Observability Routes ───────────────────────────
@@ -253,6 +255,24 @@ router.post('/api/upload', vendorPanelController.uploadImage);
 router.post('/api/upload-image', vendorPanelController.uploadImage);
 router.post('/api/upload-logo', vendorPanelController.uploadImage);
 
+
+// ── Generic /api/products Item & Photo Endpoints ───────────
+async function resolveItemVendorId(req, res, next) {
+    if (!req.params.vendorId && req.params.itemId) {
+        const itemRow = await query('SELECT vendor_id FROM items WHERE item_id = ?', [req.params.itemId]).catch(() => ({ rows: [] }));
+        if (itemRow.rows && itemRow.rows[0]) {
+            req.params.vendorId = itemRow.rows[0].vendor_id;
+        }
+    }
+    next();
+}
+
+router.get('/api/products/:itemId', resolveItemVendorId, storefrontController.getVendorStorefront);
+router.put('/api/products/:itemId', upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
+router.patch('/api/products/:itemId', upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
+router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
 
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
 
