@@ -462,16 +462,27 @@ async function toggleAvailability(req, res) {
 }
 
 /**
- * PUT /api/vendorPanel/:vendorId/settings - Update store settings
+ * PUT /api/vendorPanel/:vendorId/settings & /profile - Update store settings / profile
  */
 async function updateSettings(req, res) {
     try {
         const { vendorId } = req.params;
+        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+        if (file) {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            const uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
+            req.body = req.body || {};
+            req.body.logo = uploadedUrl;
+            req.body.logo_url = uploadedUrl;
+            req.body.shop_image = uploadedUrl;
+        }
         const result = await vendorService.updateStoreSettings(vendorId, req.body);
         res.status(200).json({
-            message: 'Store settings updated successfully',
+            message: 'Store profile & settings updated successfully',
             success: true,
             logo: result.logo,
+            logo_url: result.logo,
+            shop_image: result.logo,
             vendor: result.vendor,
             data: result.vendor
         });

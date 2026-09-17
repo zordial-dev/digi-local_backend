@@ -103,9 +103,9 @@ router.get('/status/:vendorId', vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
-router.put('/:vendorId/settings', vendorPanelController.updateSettings);
-router.post('/:vendorId/settings', vendorPanelController.updateSettings);
-router.patch('/:vendorId/settings', vendorPanelController.updateSettings);
+router.put(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
+router.post(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
+router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
 
 // Vendor Catalog / Items & Products Routes (/api/vendors/:vendorId/items & /products)
 router.get(['/:vendorId/items', '/:vendorId/products'], storefrontController.getVendorStorefront);

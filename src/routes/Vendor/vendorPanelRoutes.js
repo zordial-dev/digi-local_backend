@@ -134,10 +134,10 @@ router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], authe
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 
-// PUT/POST/PATCH /api/vendorPanel/:vendorId/settings
-router.put('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
-router.post('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
-router.patch('/:vendorId/settings', authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
+// PUT/POST/PATCH /api/vendorPanel/:vendorId/settings, /profile, and /:vendorId directly
+router.put(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
+router.post(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
+router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
 
 // PUT /api/vendorPanel/:vendorId/coverage
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);

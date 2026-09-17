@@ -279,8 +279,8 @@ class VendorService {
       }
     }
 
-    const candidateLogo = logo || logo_url || shop_image;
-    let logoUrl = candidateLogo && candidateLogo.trim() !== '' ? candidateLogo : null;
+    const candidateLogo = logo || logo_url || store_logo || shop_image || image_url || image || photo || avatar || avatar_url;
+    let logoUrl = candidateLogo && typeof candidateLogo === 'string' && candidateLogo.trim() !== '' ? candidateLogo.trim() : null;
 
     if (logoUrl && typeof logoUrl === 'string' && (logoUrl.startsWith('data:image') || logoUrl.length > 200) && !logoUrl.startsWith('http://') && !logoUrl.startsWith('https://')) {
       try {
