@@ -197,3 +197,5 @@ process.on('uncaughtException', (err) => {
 });
 
 bootServer();
+
+module.exports = app;

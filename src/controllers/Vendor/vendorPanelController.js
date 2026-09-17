@@ -237,64 +237,191 @@ async function addItem(req, res) {
             }
         }
 
-        const { item_name, description, price, stock, category, unit, is_available } = req.body;
-        const rawImg = req.body.image_url || req.body.imageUrl || req.body.image || req.body.item_image || req.body.itemImage || req.body.photo || req.body.photo_url;
+        const { item_name, description, price, stock, category, unit, is_available } = req.body || {};
+        const rawImg = req.body?.image_url || req.body?.imageUrl || req.body?.image || req.body?.item_image || req.body?.itemImage || req.body?.photo || req.body?.photo_url;
 
-        const avail = (is_available === false || is_available === 0) ? 0 : 1;
+        // Check if file was uploaded via multipart/form-data (camera/gallery)
+        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+        let uploadedUrl = null;
+        if (file) {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
+        } else {
+            const base64Result = processBase64Upload(req);
+            if (base64Result) {
+                uploadedUrl = base64Result.image_url;
+            }
+        }
+
+        const avail = (is_available === false || is_available === 0 || is_available === 'false' || is_available === '0') ? 0 : 1;
+        const candidateImg = uploadedUrl || rawImg;
 
         // Use async resolveImageUrl so share.google, photos.app.goo.gl, etc. work correctly
-        const normalizedImg = await resolveImageUrl(rawImg);
+        const normalizedImg = candidateImg ? await resolveImageUrl(candidateImg) : (await resolveImageUrl(null));
 
         const result = await query(
             `INSERT INTO items (vendor_id, item_name, description, price, stock, category, unit, is_available, image_url) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING item_id, image_url`,
             [vendorId, item_name, description || '', price, stock || 50, category || 'General', unit || 'piece', avail, normalizedImg]
         );
 
-        res.status(201).json({ message: 'Item added successfully', item_id: result.insertId, image_url: normalizedImg });
+        const insertedId = result.rows && result.rows[0] ? result.rows[0].item_id : result.insertId;
+        const savedImg = result.rows && result.rows[0] ? result.rows[0].image_url : normalizedImg;
+
+        res.status(201).json({
+            success: true,
+            message: 'Item added successfully',
+            item_id: insertedId,
+            image_url: savedImg
+        });
     } catch (err) {
         console.error('Error adding item:', err);
-        res.status(500).json({ error: 'Failed to add item' });
+        res.status(500).json({ error: 'Failed to add item', details: err.message });
     }
 }
 
 /**
- * PUT /api/vendorPanel/:vendorId/items/:itemId - Edit item or toggle availability
+ * PUT /api/vendorPanel/:vendorId/items/:itemId - Edit item or toggle availability or update photo
  */
 async function updateItem(req, res) {
     try {
         const { vendorId, itemId } = req.params;
-        const { item_name, description, price, stock, category, unit, is_available } = req.body;
-        const rawImg = req.body.image_url || req.body.imageUrl || req.body.image || req.body.item_image || req.body.itemImage || req.body.photo || req.body.photo_url;
+        const { item_name, description, price, stock, category, unit, is_available } = req.body || {};
+        const rawImg = req.body?.image_url || req.body?.imageUrl || req.body?.image || req.body?.item_image || req.body?.itemImage || req.body?.photo || req.body?.photo_url;
 
-        if (is_available !== undefined && item_name === undefined && !rawImg) {
-            const availVal = (is_available === true || is_available === 1) ? 1 : 0;
-            await query(`UPDATE items SET is_available = ? WHERE item_id = ? AND vendor_id = ?`, [availVal, itemId, vendorId]);
-            return res.status(200).json({ message: 'Availability status updated successfully' });
+        // Check if file was uploaded via multipart/form-data (camera/gallery)
+        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+        let uploadedUrl = null;
+        if (file) {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
+        } else {
+            const base64Result = processBase64Upload(req);
+            if (base64Result) {
+                uploadedUrl = base64Result.image_url;
+            }
         }
 
-        const availVal = (is_available === true || is_available === 1) ? 1 : 0;
+        const candidateImg = uploadedUrl || rawImg;
+        const normalizedImg = candidateImg !== undefined ? await resolveImageUrl(candidateImg) : undefined;
 
-        // Use async resolveImageUrl so share.google, photos.app.goo.gl, etc. work correctly
-        const normalizedImg = rawImg ? await resolveImageUrl(rawImg) : undefined;
+        // Dynamic SQL builder to update ONLY provided fields
+        const fields = [];
+        const params = [];
 
-        let sql = `UPDATE items SET item_name = ?, description = ?, price = ?, stock = ?, category = ?, unit = ?, is_available = ?`;
-        const params = [item_name, description, price, stock, category, unit, availVal];
-
-        if (normalizedImg) {
-            sql += `, image_url = ?`;
+        if (item_name !== undefined) {
+            fields.push('item_name = ?');
+            params.push(item_name);
+        }
+        if (description !== undefined) {
+            fields.push('description = ?');
+            params.push(description);
+        }
+        if (price !== undefined) {
+            fields.push('price = ?');
+            params.push(price);
+        }
+        if (stock !== undefined) {
+            fields.push('stock = ?');
+            params.push(stock);
+        }
+        if (category !== undefined) {
+            fields.push('category = ?');
+            params.push(category);
+        }
+        if (unit !== undefined) {
+            fields.push('unit = ?');
+            params.push(unit);
+        }
+        if (is_available !== undefined) {
+            const availVal = (is_available === true || is_available === 1 || is_available === 'true' || is_available === '1') ? 1 : 0;
+            fields.push('is_available = ?');
+            params.push(availVal);
+        }
+        if (normalizedImg !== undefined) {
+            fields.push('image_url = ?');
             params.push(normalizedImg);
         }
 
-        sql += ` WHERE item_id = ? AND vendor_id = ?`;
-        params.push(itemId, vendorId);
+        if (fields.length === 0) {
+            return res.status(400).json({ error: 'No valid fields provided for update' });
+        }
 
-        await query(sql, params);
+        params.push(itemId, vendorId, String(vendorId));
+        const updateSql = `UPDATE items SET ${fields.join(', ')} WHERE item_id = ? AND (vendor_id = ? OR CAST(vendor_id AS TEXT) = ?) RETURNING *`;
 
-        res.status(200).json({ message: 'Item updated successfully', image_url: normalizedImg });
+        const updateRes = await query(updateSql, params);
+
+        if (updateRes.rows && updateRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Item not found for this vendor' });
+        }
+
+        const updatedItem = updateRes.rows ? updateRes.rows[0] : null;
+
+        res.status(200).json({
+            success: true,
+            message: 'Item updated successfully',
+            image_url: updatedItem?.image_url || normalizedImg,
+            item: updatedItem
+        });
     } catch (err) {
         console.error('Error updating item:', err);
-        res.status(500).json({ error: 'Failed to update item' });
+        res.status(500).json({ error: 'Failed to update item', details: err.message });
+    }
+}
+
+/**
+ * POST/PUT /api/vendorPanel/:vendorId/items/:itemId/image or /photo
+ * Dedicated endpoint for uploading or updating an item's photo directly from camera or gallery
+ */
+async function updateItemImage(req, res) {
+    try {
+        const { vendorId, itemId } = req.params;
+
+        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+        let imageUrl = null;
+
+        if (file) {
+            const baseUrl = `${req.protocol}://${req.get('host')}`;
+            imageUrl = `${baseUrl}/uploads/${file.filename}`;
+        } else {
+            const base64Result = processBase64Upload(req);
+            if (base64Result) {
+                imageUrl = base64Result.image_url;
+            } else {
+                imageUrl = req.body?.image_url || req.body?.imageUrl || req.body?.image || req.body?.photo || req.body?.photo_url;
+            }
+        }
+
+        if (!imageUrl) {
+            return res.status(400).json({
+                error: 'No image provided. Please send a file via multipart form-data (field: file, image, or photo), base64 string, or image_url string.',
+                code: 'NO_IMAGE_PROVIDED'
+            });
+        }
+
+        const normalizedImg = await resolveImageUrl(imageUrl);
+
+        const updateRes = await query(
+            `UPDATE items SET image_url = ? WHERE item_id = ? AND (vendor_id = ? OR CAST(vendor_id AS TEXT) = ?) RETURNING *`,
+            [normalizedImg, itemId, vendorId, String(vendorId)]
+        );
+
+        if (updateRes.rows && updateRes.rows.length === 0) {
+            return res.status(404).json({ error: 'Item not found for this vendor' });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Item photo updated successfully',
+            vendor_id: vendorId,
+            item_id: itemId,
+            image_url: normalizedImg,
+            item: updateRes.rows ? updateRes.rows[0] : undefined
+        });
+    } catch (err) {
+        console.error('Error updating item photo:', err);
+        res.status(500).json({ error: 'Failed to update item photo', details: err.message });
     }
 }
 
@@ -620,6 +747,7 @@ module.exports = {
   getVendorPurchases,
   addItem,
   updateItem,
+  updateItemImage,
   deleteItem,
   updateSettings,
   renewSubscription,

@@ -53,6 +53,7 @@ router.use(['/api/admin', '/api/admin/panel'], adminRoutes);               // Ad
 router.use('/api/auth', authRoutes);                 // Admin Auth & Profile
 router.use('/api/sub-admins', subAdminsRoutes);      // Sub-Admins & RBAC
 router.use('/api/subscriptions', subscriptionsRoutes); // Financial Analytics & Subscriptions
+router.use('/api/config', configRoutes);               // Platform Branding & Security Config
 router.use(ratingRoutes);                                  // Vendor Ratings & Reviews
 const storefrontController = require('../controllers/Storefront/storefrontController');
 

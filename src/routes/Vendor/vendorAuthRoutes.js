@@ -14,6 +14,7 @@ const {
   verifyOtpSchema,
   resetPasswordSchema
 } = require('../../schemas/authSchema');
+const { upload, handleMulterError } = require('../../middleware/upload');
 
 /**
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
@@ -108,8 +109,15 @@ router.patch('/:vendorId/settings', vendorPanelController.updateSettings);
 
 // Vendor Catalog / Items Specification Routes (/api/vendors/:vendorId/items)
 router.get('/:vendorId/items', storefrontController.getVendorStorefront);
-router.post('/:vendorId/items', vendorPanelController.addItem);
-router.put('/:vendorId/items/:itemId', vendorPanelController.updateItem);
+router.post('/:vendorId/items', upload.any(), handleMulterError, vendorPanelController.addItem);
+router.put('/:vendorId/items/:itemId', upload.any(), handleMulterError, vendorPanelController.updateItem);
+router.patch('/:vendorId/items/:itemId', upload.any(), handleMulterError, vendorPanelController.updateItem);
+router.post('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.put('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.patch('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.post('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.put('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
+router.patch('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, vendorPanelController.updateItemImage);
 router.delete('/:vendorId/items/:itemId', vendorPanelController.deleteItem);
 router.patch('/:vendorId/items/:itemId/availability', vendorPanelController.toggleAvailability);
 router.put('/:vendorId/items/:itemId/availability', vendorPanelController.toggleAvailability);
@@ -121,8 +129,8 @@ router.patch('/:vendorId/orders/:orderId/status', ordersController.updateOrderSt
 
 // Vendor Payments & Logo Routes
 router.get('/:vendorId/payments', adminPanelController.getVendorPayments);
-router.post('/:vendorId/logo', vendorPanelController.updateVendorLogo);
-router.put('/:vendorId/logo', vendorPanelController.updateVendorLogo);
+router.post('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
+router.put('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
 
 router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.approveVendor);
 router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);

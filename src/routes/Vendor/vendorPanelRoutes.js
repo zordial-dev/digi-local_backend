@@ -108,11 +108,20 @@ router.get('/:vendorId/my-orders', vendorPanelController.getVendorPurchases);
 router.get('/:vendorId/orders-made', vendorPanelController.getVendorPurchases);
 
 
-// POST /api/vendorPanel/:vendorId/items
-router.post('/:vendorId/items', authenticateToken, requireVendorOwner, validateRequest(addItemSchema), vendorPanelController.addItem);
+// POST /api/vendorPanel/:vendorId/items (Supports multipart/form-data camera/gallery uploads and JSON)
+router.post('/:vendorId/items', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(addItemSchema), vendorPanelController.addItem);
 
-// PUT /api/vendorPanel/:vendorId/items/:itemId
-router.put('/:vendorId/items/:itemId', authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
+// PUT/PATCH /api/vendorPanel/:vendorId/items/:itemId (Supports multipart/form-data camera/gallery uploads and JSON)
+router.put('/:vendorId/items/:itemId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
+router.patch('/:vendorId/items/:itemId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
+
+// Dedicated Photo / Image endpoints for items
+router.post('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.put('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.patch('/:vendorId/items/:itemId/image', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.post('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.put('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.patch('/:vendorId/items/:itemId/photo', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
 
 // Toggle Item Availability Endpoints
 router.patch('/items/:itemId/availability', authenticateToken, vendorPanelController.toggleAvailability);
