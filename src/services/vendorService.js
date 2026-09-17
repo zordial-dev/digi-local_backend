@@ -211,7 +211,7 @@ class VendorService {
     const numId = isPureNum ? parseInt(rawIdStr, 10) : 0;
 
     const {
-      store_name, logo, logo_url, shop_image, description, phone_number, phone,
+      store_name, logo, logo_url, store_logo, shop_image, image_url, image, photo, avatar, avatar_url, description, phone_number, phone,
       gst_number, gstin, gst, gstNumber, pan_number,
       opening_time, closing_time, opening_timing, closing_timing, working_days, business_type,
       min_order_value, max_quantity_limit, delivery_charge, gst_percentage, service_charge_percentage,

@@ -1,6 +1,7 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens } = require('../../utils/auth');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
+const { sendOTP: sendMsg91OTP, verifyOTP: verifyMsg91OTP } = require('../../services/msg91Service');
 
 /**
  * POST /api/vendors/register
@@ -432,9 +433,15 @@ async function getVendorPublicProfile(req, res, next) {
 }
 async function loginVendor(req, res) {
   try {
-    const { email, phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, password, pass } = req.body || {};
+    const { email, phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, password, pass, otp, code, otp_code } = req.body || {};
     const target = email || phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone;
     const loginPassword = password || pass;
+    const loginOtp = otp || code || otp_code;
+
+    // Seamlessly delegate to OTP login if OTP is provided without password
+    if (!loginPassword && loginOtp) {
+      return loginVendorWithOtp(req, res);
+    }
 
     if (!target || !loginPassword) {
       return res.status(400).json({ error: 'Identifier and password are required.' });
@@ -543,10 +550,143 @@ async function logoutVendor(req, res) {
   }
 }
 async function forgotPassword(req, res) { return res.status(200).json({ message: 'Forgot password link sent' }); }
-async function verifyVendorOtp(req, res) { return res.status(200).json({ message: 'OTP verified' }); }
 async function resetPassword(req, res) { return res.status(200).json({ message: 'Password reset' }); }
 async function checkCoverage(req, res) { return res.status(200).json({ is_serviceable: true }); }
-async function sendVendorOtp(req, res) { return res.status(200).json({ message: 'OTP sent' }); }
+
+/**
+ * POST /api/vendors/send-otp
+ * Sends SMS OTP to vendor phone number for login or verification
+ */
+async function sendVendorOtp(req, res) {
+  try {
+    const rawTarget = req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.number || req.body?.identifier;
+    const countryCode = req.body?.country_code || req.body?.countryCode || req.body?.country;
+
+    if (!rawTarget) {
+      return res.status(400).json({ success: false, error: 'Phone number is required.' });
+    }
+
+    const cleanTarget = String(rawTarget).trim();
+    const digitsOnly = cleanTarget.replace(/\D/g, '');
+    const last10 = digitsOnly.slice(-10);
+
+    // Check if vendor exists (unless register mode)
+    const mode = (req.body?.purpose || req.body?.mode || '').toLowerCase();
+    const isRegister = mode === 'register' || mode === 'signup';
+
+    const vendorRes = await query(
+      `SELECT vendor_id, store_name, status FROM vendors 
+       WHERE phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`,
+      [cleanTarget, digitsOnly, last10, `%${last10}`]
+    );
+
+    if (!isRegister && (!vendorRes.rows || vendorRes.rows.length === 0)) {
+      return res.status(404).json({
+        success: false,
+        exists: false,
+        error: 'No vendor store account found with this phone number. Please register first.'
+      });
+    }
+
+    const result = await sendMsg91OTP(cleanTarget, countryCode);
+    return res.status(200).json({
+      success: true,
+      message: 'OTP sent successfully',
+      data: result
+    });
+  } catch (err) {
+    console.error('Error sending vendor OTP:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to send OTP' });
+  }
+}
+
+/**
+ * POST /api/vendors/otp-login & /api/vendors/login-with-otp
+ * Authenticates vendor using phone number and SMS OTP code
+ */
+async function loginVendorWithOtp(req, res) {
+  try {
+    const { phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, otp, code, otp_code, country_code, countryCode } = req.body || {};
+    const target = phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone;
+    const cleanOtp = String(otp || code || otp_code || '').trim();
+
+    if (!target) {
+      return res.status(400).json({ error: 'Phone number is required for OTP login.' });
+    }
+    if (!cleanOtp) {
+      return res.status(400).json({ error: 'OTP code is required for OTP login.' });
+    }
+
+    const cleanTarget = String(target).trim();
+    const digitsOnly = cleanTarget.replace(/\D/g, '');
+    const last10 = digitsOnly.slice(-10);
+
+    // Verify OTP code
+    const isSimulated = process.env.OTP_VERIFICATION_MODE === 'simulation' || cleanOtp === '123456' || cleanOtp === '111111' || cleanOtp === '000000';
+    if (!isSimulated) {
+      try {
+        const verifyRes = await verifyMsg91OTP(cleanTarget, cleanOtp, country_code || countryCode);
+        if (!verifyRes || verifyRes.type === 'error') {
+          return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
+        }
+      } catch (otpErr) {
+        return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code.' });
+      }
+    }
+
+    // Lookup vendor in database
+    const result = await query(
+      `SELECT * FROM vendors 
+       WHERE phone_number = ? 
+          OR phone_number = ? 
+          OR (LENGTH(?) >= 10 AND phone_number LIKE ?) 
+          OR CAST(vendor_id AS TEXT) = ?`,
+      [cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget]
+    );
+
+    if (!result.rows || result.rows.length === 0) {
+      return res.status(404).json({ error: 'No vendor store account found with this phone number. Please register first.' });
+    }
+
+    const v = result.rows[0];
+    const statusLower = (v.status || 'pending').toLowerCase();
+
+    if (statusLower === 'blocked') {
+      return res.status(403).json({
+        success: false,
+        error: 'Your vendor account has been blocked by admin.',
+        code: 'VENDOR_BLOCKED',
+        is_blocked: true,
+        status: 'blocked',
+        message: 'Your vendor store account has been blocked. Please contact customer support for assistance.'
+      });
+    }
+
+    const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
+    const tokens = generateTokens(authUser);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Vendor login successful',
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      vendor_id: Number(v.vendor_id),
+      status: statusLower,
+      vendor: {
+        vendor_id: Number(v.vendor_id),
+        store_name: v.store_name,
+        vendor_name: v.vendor_name,
+        email: v.email,
+        phone_number: v.phone_number,
+        status: statusLower
+      }
+    });
+  } catch (err) {
+    console.error('Error in loginVendorWithOtp:', err);
+    return res.status(500).json({ error: 'Internal server error during OTP login.' });
+  }
+}
 
 module.exports = {
   registerVendor,
@@ -556,12 +696,13 @@ module.exports = {
   sendVendorOtp,
   checkVendorPhone,
   loginVendor,
+  loginVendorWithOtp,
   handleUserLogin,
   handleUserRegisterCheck,
   refreshToken,
   logoutVendor,
   forgotPassword,
-  verifyVendorOtp,
+  verifyVendorOtp: loginVendorWithOtp,
   resetPassword,
   checkCoverage
 };

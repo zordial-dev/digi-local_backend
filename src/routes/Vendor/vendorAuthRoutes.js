@@ -71,7 +71,8 @@ router.post('/resubmit', vendorAuthController.resubmitVendorRequest);
 router.put('/resubmit', vendorAuthController.resubmitVendorRequest);
 
 // 3. Static Auth Endpoints (Must come BEFORE /:vendorId)
-router.post('/send-otp', vendorAuthController.sendVendorOtp);
+router.post(['/send-otp', '/request-otp', '/otp-send'], vendorAuthController.sendVendorOtp);
+router.post(['/otp-login', '/login-with-otp', '/login-otp'], loginBruteForceGuard, vendorAuthController.loginVendorWithOtp);
 router.post('/check-coverage', vendorAuthController.checkCoverage);
 router.post('/check-phone', vendorAuthController.checkVendorPhone);
 router.post('/check-vendor', vendorAuthController.checkVendorPhone);
@@ -87,7 +88,7 @@ router.post('/user-register', vendorAuthController.handleUserRegisterCheck);
 router.post('/refresh', vendorAuthController.refreshToken);
 router.post('/logout', vendorAuthController.logoutVendor);
 router.post('/forgot-password', validateRequest(forgotPasswordSchema), vendorAuthController.forgotPassword);
-router.post('/verify-otp', validateRequest(verifyOtpSchema), vendorAuthController.verifyVendorOtp);
+router.post('/verify-otp', vendorAuthController.loginVendorWithOtp);
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);
 
 // FCM / Push Token Static Endpoints
@@ -103,9 +104,9 @@ router.get('/status/:vendorId', vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
-router.put(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
-router.post(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
-router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
+router.put(['/:vendorId(\\d+)/settings', '/:vendorId(\\d+)/profile', '/:vendorId(\\d+)'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
+router.post(['/:vendorId(\\d+)/settings', '/:vendorId(\\d+)/profile', '/:vendorId(\\d+)'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
+router.patch(['/:vendorId(\\d+)/settings', '/:vendorId(\\d+)/profile', '/:vendorId(\\d+)'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
 
 // Vendor Catalog / Items & Products Routes (/api/vendors/:vendorId/items & /products)
 router.get(['/:vendorId/items', '/:vendorId/products'], storefrontController.getVendorStorefront);
