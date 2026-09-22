@@ -128,6 +128,7 @@ router.post('/api/payments/cashfree/verify-direct', cashfreePaymentController.ve
 router.post('/api/payments/cashfree/webhook', cashfreePaymentController.cashfreeWebhook);
 router.get(['/api/vendors/:vendorId/cashfree-payments', '/api/vendor/:vendorId/cashfree-payments'], cashfreePaymentController.getVendorCashfreePayments);
 router.get('/api/admin/payments/cashfree-ledger', cashfreePaymentController.getAdminCashfreeLedger);
+router.all(['/api/payments/cashfree/check-credentials', '/api/payments/cashfree/test-credentials'], cashfreePaymentController.checkCredentials);
 
 router.get('/api/payments/transactions', adminPanelController.getPaymentTransactions);
 router.get('/api/payments/revenue-dashboard', adminPanelController.getRevenueDashboard);

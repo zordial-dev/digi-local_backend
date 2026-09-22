@@ -1,0 +1,1304 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DigiLocal — Cashfree PG v3 Test Bench</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <!-- Cashfree Web SDK v3 -->
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+
+  <style>
+    :root {
+      --bg-base: #0a0f1d;
+      --bg-surface: #131b2e;
+      --bg-card: #182238;
+      --bg-input: #0e1626;
+      --border-color: #23314d;
+      --border-focus: #3b82f6;
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-glow: rgba(37, 99, 235, 0.35);
+      --accent-gold: #f59e0b;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-purple: #8b5cf6;
+      --radius: 12px;
+      --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 24px 16px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #182238 0%, #111827 100%);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .header-info h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-info h1 span.badge {
+      font-size: 11px;
+      background: rgba(37, 99, 235, 0.2);
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .header-info p {
+      color: var(--text-secondary);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-pill {
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px var(--accent-green);
+    }
+
+    .mode-select {
+      background: var(--bg-input);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+      overflow-x: auto;
+    }
+
+    .tab-btn {
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      background: var(--primary);
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    /* Main Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--border-color);
+      color: #38bdf8;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-ghost:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: #38bdf8;
+    }
+
+    /* Form Fields */
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+
+    .mono-input {
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    /* Action Buttons */
+    .btn {
+      width: 100%;
+      padding: 12px 18px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s;
+      margin-top: 14px;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 14px var(--primary-glow);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-success {
+      background: var(--accent-green);
+      color: #064e3b;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-success:hover {
+      background: #059669;
+      color: #fff;
+    }
+
+    .btn-checkout {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #fff;
+      font-size: 15px;
+      padding: 14px;
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-checkout:hover {
+      filter: brightness(1.1);
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: var(--text-secondary);
+    }
+
+    /* Response & Inspector Box */
+    .checkout-box {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px dashed var(--accent-green);
+      border-radius: 10px;
+      padding: 16px;
+      margin-top: 18px;
+      display: none;
+    }
+
+    .checkout-box.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .checkout-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .checkout-session-id {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #a7f3d0;
+      background: rgba(6, 78, 59, 0.6);
+      padding: 4px 8px;
+      border-radius: 4px;
+      word-break: break-all;
+    }
+
+    .inspector {
+      background: #060b16;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-top: 18px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .inspector-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-bottom: 1px solid #1a2333;
+      padding-bottom: 6px;
+    }
+
+    .log-box {
+      background: #060b16;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius);
+      padding: 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #38bdf8;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 14px;
+    }
+
+    .log-entry {
+      margin-bottom: 4px;
+      line-height: 1.4;
+    }
+
+    .log-entry.success {
+      color: #4ade80;
+    }
+
+    .log-entry.error {
+      color: #f87171;
+    }
+
+    .log-entry.warn {
+      color: #facc15;
+    }
+
+    /* Ledger Table */
+    .ledger-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+
+    .ledger-table th {
+      background: var(--bg-card);
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 10px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .ledger-table td {
+      padding: 10px;
+      border-bottom: 1px solid #1c273c;
+    }
+
+    .badge-status {
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-block;
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+    }
+
+    .badge-pending {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+    }
+
+    .badge-failed {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+    }
+
+    /* Metric Cards */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .metric-val {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .metric-lbl {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-info">
+        <h1>
+          <span>💳 DigiLocal — Cashfree PG v3 Test Bench</span>
+          <span class="badge">Live Sandbox & PG Ready</span>
+        </h1>
+        <p>Interactive testing suite for Customer Orders, Scan & Pay, Verification & Live Payment Ledgers.</p>
+      </div>
+      <div class="status-bar">
+        <button class="btn-ghost"
+          style="padding: 6px 12px; font-weight: 700; color: #f59e0b; border: 1px solid #f59e0b;"
+          onclick="checkCashfreeCredentials()">
+          🔑 Test PG Credentials
+        </button>
+        <div class="status-pill">
+          <div class="status-dot"></div>
+          <span>Backend Connected</span>
+        </div>
+        <select id="cashfreeSdkMode" class="mode-select">
+          <option value="production" selected>Mode: PRODUCTION (Live)</option>
+          <option value="sandbox">Mode: SANDBOX (Test)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('cartOrder')">
+        🛒 1. Cart Order Session
+      </button>
+      <button class="tab-btn" onclick="switchTab('directPay')">
+        ⚡ 2. Direct Vendor Pay
+      </button>
+      <button class="tab-btn" onclick="switchTab('verifyPay')">
+        🔍 3. Verify Payment Status
+      </button>
+      <button class="tab-btn" onclick="switchTab('adminLedger')">
+        📊 4. Payments Ledger
+      </button>
+    </div>
+
+    <!-- Tab 1: Cart Order Session -->
+    <div id="tab-cartOrder" class="tab-content">
+      <div class="grid">
+        <!-- Form Panel -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📝 Cart Order Parameters</div>
+            <button class="btn-ghost" onclick="generateDummyCartOrder()">🎲 Regenerate Dummy Data</button>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Order ID (Auto-Generated)</label>
+              <input type="text" id="co_order_id" class="mono-input" readonly />
+            </div>
+            <div class="form-group">
+              <label>Amount (INR)</label>
+              <input type="number" id="co_amount" value="10.00" step="1" min="1" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Select Vendor / Merchant</label>
+              <select id="co_vendor_id" onchange="onVendorChange(this.value, 'co_store_name')">
+                <option value="1296" selected>#1296 — Flower Point (Ramesh Sharma)</option>
+                <option value="1302">#1302 — Super Bakery Store (Rajesh Sharma)</option>
+                <option value="1298">#1298 — Kirana Mart (Manish)</option>
+                <option value="1305">#1305 — FCM Order Vendor</option>
+                <option value="1306">#1306 — Expo Order Vendor</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Store / Merchant Name</label>
+              <input type="text" id="co_store_name" value="Flower Point" />
+            </div>
+          </div>
+
+          <!-- Dual Option: Cash on Delivery vs Cashfree Online Payment -->
+          <div class="form-group">
+            <label>Payment Method Selection</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px;">
+              <div id="card_method_cod" onclick="selectPaymentMethod('COD')"
+                style="border: 2px solid var(--border-color); background: var(--bg-input); padding: 12px; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.2s;">
+                <div style="font-size: 20px;">💵</div>
+                <div style="font-weight: 700; font-size: 13px; margin-top: 4px;">Cash on Delivery</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Pay cash/UPI at doorstep</div>
+              </div>
+              <div id="card_method_cashfree" onclick="selectPaymentMethod('CASHFREE')"
+                style="border: 2px solid var(--primary); background: rgba(37, 99, 235, 0.15); padding: 12px; border-radius: 8px; cursor: pointer; text-align: center; transition: all 0.2s;">
+                <div style="font-size: 20px;">💳</div>
+                <div style="font-weight: 700; font-size: 13px; margin-top: 4px; color: #60a5fa;">Online Payment</div>
+                <div style="font-size: 11px; color: var(--text-muted);">Cashfree (UPI, Cards, NetBanking)</div>
+              </div>
+            </div>
+            <input type="hidden" id="co_payment_method" value="CASHFREE" />
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Customer Name</label>
+              <input type="text" id="co_customer_name" value="Aarushi Verma" />
+            </div>
+            <div class="form-group">
+              <label>Customer Phone (10 digits)</label>
+              <input type="text" id="co_customer_phone" value="9876543210" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Delivery Address</label>
+            <input type="text" id="co_delivery_address" value="Flat 402, Tower B, Greenwood Residency" />
+          </div>
+
+          <div class="form-group">
+            <label>Customer Email</label>
+            <input type="email" id="co_customer_email" value="resident@digilocal.in" />
+          </div>
+
+          <div class="form-group">
+            <label>Order Note</label>
+            <input type="text" id="co_note" value="DigiLocal Cart Order" />
+          </div>
+
+          <button class="btn btn-primary" id="btnCreateOrderSession" onclick="processOrderCheckout()">
+            💳 Place Order & Pay via Cashfree
+          </button>
+        </div>
+
+        <!-- Session & Checkout Actions Panel -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">⚡ Checkout & Response Inspector</div>
+            <span id="sessionStatusBadge" class="badge-status badge-pending">Ready</span>
+          </div>
+
+          <!-- Active Checkout Trigger Box (Shown once session is generated) -->
+          <div id="checkoutBox" class="checkout-box">
+            <div class="checkout-header">
+              <strong style="color: #34d399; font-size: 13px;">✅ Cashfree Session Ready</strong>
+              <span id="sessionModeBadge" class="badge-status badge-success">LIVE</span>
+            </div>
+            <div class="form-group">
+              <label>Payment Session ID:</label>
+              <div id="dispSessionId" class="checkout-session-id">-</div>
+            </div>
+
+            <button class="btn btn-checkout" onclick="launchCashfreeModal()">
+              💳 Pay Now via Cashfree Modal (Web SDK)
+            </button>
+            <button class="btn btn-outline" style="margin-top: 8px;" onclick="openCashfreeHostedLink()">
+              🔗 Open Cashfree Hosted Checkout Page
+            </button>
+            <button class="btn btn-ghost" style="margin-top: 8px; width: 100%;" onclick="copyToVerifyTab()">
+              ➡️ Populate Verify Tab with this Order
+            </button>
+          </div>
+
+          <!-- Raw Response JSON Inspector -->
+          <div class="inspector">
+            <div class="inspector-header">
+              <span>HTTP RESPONSE JSON</span>
+              <button class="btn-ghost" style="padding: 2px 6px; font-size: 10px;"
+                onclick="copyJson('jsonInspector')">Copy</button>
+            </div>
+            <pre id="jsonInspector">// Awaiting API action...</pre>
+          </div>
+
+          <!-- Activity Log -->
+          <div class="log-box" id="activityLog">
+            <div class="log-entry">ℹ️ Ready. Fill dummy data and click "Create Cashfree Payment Session".</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Direct Resident-to-Vendor Scan & Pay -->
+    <div id="tab-directPay" class="tab-content" style="display: none;">
+      <div class="grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">⚡ Direct Scan & Pay Parameters</div>
+            <button class="btn-ghost" onclick="generateDummyDirectPay()">🎲 Regenerate Data</button>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Select Vendor / Merchant</label>
+              <select id="dir_vendor_id">
+                <option value="1296" selected>#1296 — Flower Point (Ramesh Sharma)</option>
+                <option value="1302">#1302 — Super Bakery Store (Rajesh Sharma)</option>
+                <option value="1298">#1298 — Kirana Mart (Manish)</option>
+                <option value="1305">#1305 — FCM Order Vendor</option>
+                <option value="1306">#1306 — Expo Order Vendor</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Direct Amount (INR)</label>
+              <input type="number" id="dir_amount" value="25.00" step="1" min="1" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Customer Name</label>
+              <input type="text" id="dir_customer_name" value="Rohan Sharma" />
+            </div>
+            <div class="form-group">
+              <label>Customer Phone</label>
+              <input type="text" id="dir_customer_phone" value="9876543210" />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Customer Email</label>
+            <input type="email" id="dir_customer_email" value="rohan@digilocal.in" />
+          </div>
+
+          <div class="form-group">
+            <label>Payment Notes (e.g. Khata clearance / Counter scan)</label>
+            <input type="text" id="dir_notes" value="Direct counter bill payment" />
+          </div>
+
+          <button class="btn btn-primary" onclick="createDirectPaymentSession()">
+            🚀 Create Direct Payment Session
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">⚡ Direct Checkout & Inspector</div>
+          </div>
+
+          <div id="directCheckoutBox" class="checkout-box">
+            <div class="checkout-header">
+              <strong style="color: #34d399; font-size: 13px;">✅ Direct Session Ready</strong>
+            </div>
+            <div class="form-group">
+              <label>Payment Session ID:</label>
+              <div id="dispDirectSessionId" class="checkout-session-id">-</div>
+            </div>
+            <button class="btn btn-checkout" onclick="launchDirectCashfreeModal()">
+              💳 Pay Now via Cashfree Modal
+            </button>
+            <button class="btn btn-outline" style="margin-top: 8px;" onclick="openDirectHostedLink()">
+              🔗 Open Direct Checkout Page
+            </button>
+          </div>
+
+          <div class="inspector">
+            <div class="inspector-header">
+              <span>RESPONSE JSON</span>
+              <button class="btn-ghost" style="padding: 2px 6px; font-size: 10px;"
+                onclick="copyJson('jsonDirectInspector')">Copy</button>
+            </div>
+            <pre id="jsonDirectInspector">// Awaiting Direct Pay creation...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Verify Payment Status -->
+    <div id="tab-verifyPay" class="tab-content" style="display: none;">
+      <div class="grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔍 Verify Order Payment with Cashfree PG</div>
+          </div>
+
+          <div class="form-group">
+            <label>Order ID (or Cashfree Order ID)</label>
+            <input type="text" id="vf_order_id" class="mono-input" placeholder="e.g. CF_ORD_..." />
+          </div>
+
+          <div class="form-group">
+            <label>Cashfree Payment ID (Optional)</label>
+            <input type="text" id="vf_payment_id" class="mono-input"
+              placeholder="e.g. CF_PAY_... or leave blank to query all" />
+          </div>
+
+          <div class="form-group">
+            <label>Verification Endpoint</label>
+            <select id="vf_endpoint">
+              <option value="/api/payments/cashfree/verify">Cart Order (/api/payments/cashfree/verify)</option>
+              <option value="/api/payments/cashfree/verify-direct">Direct Pay (/api/payments/cashfree/verify-direct)
+              </option>
+            </select>
+          </div>
+
+          <button class="btn btn-success" onclick="verifyPayment()">
+            🔍 Query Cashfree PG Verification API
+          </button>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 Verification Verdict</div>
+            <span id="vfStatusBadge" class="badge-status badge-pending">Pending Query</span>
+          </div>
+
+          <div class="inspector">
+            <div class="inspector-header">
+              <span>VERIFICATION RESULT</span>
+              <button class="btn-ghost" style="padding: 2px 6px; font-size: 10px;"
+                onclick="copyJson('jsonVerifyInspector')">Copy</button>
+            </div>
+            <pre id="jsonVerifyInspector">// Click "Query Cashfree PG Verification API" above...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: Admin Payments Ledger -->
+    <div id="tab-adminLedger" class="tab-content" style="display: none;">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📊 Platform-Wide Cashfree Payments Ledger</div>
+          <button class="btn-ghost" onclick="fetchPaymentsLedger()">🔄 Refresh Ledger</button>
+        </div>
+
+        <!-- Metrics -->
+        <div class="metrics-row">
+          <div class="metric-card">
+            <div class="metric-val" id="metricTotalVol">₹0.00</div>
+            <div class="metric-lbl">Total Volume</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="metricTotalTxns">0</div>
+            <div class="metric-lbl">Total Transactions</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="metricSuccessTxns">0</div>
+            <div class="metric-lbl">Successful</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="metricPendingTxns">0</div>
+            <div class="metric-lbl">Pending</div>
+          </div>
+        </div>
+
+        <div style="overflow-x: auto;">
+          <table class="ledger-table">
+            <thead>
+              <tr>
+                <th>Order ID</th>
+                <th>Store / Vendor</th>
+                <th>Customer</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Cashfree Ref</th>
+                <th>Date</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTableBody">
+              <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">Click "Refresh
+                  Ledger" to load payment transactions.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // State
+    let currentSession = null;
+    let currentDirectSession = null;
+
+    // Initialize with dummy data on load
+    window.addEventListener('DOMContentLoaded', () => {
+      generateDummyCartOrder();
+      generateDummyDirectPay();
+    });
+
+    // Credential Tester
+    async function checkCashfreeCredentials() {
+      const mode = document.getElementById('cashfreeSdkMode').value;
+      logActivity(`Probing Cashfree remote server (${mode.toUpperCase()}) to check credentials...`, 'info');
+      try {
+        const res = await fetch(`/api/payments/cashfree/check-credentials?env=${mode.toUpperCase()}`);
+        const data = await res.json();
+        document.getElementById('jsonInspector').innerText = JSON.stringify(data, null, 2);
+
+        if (data.authenticated) {
+          logActivity(data.message, 'success');
+          alert(`✅ CASHFREE AUTHENTICATION SUCCESS!\n\nEnvironment: ${data.environment}\nStatus: 200 OK\n\nYour Cashfree credentials are valid and live!`);
+        } else {
+          logActivity(`❌ Cashfree Rejected Credentials (HTTP ${data.status_code || 401}): ${data.error}`, 'error');
+          (data.diagnostics || []).forEach(d => logActivity(`👉 ${d}`, 'warn'));
+          alert(`❌ CASHFREE AUTHENTICATION FAILED (HTTP ${data.status_code || 401})\n\nDiagnostics:\n${(data.diagnostics || []).map(d => '• ' + d).join('\n')}\n\nRecommended Fix:\n${data.fix_advice}`);
+        }
+      } catch (err) {
+        logActivity(`Network error checking credentials: ${err.message}`, 'error');
+      }
+    }
+
+    // Tab Switching
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+      const target = document.getElementById(`tab-${tabName}`);
+      if (target) target.style.display = 'block';
+
+      const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(tabName));
+      if (activeBtn) activeBtn.classList.add('active');
+
+      if (tabName === 'adminLedger') {
+        fetchPaymentsLedger();
+      }
+    }
+
+    // Dummy Data Generators
+    function generateDummyCartOrder() {
+      const ts = Date.now();
+      const rand4 = Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('co_order_id').value = `ORD_${ts}_${rand4}`;
+      document.getElementById('co_amount').value = (Math.floor(Math.random() * 50) + 10).toFixed(2);
+      document.getElementById('co_vendor_id').value = '1296';
+      document.getElementById('co_store_name').value = 'Flower Point';
+      document.getElementById('co_customer_name').value = ['Aarushi Verma', 'Rahul Sharma', 'Neha Kapoor', 'Vikram Malhotra'][Math.floor(Math.random() * 4)];
+      document.getElementById('co_customer_phone').value = `98${Math.floor(10000000 + Math.random() * 90000000)}`;
+      document.getElementById('co_customer_email').value = `resident_${rand4}@digilocal.in`;
+      logActivity(`Generated new dummy Cart Order parameters (#${document.getElementById('co_order_id').value}) for Vendor #1296.`);
+    }
+
+    function onVendorChange(vendorId, targetStoreNameId) {
+      const storeMap = {
+        '1296': 'Flower Point',
+        '1302': 'Super Bakery Store',
+        '1298': 'Kirana Mart',
+        '1305': 'FCM Order Vendor',
+        '1306': 'Expo Order Vendor'
+      };
+      const storeName = storeMap[String(vendorId)] || `Vendor #${vendorId}`;
+      const target = document.getElementById(targetStoreNameId);
+      if (target) target.value = storeName;
+    }
+
+    function selectPaymentMethod(method) {
+      document.getElementById('co_payment_method').value = method;
+      const cardCod = document.getElementById('card_method_cod');
+      const cardCf = document.getElementById('card_method_cashfree');
+      const btn = document.getElementById('btnCreateOrderSession');
+
+      if (method === 'COD') {
+        cardCod.style.borderColor = 'var(--accent-green)';
+        cardCod.style.background = 'rgba(16, 185, 129, 0.15)';
+        cardCf.style.borderColor = 'var(--border-color)';
+        cardCf.style.background = 'var(--bg-input)';
+        cardCf.querySelector('div:nth-child(2)').style.color = 'var(--text-primary)';
+        cardCod.querySelector('div:nth-child(2)').style.color = '#34d399';
+
+        btn.innerText = '📦 Place Order via Cash on Delivery (COD)';
+        btn.className = 'btn btn-success';
+        logActivity('Selected Payment Method: Cash on Delivery (COD). Pay at doorstep.');
+      } else {
+        cardCf.style.borderColor = 'var(--primary)';
+        cardCf.style.background = 'rgba(37, 99, 235, 0.15)';
+        cardCod.style.borderColor = 'var(--border-color)';
+        cardCod.style.background = 'var(--bg-input)';
+        cardCod.querySelector('div:nth-child(2)').style.color = 'var(--text-primary)';
+        cardCf.querySelector('div:nth-child(2)').style.color = '#60a5fa';
+
+        btn.innerText = '💳 Place Order & Pay via Cashfree';
+        btn.className = 'btn btn-primary';
+        logActivity('Selected Payment Method: Cashfree Online Payment (UPI, Cards, NetBanking).');
+      }
+    }
+
+    function generateDummyDirectPay() {
+      const rand4 = Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('dir_vendor_id').value = '1296';
+      document.getElementById('dir_amount').value = (Math.floor(Math.random() * 100) + 15).toFixed(2);
+      document.getElementById('dir_customer_phone').value = `97${Math.floor(10000000 + Math.random() * 90000000)}`;
+      document.getElementById('dir_customer_email').value = `direct_${rand4}@digilocal.in`;
+    }
+
+    // Log Activity helper
+    function logActivity(msg, type = 'info') {
+      const box = document.getElementById('activityLog');
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.innerText = `[${time}] ${msg}`;
+      box.prepend(entry);
+    }
+
+    // 1. Process Order Placement & Cashfree Checkout
+    async function processOrderCheckout() {
+      const paymentMethod = document.getElementById('co_payment_method').value;
+      const btn = document.getElementById('btnCreateOrderSession');
+      btn.disabled = true;
+      btn.innerText = paymentMethod === 'COD' ? '⏳ Placing COD Order...' : '⏳ Contacting Cashfree PG...';
+
+      const orderAmount = Number(document.getElementById('co_amount').value);
+      const vendorId = Number(document.getElementById('co_vendor_id').value);
+      const customerName = document.getElementById('co_customer_name').value;
+      const customerPhone = document.getElementById('co_customer_phone').value;
+      const customerEmail = document.getElementById('co_customer_email').value;
+      const deliveryAddress = document.getElementById('co_delivery_address').value;
+      const currentSdkMode = document.getElementById('cashfreeSdkMode').value;
+
+      const orderPayload = {
+        order_id: document.getElementById('co_order_id').value,
+        user_id: `usr_${customerPhone}`,
+        vendor_id: vendorId,
+        payment_method: paymentMethod,
+        total_amount: orderAmount,
+        customer_name: customerName,
+        phone: customerPhone,
+        customer_email: customerEmail,
+        delivery_address: deliveryAddress,
+        env: currentSdkMode,
+        items: [
+          {
+            item_id: 1,
+            item_name: document.getElementById('co_note').value || 'Cart Items',
+            quantity: 1,
+            price: orderAmount
+          }
+        ]
+      };
+
+      logActivity(`POST /api/orders [${paymentMethod}] payload sent for ₹${orderAmount} to Vendor #${vendorId}...`);
+
+      try {
+        const res = await fetch('/api/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(orderPayload)
+        });
+
+        const data = await res.json();
+        document.getElementById('jsonInspector').innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok && data.success) {
+          if (paymentMethod === 'COD') {
+            document.getElementById('checkoutBox').classList.remove('active');
+            document.getElementById('sessionStatusBadge').className = 'badge-status badge-success';
+            document.getElementById('sessionStatusBadge').innerText = 'COD Placed';
+            logActivity(`✅ In-app push notification dispatched to vendor app.`, 'info');
+          } else {
+            // Cashfree Online Payment
+            if (data.payment_session_id) {
+              currentSession = {
+                order_id: data.order_id,
+                payment_session_id: data.payment_session_id,
+                payment_url: data.payment_url || `https://payments.cashfree.com/order/#${data.order_id}`,
+                order_amount: data.total_amount
+              };
+              document.getElementById('checkoutBox').classList.add('active');
+              document.getElementById('dispSessionId').innerText = data.payment_session_id;
+              document.getElementById('sessionStatusBadge').className = 'badge-status badge-success';
+              document.getElementById('sessionStatusBadge').innerText = 'Session Ready';
+              logActivity(`✅ Cashfree Payment Session created! Session ID: ${data.payment_session_id.slice(0, 30)}...`, 'success');
+            } else {
+              document.getElementById('checkoutBox').classList.remove('active');
+              document.getElementById('sessionStatusBadge').className = 'badge-status badge-failed';
+              document.getElementById('sessionStatusBadge').innerText = 'Cashfree Failed';
+              logActivity(`⚠️ Order recorded, but Cashfree rejected session: ${data.payment_error || data.cashfree?.error || 'Authentication Failed'}`, 'error');
+              logActivity(`Tip: Check CASHFREE_APP_ID & CASHFREE_SECRET_KEY in your .env or verify mode (${currentSdkMode}).`, 'warn');
+            }
+          }
+        } else {
+          document.getElementById('sessionStatusBadge').className = 'badge-status badge-failed';
+          document.getElementById('sessionStatusBadge').innerText = 'Failed';
+          logActivity(`Order placement failed: ${data.error || 'Server error'}`, 'error');
+        }
+      } catch (err) {
+        document.getElementById('jsonInspector').innerText = `Network/Server Error: ${err.message}`;
+        logActivity(`Exception: ${err.message}`, 'error');
+      } finally {
+        btn.disabled = false;
+        selectPaymentMethod(paymentMethod);
+      }
+    }
+
+    // Cashfree Web SDK Modal Checkout
+    function launchCashfreeModal() {
+      if (!currentSession || !currentSession.payment_session_id) {
+        alert('Please create an order session first!');
+        return;
+      }
+
+      const sdkMode = document.getElementById('cashfreeSdkMode').value;
+      logActivity(`Initializing Cashfree SDK (mode: ${sdkMode})...`);
+
+      try {
+        const cashfree = Cashfree({ mode: sdkMode });
+        const checkoutOptions = {
+          paymentSessionId: currentSession.payment_session_id,
+          redirectTarget: "_modal"
+        };
+
+        logActivity(`Opening Cashfree Modal for order #${currentSession.order_id}...`, 'info');
+
+        cashfree.checkout(checkoutOptions).then((result) => {
+          if (result.error) {
+            logActivity(`Cashfree Modal Error: ${result.error.message || JSON.stringify(result.error)}`, 'error');
+          }
+          if (result.redirect) {
+            logActivity(`Redirection in progress...`, 'info');
+          }
+          if (result.paymentDetails) {
+            logActivity(`Payment completed via modal! Result: ${JSON.stringify(result.paymentDetails)}`, 'success');
+            // Auto verify
+            copyToVerifyTab();
+            switchTab('verifyPay');
+            verifyPayment();
+          }
+        }).catch(err => {
+          logActivity(`SDK Checkout Exception: ${err.message}`, 'error');
+        });
+      } catch (sdkErr) {
+        logActivity(`Cashfree SDK Initialization failed: ${sdkErr.message}. You can use "Open Cashfree Hosted Checkout Page" directly.`, 'warn');
+        window.open(currentSession.payment_url, '_blank');
+      }
+    }
+
+    function openCashfreeHostedLink() {
+      if (currentSession && currentSession.payment_url) {
+        logActivity(`Opening Cashfree hosted link: ${currentSession.payment_url}`);
+        window.open(currentSession.payment_url, '_blank');
+      }
+    }
+
+    function copyToVerifyTab() {
+      if (currentSession) {
+        document.getElementById('vf_order_id').value = currentSession.order_id;
+        document.getElementById('vf_endpoint').value = '/api/payments/cashfree/verify';
+        logActivity(`Copied Order #${currentSession.order_id} to Verify Tab.`);
+      }
+    }
+
+    // 2. Direct Payment Session
+    async function createDirectPaymentSession() {
+      const payload = {
+        vendor_id: Number(document.getElementById('dir_vendor_id').value),
+        amount: Number(document.getElementById('dir_amount').value),
+        customer_name: document.getElementById('dir_customer_name').value,
+        customer_phone: document.getElementById('dir_customer_phone').value,
+        customer_email: document.getElementById('dir_customer_email').value,
+        notes: document.getElementById('dir_notes').value
+      };
+
+      try {
+        const res = await fetch('/api/payments/cashfree/pay-vendor-direct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        document.getElementById('jsonDirectInspector').innerText = JSON.stringify(data, null, 2);
+
+        if (res.ok && data.success && data.payment_session_id) {
+          currentDirectSession = data;
+          document.getElementById('directCheckoutBox').classList.add('active');
+          document.getElementById('dispDirectSessionId').innerText = data.payment_session_id;
+        }
+      } catch (err) {
+        document.getElementById('jsonDirectInspector').innerText = `Error: ${err.message}`;
+      }
+    }
+
+    function launchDirectCashfreeModal() {
+      if (!currentDirectSession) return;
+      const sdkMode = document.getElementById('cashfreeSdkMode').value;
+      try {
+        const cashfree = Cashfree({ mode: sdkMode });
+        cashfree.checkout({
+          paymentSessionId: currentDirectSession.payment_session_id,
+          redirectTarget: "_modal"
+        });
+      } catch (e) {
+        window.open(currentDirectSession.payment_url, '_blank');
+      }
+    }
+
+    function openDirectHostedLink() {
+      if (currentDirectSession && currentDirectSession.payment_url) {
+        window.open(currentDirectSession.payment_url, '_blank');
+      }
+    }
+
+    // 3. Verify Payment Status
+    async function verifyPayment() {
+      const orderId = document.getElementById('vf_order_id').value.trim();
+      const paymentId = document.getElementById('vf_payment_id').value.trim();
+      const endpoint = document.getElementById('vf_endpoint').value;
+
+      if (!orderId) {
+        alert('Please enter an Order ID to verify!');
+        return;
+      }
+
+      const payload = {
+        order_id: orderId,
+        cashfree_order_id: orderId,
+        cashfree_payment_id: paymentId || undefined
+      };
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        document.getElementById('jsonVerifyInspector').innerText = JSON.stringify(data, null, 2);
+
+        const badge = document.getElementById('vfStatusBadge');
+        if (data.verified || data.payment_status === 'PAID' || data.payment_status === 'SUCCESS') {
+          badge.className = 'badge-status badge-success';
+          badge.innerText = `PAID / VERIFIED (${data.payment_method || 'CASHFREE'})`;
+        } else {
+          badge.className = 'badge-status badge-failed';
+          badge.innerText = data.payment_status || 'FAILED / UNPAID';
+        }
+      } catch (err) {
+        document.getElementById('jsonVerifyInspector').innerText = `Error: ${err.message}`;
+      }
+    }
+
+    // 4. Fetch Ledger
+    async function fetchPaymentsLedger() {
+      try {
+        const res = await fetch('/api/admin/payments/cashfree-ledger?limit=50');
+        const data = await res.json();
+
+        if (data.success && data.summary) {
+          document.getElementById('metricTotalVol').innerText = `₹${data.summary.total_volume.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`;
+          document.getElementById('metricTotalTxns').innerText = data.summary.total_transactions;
+          document.getElementById('metricSuccessTxns').innerText = data.summary.successful_transactions;
+          document.getElementById('metricPendingTxns').innerText = data.summary.pending_transactions;
+        }
+
+        const tbody = document.getElementById('ledgerTableBody');
+        tbody.innerHTML = '';
+
+        if (!data.payments || data.payments.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 20px;">No Cashfree payment records found in database.</td></tr>`;
+          return;
+        }
+
+        data.payments.forEach(p => {
+          const isSuccess = p.payment_status === 'SUCCESS' || p.payment_status === 'PAID';
+          const statusClass = isSuccess ? 'badge-success' : 'badge-pending';
+          const dateStr = p.created_at ? new Date(p.created_at).toLocaleString('en-IN') : '-';
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-family: var(--font-mono); font-weight: 600;">${p.order_id}</td>
+            <td>${p.store_name || 'Vendor #' + p.vendor_id}</td>
+            <td>${p.customer_name || 'Resident'}<br><small style="color: var(--text-muted);">${p.customer_phone || ''}</small></td>
+            <td style="font-weight: 700; color: #34d399;">₹${Number(p.amount).toFixed(2)}</td>
+            <td><span class="badge-status ${statusClass}">${p.payment_status}</span></td>
+            <td style="font-family: var(--font-mono); font-size: 11px; color: var(--text-muted);">${p.cashfree_payment_id || p.cashfree_order_id || '-'}</td>
+            <td style="color: var(--text-muted); font-size: 11px;">${dateStr}</td>
+            <td>
+              <button class="btn-ghost" style="padding: 3px 8px; font-size: 11px;" onclick="quickVerifyFromLedger('${p.order_id}')">Verify</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('Failed to load ledger:', err);
+      }
+    }
+
+    function quickVerifyFromLedger(orderId) {
+      document.getElementById('vf_order_id').value = orderId;
+      switchTab('verifyPay');
+      verifyPayment();
+    }
+
+    // Copy JSON Helper
+    function copyJson(elementId) {
+      const text = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(text).then(() => alert('JSON copied to clipboard!'));
+    }
+  </script>
+</body>
+
+</html>

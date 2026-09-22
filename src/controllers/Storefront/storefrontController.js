@@ -1,5 +1,6 @@
 const { query } = require('../../models/db');
 const { performance } = require('perf_hooks');
+const { normalizeImageUrl } = require('../../utils/imageUtils');
 
 /**
  * GET /api/societies/:societyId/vendors - List ACTIVE vendors in a society
@@ -110,7 +111,11 @@ async function getVendorStorefront(req, res) {
         const endTime = performance.now();
 
         if (!vendorResult.rows || vendorResult.rows.length === 0) {
-            return res.status(404).json({ error: `Vendor "${vendorIdParam}" not found or is currently inactive.` });
+            return res.status(404).json({
+                success: false,
+                error: `Vendor "${vendorIdParam}" not found or is currently inactive.`,
+                message: `Vendor "${vendorIdParam}" not found or is currently inactive.`
+            });
         }
 
         const vendor = vendorResult.rows[0];
@@ -124,7 +129,7 @@ async function getVendorStorefront(req, res) {
         ).catch(() => ({ rows: [] }));
 
         const itemsList = (itemsResult.rows || []).map(i => {
-            const finalImg = normalizeImageUrl(i.image_url);
+            const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url) : (i.image_url || '');
             return {
                 ...i,
                 item_id: Number(i.item_id),
@@ -141,6 +146,9 @@ async function getVendorStorefront(req, res) {
                 images: finalImg ? [finalImg] : []
             };
         });
+
+        const finalShopLogo = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(vendor.logo || vendor.shop_image || '') : (vendor.logo || vendor.shop_image || '');
+        const finalShopImage = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(vendor.shop_image || vendor.logo || '') : (vendor.shop_image || vendor.logo || '');
 
         const cleanVendorObj = {
             ...vendor,
@@ -171,8 +179,8 @@ async function getVendorStorefront(req, res) {
             city: vendor.city || '',
             state: vendor.state || '',
             pincode: vendor.pincode || '',
-            shop_image: vendor.shop_image || vendor.logo || '',
-            logo: vendor.logo || vendor.shop_image || '',
+            shop_image: finalShopImage,
+            logo: finalShopLogo,
             status: String(vendor.status || 'ACTIVE').toLowerCase(),
             is_servicable: true
         };
@@ -191,7 +199,11 @@ async function getVendorStorefront(req, res) {
         });
     } catch (err) {
         console.error('Error fetching vendor storefront:', err);
-        return res.status(500).json({ error: 'Failed to fetch vendor details' });
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch vendor details',
+            message: err.message
+        });
     }
 }
 

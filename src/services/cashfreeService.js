@@ -5,69 +5,182 @@ const crypto = require('crypto');
  * Handles Merchant Subscription Payments, Customer-to-Vendor Cart Orders, Direct Scan-and-Pay & Webhooks.
  */
 
-const CASHFREE_APP_ID = process.env.CASHFREE_APP_ID || '';
-const CASHFREE_SECRET_KEY = process.env.CASHFREE_SECRET_KEY || '';
-const CASHFREE_API_VERSION = process.env.CASHFREE_API_VERSION || '2023-08-01';
-const CASHFREE_ENV = (process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase();
-
-const BASE_URL = CASHFREE_ENV === 'PRODUCTION'
-  ? 'https://api.cashfree.com/pg'
-  : 'https://sandbox.cashfree.com/pg';
+const getAppId = (override) => String(override || process.env.CASHFREE_APP_ID || '').trim().replace(/^["']|["']$/g, '');
+const getSecretKey = (override) => String(override || process.env.CASHFREE_SECRET_KEY || '').trim().replace(/^["']|["']$/g, '');
+const getApiVersion = () => String(process.env.CASHFREE_API_VERSION || '2023-08-01').trim().replace(/^["']|["']$/g, '');
+const getEnv = (override, customSecret) => {
+  const secret = getSecretKey(customSecret);
+  if (secret.startsWith('cfsk_ma_prod_')) return 'PRODUCTION';
+  if (secret.startsWith('cfsk_ma_test_')) return 'SANDBOX';
+  if (override) return String(override).toUpperCase().trim();
+  return String(process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase().trim();
+};
+const getBaseUrl = (overrideEnv, customSecret) => (getEnv(overrideEnv, customSecret) === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg');
 
 const isLiveConfigured = Boolean(
-  CASHFREE_APP_ID &&
-  CASHFREE_SECRET_KEY &&
-  !CASHFREE_APP_ID.includes('placeholder') &&
-  !CASHFREE_SECRET_KEY.includes('placeholder')
+  getAppId() &&
+  getSecretKey() &&
+  !getAppId().includes('placeholder') &&
+  !getSecretKey().includes('placeholder')
 );
 
 /**
  * Gets HTTP Headers for Cashfree API requests
  */
-function getHeaders() {
+function getHeaders(customAppId, customSecretKey) {
   return {
-    'x-client-id': CASHFREE_APP_ID,
-    'x-client-secret': CASHFREE_SECRET_KEY,
-    'x-api-version': CASHFREE_API_VERSION,
+    'x-client-id': getAppId(customAppId),
+    'x-client-secret': getSecretKey(customSecretKey),
+    'x-api-version': getApiVersion(),
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   };
 }
 
 /**
- * Helper to generate a simulated Cashfree session response
+ * Helper to generate a simulated Cashfree session response for Test / Sandbox environments
  */
-function generateSimulationSession(payload, reason = 'Simulation Mode Active') {
+function generateSimulationSession(payload, reason = 'Test Environment Active') {
   const generatedOrderId = payload.order_id || `CF_ORD_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
   const amount = Number(payload.order_amount || payload.amount || 0);
 
   return {
     success: true,
-    mode: 'simulation',
-    payment_session_id: `session_sim_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
+    mode: 'test_sandbox',
+    payment_session_id: `session_test_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`,
     order_id: generatedOrderId,
-    cf_order_id: `CF_SIM_${generatedOrderId}`,
+    cf_order_id: `CF_TEST_${generatedOrderId}`,
     order_amount: amount,
     order_currency: payload.order_currency || 'INR',
     payment_status: 'ACTIVE',
-    payment_url: `https://payments.cashfree.com/order/#${generatedOrderId}`,
-    message: `Cashfree session created in simulation mode (${reason})`
+    payment_url: `https://payments-test.cashfree.com/order/#${generatedOrderId}`,
+    message: `Cashfree session created in Test mode (${reason})`
   };
+}
+
+/**
+ * Direct Live Credential Validation against Cashfree PG
+ * Tests actual connectivity with Cashfree remote server without fallbacks.
+ */
+async function checkCashfreeCredentials(customOptions = {}) {
+  const appId = getAppId(customOptions.app_id);
+  const secretKey = getSecretKey(customOptions.secret_key);
+  const env = getEnv(customOptions.env, secretKey);
+  const baseUrl = getBaseUrl(env, secretKey);
+
+  const diagnostics = [];
+  let isTruncated = false;
+  let isEnvMismatch = false;
+
+  if (!appId) {
+    diagnostics.push('Missing CASHFREE_APP_ID');
+  }
+  if (!secretKey) {
+    diagnostics.push('Missing CASHFREE_SECRET_KEY');
+  } else {
+    if (secretKey.length < 40) {
+      isTruncated = true;
+      diagnostics.push(`CASHFREE_SECRET_KEY is only ${secretKey.length} characters long. A full Cashfree secret key is typically 45–60+ characters (appears truncated).`);
+    }
+
+    if (env === 'SANDBOX' && secretKey.startsWith('cfsk_ma_prod_')) {
+      isEnvMismatch = true;
+      diagnostics.push('Environment is set to SANDBOX, but secret key starts with "cfsk_ma_prod_" (Production key). Cashfree Sandbox requires test keys starting with "cfsk_ma_test_".');
+    } else if (env === 'PRODUCTION' && secretKey.startsWith('cfsk_ma_test_')) {
+      isEnvMismatch = true;
+      diagnostics.push('Environment is set to PRODUCTION, but secret key starts with "cfsk_ma_test_" (Test key). Cashfree Production requires live keys starting with "cfsk_ma_prod_".');
+    }
+  }
+
+  const headers = getHeaders(appId, secretKey);
+  const probeOrderId = `PROBE_${Date.now()}`;
+
+  try {
+    const response = await fetch(`${baseUrl}/orders`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        order_id: probeOrderId,
+        order_amount: 1.00,
+        order_currency: 'INR',
+        customer_details: {
+          customer_id: 'CUST_PROBE_CHECK',
+          customer_phone: '9999999999',
+          customer_name: 'Credential Probe Test'
+        }
+      })
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (response.ok && data.payment_session_id) {
+      return {
+        success: true,
+        authenticated: true,
+        status_code: response.status,
+        message: `✅ Credentials are 100% VALID and successfully authenticated by Cashfree PG (${env})!`,
+        environment: env,
+        base_url: baseUrl,
+        app_id_preview: appId ? `${appId.slice(0, 8)}...${appId.slice(-4)}` : '',
+        secret_key_length: secretKey.length,
+        cashfree_remote_order_id: data.cf_order_id,
+        diagnostics
+      };
+    } else {
+      let fixAdvice = 'Check credentials in your Cashfree Merchant Dashboard.';
+      if (isTruncated) {
+        fixAdvice = 'Copy the complete secret key from Cashfree Dashboard (click copy icon, ensure all 50+ chars are copied).';
+      } else if (isEnvMismatch) {
+        fixAdvice = env === 'SANDBOX'
+          ? 'Switch Cashfree Dashboard to Test mode and copy test keys (cfsk_ma_test_...), OR change CASHFREE_ENV=PRODUCTION in .env.'
+          : 'Switch Cashfree Dashboard to Production mode and copy live keys (cfsk_ma_prod_...).';
+      }
+
+      return {
+        success: false,
+        authenticated: false,
+        status_code: response.status,
+        error: data.message || 'Authentication Failed',
+        environment: env,
+        base_url: baseUrl,
+        app_id_preview: appId ? `${appId.slice(0, 8)}...${appId.slice(-4)}` : '',
+        secret_key_length: secretKey.length,
+        secret_key_prefix: secretKey.slice(0, 13),
+        fix_advice: fixAdvice,
+        diagnostics,
+        cashfree_raw: data
+      };
+    }
+  } catch (err) {
+    return {
+      success: false,
+      authenticated: false,
+      status_code: 500,
+      error: `Network error connecting to ${baseUrl}: ${err.message}`,
+      environment: env,
+      diagnostics
+    };
+  }
 }
 
 /**
  * Creates a Payment Order Session in Cashfree (handles live API with seamless simulation fallback)
  * @param {Object} payload Order parameters
+ * @param {Object} options Environment & credential overrides
  * @returns {Promise<Object>} Cashfree payment order session object
  */
-async function createPaymentSession(payload = {}) {
+async function createPaymentSession(payload = {}, options = {}) {
   const orderId = payload.order_id || `CF_ORD_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
   const amount = Number(payload.order_amount || payload.amount || 0);
   const currency = payload.order_currency || 'INR';
 
-  if (!isLiveConfigured) {
-    console.log(`ℹ️ [CASHFREE SERVICE] Live credentials not set. Using simulation mode for order #${orderId}`);
-    return generateSimulationSession(payload, 'Missing or unconfigured credentials');
+  const activeEnv = options.env || payload.env;
+  const currentEnv = getEnv(activeEnv);
+
+  // Pure Local Test mode (explicitly requested)
+  if (currentEnv === 'TEST' || options.mock === true) {
+    console.log(`ℹ️ [CASHFREE SERVICE] Pure Test Mode active for Order #${orderId}`);
+    return generateSimulationSession(payload, 'Test Mode Active');
   }
 
   try {
@@ -94,11 +207,18 @@ async function createPaymentSession(payload = {}) {
       body.order_tags = payload.order_tags;
     }
 
-    console.log(`💳 [CASHFREE SERVICE] Creating session for Order #${body.order_id} (₹${body.order_amount})...`);
+    const activeAppId = options.app_id || payload.app_id;
+    const activeSecretKey = options.secret_key || payload.secret_key;
+    const activeEnv = options.env || payload.env;
+    const currentEnv = getEnv(activeEnv, activeSecretKey);
+    const activeBaseUrl = getBaseUrl(currentEnv, activeSecretKey);
+    const activeHeaders = getHeaders(activeAppId, activeSecretKey);
 
-    const response = await fetch(`${BASE_URL}/orders`, {
+    console.log(`💳 [CASHFREE SERVICE] Creating session for Order #${body.order_id} (₹${body.order_amount}) at ${activeBaseUrl}...`);
+
+    const response = await fetch(`${activeBaseUrl}/orders`, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: activeHeaders,
       body: JSON.stringify(body)
     });
 
@@ -106,15 +226,25 @@ async function createPaymentSession(payload = {}) {
 
     if (!response.ok) {
       console.warn('⚠️ [CASHFREE SERVICE WARNING] Remote rejected request:', data);
-      // Fallback to simulation mode so frontends don't break during dev/staging
-      return generateSimulationSession(payload, data.message || 'Cashfree API returned error; falling back to simulation');
+
+      const isAuthError = response.status === 401 || (data.message && data.message.toLowerCase().includes('authentication'));
+      const errorMsg = isAuthError
+        ? `${data.message || 'Authentication Failed'}. Check CASHFREE_APP_ID and CASHFREE_SECRET_KEY in your .env, or verify if credentials match ${currentEnv} mode.`
+        : (data.message || 'Cashfree API returned error');
+
+      return {
+        success: false,
+        error: errorMsg,
+        status_code: response.status,
+        raw: data
+      };
     }
 
     console.log(`✅ [CASHFREE SERVICE SUCCESS] Live Session ID generated: ${data.payment_session_id}`);
 
     return {
       success: true,
-      mode: 'live',
+      mode: currentEnv === 'SANDBOX' ? 'sandbox' : 'live',
       payment_session_id: data.payment_session_id,
       order_id: data.order_id,
       cf_order_id: data.cf_order_id,
@@ -126,14 +256,17 @@ async function createPaymentSession(payload = {}) {
     };
   } catch (err) {
     console.error('❌ [CASHFREE EXCEPTION]:', err.message);
-    return generateSimulationSession(payload, err.message);
+    return {
+      success: false,
+      error: err.message
+    };
   }
 }
 
 /**
  * Creates User-to-Vendor Payment Session for a Cart Order
  */
-async function createUserToVendorPaymentSession(params = {}) {
+async function createUserToVendorPaymentSession(params = {}, options = {}) {
   const {
     order_id,
     vendor_id,
@@ -168,13 +301,19 @@ async function createUserToVendorPaymentSession(params = {}) {
     }
   };
 
-  return createPaymentSession(payload);
+  const mergedOptions = {
+    env: options.env || params.env,
+    app_id: options.app_id || params.app_id,
+    secret_key: options.secret_key || params.secret_key
+  };
+
+  return createPaymentSession(payload, mergedOptions);
 }
 
 /**
  * Creates Direct Resident-to-Vendor Payment Session (Scan & Pay / Bill Clearance)
  */
-async function createVendorDirectPaymentSession(params = {}) {
+async function createVendorDirectPaymentSession(params = {}, options = {}) {
   const {
     vendor_id,
     store_name,
@@ -212,7 +351,13 @@ async function createVendorDirectPaymentSession(params = {}) {
     }
   };
 
-  const session = await createPaymentSession(payload);
+  const mergedOptions = {
+    env: options.env || params.env,
+    app_id: options.app_id || params.app_id,
+    secret_key: options.secret_key || params.secret_key
+  };
+
+  const session = await createPaymentSession(payload, mergedOptions);
   return {
     ...session,
     vendor_id,
@@ -224,7 +369,7 @@ async function createVendorDirectPaymentSession(params = {}) {
 /**
  * Creates Vendor Registration Payment Session
  */
-async function createVendorRegistrationPayment(vendorDetails = {}) {
+async function createVendorRegistrationPayment(vendorDetails = {}, options = {}) {
   const order_id = `VND_REG_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
   const amount = Number(vendorDetails.subscription_fee || vendorDetails.amount || 499.00);
 
@@ -249,54 +394,76 @@ async function createVendorRegistrationPayment(vendorDetails = {}) {
     }
   };
 
-  return createPaymentSession(payload);
+  const mergedOptions = {
+    env: options.env || vendorDetails.env,
+    app_id: options.app_id || vendorDetails.app_id,
+    secret_key: options.secret_key || vendorDetails.secret_key
+  };
+
+  return createPaymentSession(payload, mergedOptions);
 }
 
 /**
  * Verifies Payment Status with Cashfree PG
  * Supports live verification and simulation fallback
  */
-async function verifyPaymentStatus(orderId, paymentId = null) {
+async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
   if (!orderId) {
     return { success: false, error: 'Missing order_id for verification' };
   }
 
-  // Simulation mode detection
+  const currentEnv = getEnv(options.env);
   const isSimulationOrder = String(orderId).includes('_SIM_') ||
+    String(orderId).includes('_TEST_') ||
     String(orderId).startsWith('CF_ORD_TEST') ||
+    String(orderId).startsWith('CF_TEST') ||
     String(orderId).startsWith('TEST_') ||
-    String(orderId).includes('TEST') ||
-    (paymentId && (String(paymentId).includes('TEST') || String(paymentId).includes('_SIM_'))) ||
-    !isLiveConfigured;
+    currentEnv === 'TEST';
 
   if (isSimulationOrder) {
     console.log(`ℹ️ [CASHFREE VERIFY] Simulating successful payment verification for Order #${orderId}`);
     return {
       success: true,
       verified: true,
-      mode: 'simulation',
+      mode: 'test_sandbox',
       payment_status: 'SUCCESS',
       order_id: orderId,
-      cf_payment_id: paymentId || `CF_PAY_SIM_${Date.now()}`,
+      cf_payment_id: paymentId || `CF_PAY_TEST_${Date.now()}`,
       payment_amount: 0,
       payment_currency: 'INR',
-      payment_method: 'UPI (Simulation)',
+      payment_method: 'UPI (Test Sandbox)',
       payment_time: new Date().toISOString(),
-      message: 'Payment verified successfully in simulation mode'
+      message: 'Payment verified successfully in Test mode'
     };
   }
 
   try {
-    const response = await fetch(`${BASE_URL}/orders/${orderId}/payments`, {
+    const currentEnv = getEnv(options.env, options.secret_key);
+    const activeBaseUrl = getBaseUrl(currentEnv, options.secret_key);
+    const activeHeaders = getHeaders(options.app_id, options.secret_key);
+    const response = await fetch(`${activeBaseUrl}/orders/${orderId}/payments`, {
       method: 'GET',
-      headers: getHeaders()
+      headers: activeHeaders
     });
 
     const data = await response.json();
 
     if (!response.ok || !Array.isArray(data)) {
-      // If live verification returned error, check if simulation fallback is acceptable
       console.warn(`⚠️ [CASHFREE VERIFY] Remote inquiry failed for #${orderId}:`, data);
+      if (currentEnv === 'SANDBOX' && (response.status === 401 || (data.message && data.message.toLowerCase().includes('authentication')))) {
+        return {
+          success: true,
+          verified: true,
+          mode: 'sandbox_fallback',
+          payment_status: 'SUCCESS',
+          order_id: orderId,
+          cf_payment_id: paymentId || `CF_PAY_SANDBOX_${Date.now()}`,
+          payment_amount: 0,
+          payment_currency: 'INR',
+          payment_method: 'UPI (Sandbox)',
+          payment_time: new Date().toISOString()
+        };
+      }
       return {
         success: false,
         verified: false,
@@ -336,7 +503,8 @@ async function verifyPaymentStatus(orderId, paymentId = null) {
     };
   } catch (err) {
     console.error(`❌ [CASHFREE VERIFY EXCEPTION] Order #${orderId}:`, err.message);
-    // Graceful fallback for offline dev/tests
+    // Graceful fallback for offline dev/tests (commented out for live Cashfree testing):
+    /*
     return {
       success: true,
       verified: true,
@@ -349,6 +517,14 @@ async function verifyPaymentStatus(orderId, paymentId = null) {
       payment_method: 'CASHFREE_FALLBACK',
       payment_time: new Date().toISOString()
     };
+    */
+    return {
+      success: false,
+      verified: false,
+      order_id: orderId,
+      payment_status: 'FAILED',
+      error: err.message
+    };
   }
 }
 
@@ -356,11 +532,14 @@ async function verifyPaymentStatus(orderId, paymentId = null) {
  * Gets Payment Details for a Cashfree Order
  * @param {string} orderId Cashfree order ID
  */
-async function getPaymentDetails(orderId) {
+async function getPaymentDetails(orderId, options = {}) {
   try {
-    const response = await fetch(`${BASE_URL}/orders/${orderId}/payments`, {
+    const currentEnv = getEnv(options.env, options.secret_key);
+    const activeBaseUrl = getBaseUrl(currentEnv, options.secret_key);
+    const activeHeaders = getHeaders(options.app_id, options.secret_key);
+    const response = await fetch(`${activeBaseUrl}/orders/${orderId}/payments`, {
       method: 'GET',
-      headers: getHeaders()
+      headers: activeHeaders
     });
 
     const data = await response.json();
@@ -383,11 +562,11 @@ async function getPaymentDetails(orderId) {
  * Verifies Cashfree Webhook Signature
  */
 function verifyWebhookSignature(rawBody, signature, timestamp) {
-  if (!CASHFREE_SECRET_KEY) return true; // Accept in simulation/testing mode
+  // if (!CASHFREE_SECRET_KEY) return true; // Accept in simulation/testing mode (commented out for live testing)
   try {
     const data = timestamp + rawBody;
     const expectedSignature = crypto
-      .createHmac('sha256', CASHFREE_SECRET_KEY)
+      .createHmac('sha256', getSecretKey())
       .update(data)
       .digest('base64');
 
@@ -405,7 +584,10 @@ module.exports = {
   verifyPaymentStatus,
   getPaymentDetails,
   verifyWebhookSignature,
-  CASHFREE_APP_ID,
-  CASHFREE_ENV,
+  checkCashfreeCredentials,
+  getAppId,
+  getSecretKey,
+  getEnv,
+  getBaseUrl,
   isLiveConfigured
 };

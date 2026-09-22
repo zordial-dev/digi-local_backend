@@ -283,35 +283,47 @@ async function createOrder(req, res) {
       resolvedCustomerName = rawCustomerName || 'Resident Customer';
     }
 
+    const rawMethod = String(req.body.payment_method || req.body.paymentMethod || req.body.payment_mode || 'COD').trim().toUpperCase();
+    const isCashfree = rawMethod === 'CASHFREE' || rawMethod === 'ONLINE' || rawMethod === 'ONLINE_PAYMENT' || rawMethod === 'CARD' || rawMethod === 'UPI';
+    const paymentMethod = isCashfree ? 'CASHFREE' : 'COD';
+    const paymentStatus = 'PENDING';
+    const orderStatus = isCashfree ? 'PENDING' : 'PLACED';
+
     await query(
-      `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (
+         order_id, user_id, vendor_id, society_id, total_amount, status,
+         payment_status, payment_method, customer_phone, delivery_address, created_at, customer_name
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         resolvedUserId || 'usr_anonymous',
         vendor_id,
         society_id || null,
         numTotal,
-        'PENDING',
+        orderStatus,
+        paymentStatus,
+        paymentMethod,
+        rawPhone || null,
         finalDeliveryAddress,
         createdAt,
         resolvedCustomerName
       ]
-    ).catch(e => {
-        return query(
-          `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            orderId,
-            resolvedUserId || 'usr_anonymous',
-            vendor_id,
-            society_id || null,
-            numTotal,
-            'PENDING',
-            finalDeliveryAddress,
-            createdAt
-          ]
-        );
+    ).catch(async () => {
+      return query(
+        `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          orderId,
+          resolvedUserId || 'usr_anonymous',
+          vendor_id,
+          society_id || null,
+          numTotal,
+          orderStatus,
+          finalDeliveryAddress,
+          createdAt,
+          resolvedCustomerName
+        ]
+      );
     });
 
     // ── Save last address entered by user to database ─────────────────────────────
@@ -372,47 +384,47 @@ async function createOrder(req, res) {
       ).catch((err) => console.error('Error inserting order detail:', err.message));
     }
 
-    // Generate WhatsApp Message & Fetch societyName
+    // Fetch vendor & society details for app order context
     const vendorRes = await query(`SELECT store_name, phone_number FROM vendors WHERE vendor_id = ?`, [vendor_id]);
     const societyRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [society_id || 1]);
     
     const storeName = vendorRes.rows[0]?.store_name || 'Vendor Store';
-    let vendorPhone = vendorRes.rows[0]?.phone_number || '';
-    if (vendorPhone.length === 10) vendorPhone = '91' + vendorPhone; // default to India code
-    else if (!vendorPhone.startsWith('91') && !vendorPhone.startsWith('+')) vendorPhone = '91' + vendorPhone;
-    vendorPhone = vendorPhone.replace(/\D/g, ''); // strip non-digits
-
     const societyName = societyRes.rows[0]?.society_name || 'Society Name';
-    
-    const serviceCharge = Math.max(0, numTotal - subtotal);
-    const timeString = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
-    let msg = `📦 *New Order from ${delivery_address}* - ${storeName}
---------------------------------------
-🏠 *Flat/Room:* ${delivery_address}
-🕒 *Ordered At:* ${timeString}
---------------------------------------
-
-🛒 *Items Ordered:*\n`;
-
-    populatedItems.forEach(item => {
-        msg += `* ${item.quantity || 1}x ${item.item_name || 'Item'} (₹${Number(item.price || 0).toFixed(2)} each)\n`;
-    });
-
-    msg += `
---------------------------------------
-🧾 *Summary:*
-* Subtotal: ₹${subtotal.toFixed(2)}
-* Service Charge: ₹${serviceCharge.toFixed(2)}
-* *Total Amount:* ₹${numTotal.toFixed(2)}
---------------------------------------
-
-Please confirm preparation and delivery. Thank you!`;
-
-    const finalCustomerName = resolvedCustomerName;
+    const finalCustomerName = resolvedCustomerName || 'Resident Customer';
     const itemsCount = populatedItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
 
-    // Trigger instant high-priority Expo Push Notification & Socket alert to vendor on order placement
+    // Initialize Cashfree session if user chose online payment
+    let cashfreeSession = null;
+    if (isCashfree) {
+      const cashfreeService = require('../../services/cashfreeService');
+      const cleanPhone = (rawPhone || '').replace(/\D/g, '');
+      cashfreeSession = await cashfreeService.createUserToVendorPaymentSession({
+        order_id: orderId,
+        vendor_id: vendor_id,
+        store_name: storeName,
+        amount: numTotal,
+        customer_id: resolvedUserId || `CUST_${cleanPhone || Date.now()}`,
+        customer_name: finalCustomerName,
+        customer_email: req.body.customer_email || req.body.email || 'customer@digilocal.in',
+        customer_phone: cleanPhone || '9876543210',
+        return_url: req.body.return_url,
+        notify_url: req.body.notify_url
+      }, {
+        env: req.body.env,
+        app_id: req.body.app_id,
+        secret_key: req.body.secret_key
+      }).catch(cfErr => ({ success: false, error: cfErr.message }));
+
+      if (cashfreeSession && cashfreeSession.success && cashfreeSession.payment_session_id) {
+        await query(
+          `UPDATE orders SET cashfree_order_id = ?, payment_method = 'CASHFREE' WHERE order_id = ?`,
+          [cashfreeSession.order_id, orderId]
+        ).catch(() => {});
+      }
+    }
+
+    // Trigger instant Expo Push Notification & Socket alert to vendor app
     if (req.body.skip_notification !== true) {
       const notificationService = require('../../services/notificationService');
       notificationService.notifyVendorNewOrder({
@@ -421,20 +433,22 @@ Please confirm preparation and delivery. Thank you!`;
         total_amount: numTotal,
         customer_name: finalCustomerName,
         items_count: itemsCount,
+        payment_method: paymentMethod,
+        payment_status: paymentStatus,
         items: populatedItems
       }).catch(err => console.error('[Order Push Notification Error]:', err.message));
     }
 
-
-    const whatsapp_url = `https://wa.me/${vendorPhone}?text=${encodeURIComponent(msg)}`;
-
-    res.status(201).json({
-      message: 'Order placed successfully',
+    const responsePayload = {
+      success: true,
+      message: isCashfree
+        ? (cashfreeSession?.success ? 'Order created. Please complete payment via Cashfree.' : 'Order created, but Cashfree payment session failed to initialize.')
+        : 'Order placed successfully via Cash on Delivery.',
       order_id: orderId,
       total_amount: numTotal,
-      status: 'PLACED',
-      whatsapp_url: whatsapp_url,
-      whatsapp_message: msg,
+      status: orderStatus,
+      payment_method: paymentMethod,
+      payment_status: paymentStatus,
       societyName: societyName,
       created_at: createdAt,
       order: {
@@ -444,9 +458,10 @@ Please confirm preparation and delivery. Thank you!`;
         customer_name: finalCustomerName,
         phone_number: rawPhone || '+919784319840',
         delivery_address: delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
-        status: 'PLACED',
-        payment_status: 'PAID',
-        payment_method: req.body.payment_method || 'COD / WhatsApp',
+        status: orderStatus,
+        payment_status: paymentStatus,
+        payment_method: paymentMethod,
+        cashfree_order_id: cashfreeSession?.order_id || null,
         date: createdAt,
         created_at: createdAt,
         total_amount: numTotal,
@@ -458,7 +473,18 @@ Please confirm preparation and delivery. Thank you!`;
           price: Number(i.price || 0)
         }))
       }
-    });
+    };
+
+    if (isCashfree && cashfreeSession) {
+      responsePayload.payment_session_id = cashfreeSession.payment_session_id;
+      responsePayload.payment_url = cashfreeSession.payment_url;
+      responsePayload.cashfree = cashfreeSession;
+      if (!cashfreeSession.success) {
+        responsePayload.payment_error = cashfreeSession.error || 'Failed to initialize Cashfree payment session';
+      }
+    }
+
+    return res.status(201).json(responsePayload);
   } catch (err) {
     console.error('Error creating order:', err);
     res.status(400).json({ error: err.message || 'Failed to place order' });

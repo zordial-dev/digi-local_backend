@@ -485,7 +485,7 @@ async function getUserOrders(req, res) {
         status: statusUpper,
         status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
         payment_status: ord.payment_status || 'PAID',
-        payment_method: ord.payment_method || 'COD / WhatsApp',
+        payment_method: ord.payment_method || 'COD',
         total_amount: Number(ord.total_amount || 0),
         date: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
         created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),

@@ -28,8 +28,8 @@ router.patch('/:vendorId/orders/:id/status', ordersController.updateOrderStatus)
 // GET /api/orders/:orderId - Single order detail lookup
 router.get('/:orderId', ordersController.getOrderById);
 
-// Trigger Push Notification & Firebase/Socket alert when user confirms via WhatsApp
+// Trigger In-App Push Notification & Firebase/Socket alert to vendor
 router.post('/:id/notify', ordersController.notifyOrderVendor);
-router.post('/:id/confirm-whatsapp', ordersController.notifyOrderVendor);
+router.post('/:id/confirm-whatsapp', ordersController.notifyOrderVendor); // backward-compatible alias
 
 module.exports = router;

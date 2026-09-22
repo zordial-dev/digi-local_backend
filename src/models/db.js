@@ -597,8 +597,12 @@ async function setupTablesPg() {
   try {
     await pgPool.query(`
       INSERT INTO locations (location_id, area, city, state, pincode, created_at)
-      SELECT society_id, society_name, COALESCE(city, 'Noida'), COALESCE(state, 'Uttar Pradesh'), COALESCE(pincode, '201301'), COALESCE(created_at, CURRENT_TIMESTAMP)
-      FROM societies
+      SELECT s.society_id, s.society_name, COALESCE(s.city, 'Noida'), COALESCE(s.state, 'Uttar Pradesh'), COALESCE(s.pincode, '201301'), COALESCE(s.created_at, CURRENT_TIMESTAMP)
+      FROM societies s
+      WHERE NOT EXISTS (
+        SELECT 1 FROM locations l 
+        WHERE LOWER(TRIM(l.area)) = LOWER(TRIM(s.society_name))
+      )
       ON CONFLICT (location_id) DO NOTHING;
     `).catch(() => {});
 
@@ -693,7 +697,6 @@ async function removeDuplicateVendors() {
       await query(`UPDATE payments SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
 
       await query(`DELETE FROM vendors WHERE vendor_id = ?`, [duplicateVendorId]);
-      console.log(`[Deduplication] Removed duplicate shop ID ${duplicateVendorId} in society. Reassigned records to vendor ID ${keptVendorId}.`);
     }
 
     return { removedCount: duplicatesToRemove.length };
@@ -733,7 +736,6 @@ async function removeDuplicateLocations() {
       const { duplicateLocId, keptLocId } = dup;
       await query(`UPDATE vendors SET location_id = ? WHERE location_id = ?`, [keptLocId, duplicateLocId]).catch(() => {});
       await query(`DELETE FROM locations WHERE location_id = ?`, [duplicateLocId]).catch(() => {});
-      console.log(`[Deduplication] Removed duplicate location ID ${duplicateLocId}. Reassigned vendors to location ID ${keptLocId}.`);
     }
 
     return { removedCount: duplicatesToRemove.length };

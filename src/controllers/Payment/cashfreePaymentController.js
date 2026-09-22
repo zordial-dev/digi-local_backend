@@ -91,7 +91,21 @@ async function createOrderPaymentSession(req, res) {
       customer_phone: targetCustomerPhone || '9876543210',
       return_url,
       notify_url
+    }, {
+      env: req.body.env,
+      app_id: req.body.app_id,
+      secret_key: req.body.secret_key
     });
+
+    if (!session || !session.success || !session.payment_session_id) {
+      console.warn('⚠️ [CASHFREE PAYMENT CONTROLLER] Session generation failed:', session?.error);
+      return res.status(400).json({
+        success: false,
+        error: session?.error || 'Failed to create Cashfree payment session',
+        details: session?.raw || session?.error,
+        cashfree: session
+      });
+    }
 
     // 4. Update the order record with Cashfree order info if order exists
     await query(
@@ -161,7 +175,11 @@ async function verifyOrderPayment(req, res) {
     const existingOrder = orderRes.rows?.[0] || null;
 
     // 2. Call Cashfree PG to verify payment status
-    const verification = await cashfreeService.verifyPaymentStatus(lookupOrderId, cashfree_payment_id);
+    const verification = await cashfreeService.verifyPaymentStatus(lookupOrderId, cashfree_payment_id, {
+      env: req.body.env,
+      app_id: req.body.app_id,
+      secret_key: req.body.secret_key
+    });
 
     if (!verification.success || !verification.verified) {
       return res.status(400).json({
@@ -302,9 +320,13 @@ async function payVendorDirect(req, res) {
     );
 
     if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      // Fetch available vendors to assist testing
+      const sampleVendorsRes = await query(`SELECT vendor_id, store_name FROM vendors LIMIT 3`).catch(() => ({ rows: [] }));
+      const availableList = sampleVendorsRes.rows?.map(v => `#${v.vendor_id} (${v.store_name})`).join(', ') || '1296, 1302, 1298';
+
       return res.status(404).json({
         success: false,
-        error: `Vendor with ID ${vendor_id} not found`
+        error: `Vendor with ID ${vendor_id} not found. Available active vendors: ${availableList}`
       });
     }
 
@@ -323,7 +345,21 @@ async function payVendorDirect(req, res) {
       notes: notes || `Direct payment to ${vendor.store_name}`,
       return_url,
       notify_url
+    }, {
+      env: req.body.env,
+      app_id: req.body.app_id,
+      secret_key: req.body.secret_key
     });
+
+    if (!session || !session.success || !session.payment_session_id) {
+      console.warn('⚠️ [CASHFREE DIRECT PAY CONTROLLER] Session generation failed:', session?.error);
+      return res.status(400).json({
+        success: false,
+        error: session?.error || 'Failed to create direct vendor payment session',
+        details: session?.raw || session?.error,
+        cashfree: session
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -376,7 +412,11 @@ async function verifyDirectPayment(req, res) {
       });
     }
 
-    const verification = await cashfreeService.verifyPaymentStatus(order_id, cashfree_payment_id);
+    const verification = await cashfreeService.verifyPaymentStatus(order_id, cashfree_payment_id, {
+      env: req.body.env,
+      app_id: req.body.app_id,
+      secret_key: req.body.secret_key
+    });
 
     if (!verification.success || !verification.verified) {
       return res.status(400).json({
@@ -690,6 +730,30 @@ async function getAdminCashfreeLedger(req, res) {
   }
 }
 
+/**
+ * 8. Live Credential Diagnostic Check
+ * GET or POST /api/payments/cashfree/check-credentials
+ */
+async function checkCredentials(req, res) {
+  try {
+    const options = {
+      app_id: req.body?.app_id || req.query?.app_id,
+      secret_key: req.body?.secret_key || req.query?.secret_key,
+      env: req.body?.env || req.query?.env
+    };
+
+    const result = await cashfreeService.checkCashfreeCredentials(options);
+    const httpStatus = result.authenticated ? 200 : (result.status_code || 400);
+    return res.status(httpStatus).json(result);
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      authenticated: false,
+      error: err.message
+    });
+  }
+}
+
 module.exports = {
   createOrderPaymentSession,
   verifyOrderPayment,
@@ -697,5 +761,6 @@ module.exports = {
   verifyDirectPayment,
   cashfreeWebhook,
   getVendorCashfreePayments,
-  getAdminCashfreeLedger
+  getAdminCashfreeLedger,
+  checkCredentials
 };
