@@ -518,7 +518,7 @@ async function updateOrderStatus(req, res) {
     }
 
     const allowedStatuses = [
-      'PENDING', 'CONFIRMED', 'ACCEPTED', 'IN_PROGRESS', 
+      'PLACED', 'PENDING', 'CONFIRMED', 'ACCEPTED', 'IN_PROGRESS', 
       'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 
       'COMPLETED', 'COMPLETE', 'FULFILLED', 'DONE', 
       'CANCELLED', 'CANCELED', 'REJECTED', 'DECLINED'
@@ -526,7 +526,7 @@ async function updateOrderStatus(req, res) {
 
     if (!allowedStatuses.includes(norm)) {
       return res.status(400).json({ 
-        error: `Invalid order status '${rawStatus}'. Allowed statuses: PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED`,
+        error: `Invalid order status '${rawStatus}'. Allowed statuses: PLACED, PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED`,
         allowedStatuses
       });
     }

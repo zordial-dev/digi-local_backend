@@ -18,7 +18,11 @@ const createOrderSchema = {
 
 const updateOrderStatusSchema = {
   body: z.object({
-    status: z.enum(['PLACED', 'ACCEPTED', 'COMPLETED', 'CANCELLED'], 'Invalid order status value')
+    status: z.enum([
+      'PLACED', 'PENDING', 'CONFIRMED', 'ACCEPTED', 'IN_PROGRESS',
+      'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'COMPLETED',
+      'COMPLETE', 'CANCELLED', 'CANCELED', 'REJECTED'
+    ], 'Invalid order status value')
   })
 };
 

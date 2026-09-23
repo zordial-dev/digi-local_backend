@@ -104,6 +104,17 @@ router.get('/status/:vendorId', vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/coverage', vendorPanelController.updateVendorCoverage);
+
+// Vendor Password Management Endpoints
+router.put('/:vendorId/password', vendorAuthController.updateVendorPassword);
+router.patch('/:vendorId/password', vendorAuthController.updateVendorPassword);
+router.post('/:vendorId/password', vendorAuthController.updateVendorPassword);
+router.put('/:vendorId/change-password', vendorAuthController.updateVendorPassword);
+router.post('/:vendorId/change-password', vendorAuthController.updateVendorPassword);
+router.put('/password', vendorAuthController.updateVendorPassword);
+router.post('/password', vendorAuthController.updateVendorPassword);
+router.post('/change-password', vendorAuthController.updateVendorPassword);
+
 router.put(['/:vendorId(\\d+)/settings', '/:vendorId(\\d+)/profile', '/:vendorId(\\d+)'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
 router.post(['/:vendorId(\\d+)/settings', '/:vendorId(\\d+)/profile', '/:vendorId(\\d+)'], upload.any(), handleMulterError, vendorPanelController.updateSettings);
 router.patch(['/:vendorId(\\d+)/settings', '/:vendorId(\\d+)/profile', '/:vendorId(\\d+)'], upload.any(), handleMulterError, vendorPanelController.updateSettings);

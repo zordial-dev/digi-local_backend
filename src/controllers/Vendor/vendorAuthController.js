@@ -550,7 +550,185 @@ async function logoutVendor(req, res) {
   }
 }
 async function forgotPassword(req, res) { return res.status(200).json({ message: 'Forgot password link sent' }); }
-async function resetPassword(req, res) { return res.status(200).json({ message: 'Password reset' }); }
+
+/**
+ * PUT /api/vendors/:vendorId/password
+ * PATCH /api/vendors/:vendorId/password
+ * POST /api/vendors/:vendorId/password
+ * PUT /api/vendors/:vendorId/change-password
+ * Changes / updates the password for a vendor.
+ */
+async function updateVendorPassword(req, res) {
+  try {
+    const rawVendorId = req.params.vendorId || req.params.id || req.user?.vendorId || req.user?.id || req.body?.vendor_id || req.body?.vendorId;
+    const body = req.body || {};
+
+    if (!rawVendorId) {
+      return res.status(400).json({ success: false, error: 'Vendor ID is required to update password.' });
+    }
+
+    const newPassword = String(
+      body.new_password ||
+      body.newPassword ||
+      body.password ||
+      body.pass ||
+      body.newPass ||
+      body.create_password ||
+      ''
+    ).trim();
+
+    const currentPassword = String(
+      body.current_password ||
+      body.currentPassword ||
+      body.old_password ||
+      body.oldPassword ||
+      body.existing_password ||
+      body.current_pass ||
+      body.old_pass ||
+      ''
+    ).trim();
+
+    const confirmPassword = String(
+      body.confirm_password ||
+      body.confirmPassword ||
+      body.confirm_new_password ||
+      ''
+    ).trim();
+
+    if (!newPassword) {
+      return res.status(400).json({ success: false, error: 'New password is required.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long.' });
+    }
+
+    if (confirmPassword && confirmPassword !== newPassword) {
+      return res.status(400).json({ success: false, error: 'New password and confirmation password do not match.' });
+    }
+
+    // Lookup vendor in database
+    const vendorRes = await query(
+      `SELECT vendor_id, vendor_name, email, phone_number, password, password_hash 
+       FROM vendors 
+       WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+      [rawVendorId, String(rawVendorId)]
+    );
+
+    if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Vendor with ID "${rawVendorId}" not found.` });
+    }
+
+    const vendor = vendorRes.rows[0];
+
+    // If current password was provided, verify it against stored hash or plaintext
+    if (currentPassword) {
+      const storedHash = vendor.password_hash || vendor.password;
+      let isCurrentValid = false;
+      if (storedHash) {
+        const matchRes = await comparePassword(currentPassword, storedHash);
+        if (matchRes && matchRes.matches) {
+          isCurrentValid = true;
+        } else if (storedHash === currentPassword) {
+          isCurrentValid = true;
+        }
+      }
+
+      if (!isCurrentValid) {
+        return res.status(401).json({
+          success: false,
+          error: 'Current password is incorrect. Please check and try again.'
+        });
+      }
+    }
+
+    // Hash the new password securely
+    const hashedPassword = await hashPassword(newPassword);
+
+    // Update vendors table (both password and password_hash for backward compatibility)
+    await query(
+      `UPDATE vendors 
+       SET password = ?, password_hash = ? 
+       WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+      [hashedPassword, hashedPassword, vendor.vendor_id, String(vendor.vendor_id)]
+    );
+
+    // Also update linked users table record if any
+    await query(
+      `UPDATE users 
+       SET password_hash = ? 
+       WHERE user_id = ? OR phone = ? OR email = ?`,
+      [hashedPassword, `usr_v_${vendor.vendor_id}`, vendor.phone_number, vendor.email]
+    ).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      status: 'success',
+      message: 'Password updated successfully.',
+      vendor_id: Number(vendor.vendor_id)
+    });
+  } catch (err) {
+    console.error('Error updating vendor password:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error while updating password.' });
+  }
+}
+
+async function resetPassword(req, res) {
+  try {
+    const body = req.body || {};
+    const identifier = String(body.identifier || body.phone || body.mobile || body.email || body.vendor_id || body.vendorId || '').trim();
+    const newPassword = String(body.new_password || body.newPassword || body.password || body.pass || '').trim();
+
+    if (!newPassword) {
+      return res.status(400).json({ success: false, error: 'New password is required.' });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({ success: false, error: 'Password must be at least 6 characters long.' });
+    }
+
+    if (!identifier) {
+      return res.status(400).json({ success: false, error: 'Phone number, email, or vendor ID is required.' });
+    }
+
+    const cleanDigits = identifier.replace(/\D/g, '');
+    const last10 = cleanDigits.slice(-10);
+
+    const vendorRes = await query(
+      `SELECT vendor_id, vendor_name, email, phone_number FROM vendors 
+       WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ? OR LOWER(email) = LOWER(?) OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`,
+      [identifier, identifier, identifier, identifier, last10, `%${last10}`]
+    );
+
+    if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Vendor account not found with the provided details.' });
+    }
+
+    const vendor = vendorRes.rows[0];
+    const hashedPassword = await hashPassword(newPassword);
+
+    await query(
+      `UPDATE vendors SET password = ?, password_hash = ? WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+      [hashedPassword, hashedPassword, vendor.vendor_id, String(vendor.vendor_id)]
+    );
+
+    await query(
+      `UPDATE users SET password_hash = ? WHERE user_id = ? OR phone = ? OR email = ?`,
+      [hashedPassword, `usr_v_${vendor.vendor_id}`, vendor.phone_number, vendor.email]
+    ).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      status: 'success',
+      message: 'Password reset successfully.',
+      vendor_id: Number(vendor.vendor_id)
+    });
+  } catch (err) {
+    console.error('Error resetting vendor password:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error while resetting password.' });
+  }
+}
+
 async function checkCoverage(req, res) { return res.status(200).json({ is_serviceable: true }); }
 
 /**
@@ -704,5 +882,6 @@ module.exports = {
   forgotPassword,
   verifyVendorOtp: loginVendorWithOtp,
   resetPassword,
+  updateVendorPassword,
   checkCoverage
 };

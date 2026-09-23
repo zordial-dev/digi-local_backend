@@ -429,9 +429,47 @@ Vendors can view their order revenues and settlement credit history:
 
 | Flow | Method | Endpoint | Description |
 | :--- | :--- | :--- | :--- |
-| **COD Order** | `POST` | `/api/orders` | Creates order with `payment_method: "COD"` |
-| **Cashfree Order** | `POST` | `/api/orders` | Creates order and returns `payment_session_id` |
-| **Verify Payment** | `POST` | `/api/payments/cashfree/verify` | Confirms payment and updates order to `PAID` |
+| **COD Order** | `POST` | `/api/orders` | Creates order with `payment_method: "COD"` (Status: `PLACED`) |
+| **Cashfree Order** | `POST` | `/api/orders` | Creates order and returns `payment_session_id` (Status: `PENDING`) |
+| **Verify Payment** | `POST` | `/api/payments/cashfree/verify` | Confirms payment and updates order to `PAID` / `CONFIRMED` |
+| **Update Order Status** | `PUT` | `/api/orders/:id/status` | Advances status (`ACCEPTED`, `OUT_FOR_DELIVERY`, `DELIVERED`, `CANCELLED`) |
+| **Vendor Order Status** | `PUT` | `/api/vendors/:vendorId/orders/:orderId/status` | Vendor-specific status update pipeline |
+| **Get Order Details** | `GET` | `/api/orders/:orderId` | Single order status and item details |
+| **Customer Orders** | `GET` | `/api/orders/user/:userId` | Customer orders list with uppercase `status` |
+| **Vendor Orders** | `GET` | `/api/orders/vendor/:vendorId` | Vendor orders list with lowercase `status` |
 | **Save Vendor Bank** | `PUT` | `/api/vendorPanel/:vendorId/payment-details` | Vendor saves Account Number & IFSC |
 | **View Vendor Bank** | `GET` | `/api/vendorPanel/:vendorId` | Fetches vendor profile with bank info |
 | **Vendor Ledger** | `GET` | `/api/payments/cashfree/vendor/:vendorId/ledger` | Displays settlements & credited payments |
+
+---
+
+## 🔄 8. Order Status & Lifecycle Quick Reference
+
+For complete detailed documentation on order status state machines, input mapping, error cases, and UI badge palettes, see [ORDER_STATUS_API_DOCS.md](file:///c:/Users/LENOVO/Desktop/digilocal_backend_mock/ORDER_STATUS_API_DOCS.md).
+
+### Order Status Finite State Machine:
+- **`PLACED`**: Initial status for COD orders.
+- **`PENDING`**: Initial status for Cashfree online payment orders.
+- **`CONFIRMED`**: Cashfree payment verified (`POST /api/payments/cashfree/verify`).
+- **`ACCEPTED`**: Vendor accepted the order (also accepts synonyms: `"CONFIRMED"`, `"ACCEPT"`, `"PREPARING"`).
+- **`IN_PROGRESS`**: Out for delivery / preparing (also accepts synonyms: `"OUT_FOR_DELIVERY"`, `"PROCESSING"`).
+- **`COMPLETED`**: Delivered & fulfilled (also accepts synonyms: `"DELIVERED"`, `"COMPLETE"`, `"FULFILLED"`, `"DONE"`).
+- **`CANCELLED`**: Cancelled or rejected (also accepts synonyms: `"CANCELED"`, `"REJECTED"`, `"DECLINED"`).
+
+### Update Status Quick Payload (`PUT /api/orders/:id/status`):
+```json
+{
+  "status": "OUT_FOR_DELIVERY"
+}
+```
+**Response (`200 OK`)**:
+```json
+{
+  "success": true,
+  "message": "Order status updated successfully",
+  "order_id": "ORD-5481",
+  "status": "IN_PROGRESS",
+  "raw_status": "OUT_FOR_DELIVERY"
+}
+```
+

@@ -137,6 +137,16 @@ router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], authe
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
 
+// Password Management Endpoints
+router.put('/:vendorId/password', vendorAuthController.updateVendorPassword);
+router.patch('/:vendorId/password', vendorAuthController.updateVendorPassword);
+router.post('/:vendorId/password', vendorAuthController.updateVendorPassword);
+router.put('/:vendorId/change-password', vendorAuthController.updateVendorPassword);
+router.post('/:vendorId/change-password', vendorAuthController.updateVendorPassword);
+router.put('/password', vendorAuthController.updateVendorPassword);
+router.post('/password', vendorAuthController.updateVendorPassword);
+router.post('/change-password', vendorAuthController.updateVendorPassword);
+
 // PUT/POST/PATCH /api/vendorPanel/:vendorId/settings, /profile, and /:vendorId directly
 router.put(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
 router.post(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);

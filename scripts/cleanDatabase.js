@@ -7,21 +7,21 @@ async function runCleanup() {
     const result = await cleanDatabaseTables({ cleanVendors });
 
     console.log('\n==================================================');
-    console.log('✅ DATABASE CLEANUP COMPLETE');
+    console.log('DATABASE CLEANUP COMPLETE');
     console.log('==================================================');
     console.log(`Summary: ${result.message}\n`);
 
-    console.log('🗑️ Cleaned Tables:');
+    console.log('Cleaned Tables:');
     result.cleanedTables.forEach(t => console.log(`  - ${t}`));
 
-    console.log('\n🔒 Preserved Sensitive & System Data:');
+    console.log('Preserved Sensitive & System Data:');
     result.preservedTables.forEach(t => console.log(`  - ${t}`));
     console.log('==================================================\n');
 
   } catch (err) {
-    console.error('❌ Error executing database cleanup:', err);
+    console.error('Error executing database cleanup:', err);
   } finally {
-    await closeDb().catch(() => {});
+    await closeDb().catch(() => { });
     process.exit(0);
   }
 }
