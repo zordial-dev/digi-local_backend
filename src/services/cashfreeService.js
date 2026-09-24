@@ -306,9 +306,12 @@ async function createUserToVendorPaymentSession(params = {}, options = {}) {
   };
 
   const mergedOptions = {
+    ...params,
+    ...options,
     env: options.env || params.env,
     app_id: options.app_id || params.app_id,
-    secret_key: options.secret_key || params.secret_key
+    secret_key: options.secret_key || params.secret_key,
+    mock: options.mock === true || params.mock === true || options.env === 'TEST' || params.env === 'TEST'
   };
 
   return createPaymentSession(payload, mergedOptions);
@@ -356,9 +359,12 @@ async function createVendorDirectPaymentSession(params = {}, options = {}) {
   };
 
   const mergedOptions = {
+    ...params,
+    ...options,
     env: options.env || params.env,
     app_id: options.app_id || params.app_id,
-    secret_key: options.secret_key || params.secret_key
+    secret_key: options.secret_key || params.secret_key,
+    mock: options.mock === true || params.mock === true || options.env === 'TEST' || params.env === 'TEST'
   };
 
   const session = await createPaymentSession(payload, mergedOptions);
@@ -399,9 +405,12 @@ async function createVendorRegistrationPayment(vendorDetails = {}, options = {})
   };
 
   const mergedOptions = {
+    ...vendorDetails,
+    ...options,
     env: options.env || vendorDetails.env,
     app_id: options.app_id || vendorDetails.app_id,
-    secret_key: options.secret_key || vendorDetails.secret_key
+    secret_key: options.secret_key || vendorDetails.secret_key,
+    mock: options.mock === true || vendorDetails.mock === true || options.env === 'TEST' || vendorDetails.env === 'TEST'
   };
 
   return createPaymentSession(payload, mergedOptions);

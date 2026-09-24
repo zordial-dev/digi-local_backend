@@ -43,7 +43,7 @@ router.put('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 
 // ── Core Business API Routes ────────────────────────────────
-router.use('/api/otp', otpRoutes);                 // MSG91 Mobile/Web OTP Service
+router.use('/api/otp', otpRoutes);                 // Message Central Mobile/Web OTP Service
 router.use('/api/societies', societyRoutes);       // Society management
 router.use('/api/vendors', vendorAuthRoutes);        // Vendor auth & Admin Vendor Spec
 router.use('/api/vendor', vendorAuthRoutes);         // Singular Vendor alias

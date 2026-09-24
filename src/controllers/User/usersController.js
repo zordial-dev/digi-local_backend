@@ -6,7 +6,7 @@ const logger = require('../../utils/logger');
 const { generateUniquePublicId } = require('../../utils/idGenerator');
 
 /**
- * B0. Send OTP to Resident User Phone via MSG91
+ * B0. Send OTP to Resident User Phone via Message Central
  * POST /api/users/send-otp
  */
 async function sendOtp(req, res) {
@@ -117,7 +117,7 @@ async function checkPhone(req, res) {
 }
 
 /**
- * B0.1 Verify MSG91 SMS OTP
+ * B0.1 Verify Message Central SMS OTP
  * POST /api/users/verify-otp
  */
 async function verifyOtp(req, res) {
@@ -159,7 +159,7 @@ async function getAllVendors(Req, res) {
 }
 
 /**
- * B1. Resident User Login (Password or MSG91 SMS OTP)
+ * B1. Resident User Login (Password or Message Central SMS OTP)
  * POST /api/users/login
  */
 async function loginUser(req, res) {
@@ -272,10 +272,10 @@ async function loginUser(req, res) {
     const tokenPayload = { id: user.user_id, role: 'user', phone: user.phone };
     const tokens = generateTokens(tokenPayload, 'user');
 
-    logger.auth(`User login successful for phone ${user.phone} (ID: ${user.user_id}) via ${loginOtp ? 'MSG91 OTP' : 'Password'}`, {
+    logger.auth(`User login successful for phone ${user.phone} (ID: ${user.user_id}) via ${loginOtp ? 'Message Central OTP' : 'Password'}`, {
       userId: user.user_id,
       phone: user.phone,
-      method: loginOtp ? 'msg91_otp' : 'password'
+      method: loginOtp ? 'message_central_otp' : 'password'
     });
 
     const resolvedUserPublicId = user.public_id || (user.user_id?.startsWith('usr@') ? user.user_id : ('usr@' + String(user.user_id).slice(-4)));
@@ -310,7 +310,7 @@ async function loginUser(req, res) {
 }
 
 /**
- * B2. Resident User Registration (Mobile Number Primary with MSG91 OTP or Password)
+ * B2. Resident User Registration (Mobile Number Primary with Message Central OTP or Password)
  * POST /api/users/register
  */
 async function registerUser(req, res) {
@@ -325,9 +325,14 @@ async function registerUser(req, res) {
       if (!userPhone) {
         return res.status(400).json({ error: 'Mobile number is required for OTP verification' });
       }
-      const msg91Res = await verifyMsg91OTP(userPhone, inputOtp).catch(() => null);
-      if (!msg91Res) {
-        return res.status(400).json({ error: 'Invalid or expired OTP code for registration' });
+      const verId = req.body.verification_id || req.body.verificationId;
+      try {
+        const verifyRes = await verifyCentralOTP(userPhone, inputOtp, null, verId);
+        if (!verifyRes || !verifyRes.valid) {
+          return res.status(400).json({ error: 'Invalid or expired OTP code for registration' });
+        }
+      } catch (otpErr) {
+        return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code for registration' });
       }
     }
 
@@ -401,7 +406,7 @@ async function registerUser(req, res) {
       userId,
       publicId,
       phone: userPhone,
-      method: inputOtp ? 'msg91_otp' : 'password'
+      method: inputOtp ? 'message_central_otp' : 'password'
     });
 
     res.status(201).json({
