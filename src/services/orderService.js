@@ -68,8 +68,7 @@ class OrderService {
       const duplicateCheck = await txQuery(`
         SELECT o.order_id 
         FROM orders o 
-        JOIN customers c ON o.customer_id = c.customer_id
-        WHERE o.vendor_id = ? AND c.phone_number = ? AND o.total_amount = ? 
+        WHERE o.vendor_id = ? AND o.customer_phone = ? AND o.total_amount = ? 
           AND o.order_timestamp >= CURRENT_TIMESTAMP - INTERVAL '10 seconds'
       `, [vendor_id, phone_number, computedTotalAmount]).catch(() => ({ rows: [] })); // Fallback if INTERVAL syntax differs
 
@@ -77,15 +76,12 @@ class OrderService {
         throw new Error('Duplicate order detected. Please wait a moment before submitting again.');
       }
 
-      // 5. Create or Update Customer record
-      let customer_id;
-      const custCheck = await txQuery(`SELECT customer_id FROM customers WHERE phone_number = ?`, [phone_number]);
-      if (custCheck.rows.length > 0) {
-        customer_id = custCheck.rows[0].customer_id;
-        await txQuery(`UPDATE customers SET customer_name = ?, address = ? WHERE customer_id = ?`, [customer_name, address, customer_id]);
-      } else {
-        const custRes = await txQuery(`INSERT INTO customers (customer_name, phone_number, address) VALUES (?, ?, ?)`, [customer_name, phone_number, address]);
-        customer_id = custRes.insertId;
+      // 5. Look up User record by phone
+      let user_id = null;
+      const userCheck = await txQuery(`SELECT user_id FROM users WHERE phone = ?`, [phone_number]).catch(() => ({ rows: [] }));
+      if (userCheck.rows && userCheck.rows.length > 0) {
+        user_id = userCheck.rows[0].user_id;
+        await txQuery(`UPDATE users SET name = COALESCE(NULLIF(?, ''), name), address = COALESCE(NULLIF(?, ''), address) WHERE user_id = ?`, [customer_name, address, user_id]).catch(() => {});
       }
 
       // 6. Atomically deduct item stock & prevent negative stock race conditions
@@ -102,8 +98,8 @@ class OrderService {
 
       // 7. Insert Order Record with Authoritative Server-Calculated Total
       const orderRes = await txQuery(
-        `INSERT INTO orders (vendor_id, customer_id, status, total_amount) VALUES (?, ?, 'PLACED', ?)`,
-        [vendor_id, customer_id, computedTotalAmount]
+        `INSERT INTO orders (vendor_id, user_id, customer_name, customer_phone, delivery_address, status, total_amount) VALUES (?, ?, ?, ?, ?, 'PLACED', ?)`,
+        [vendor_id, user_id, customer_name, phone_number, address, computedTotalAmount]
       );
       const order_id = orderRes.insertId;
 
@@ -139,10 +135,13 @@ class OrderService {
    */
   async getOrderDetails(orderId) {
     const orderRes = await query(`
-      SELECT o.*, v.store_name, v.phone_number as vendor_phone, c.customer_name, c.phone_number as customer_phone, c.address
+      SELECT o.*, v.store_name, v.phone_number as vendor_phone, 
+             COALESCE(NULLIF(o.customer_name, ''), u.name, 'Customer') as customer_name, 
+             COALESCE(NULLIF(o.customer_phone, ''), u.phone, '') as customer_phone, 
+             COALESCE(NULLIF(o.delivery_address, ''), u.address, '') as address
       FROM orders o
       JOIN vendors v ON o.vendor_id = v.vendor_id
-      JOIN customers c ON o.customer_id = c.customer_id
+      LEFT JOIN users u ON o.user_id = u.user_id
       WHERE o.order_id = ?
     `, [orderId]);
 

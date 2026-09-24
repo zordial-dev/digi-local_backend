@@ -1,0 +1,287 @@
+{
+  "info": {
+    "name": "DigiLocal - Message Central OTP & Cashfree Payments API",
+    "description": "Complete Postman collection for testing DigiLocal Message Central SMS OTP verification and Cashfree PG v3 online payments.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Cashfree Payment Gateway",
+      "item": [
+        {
+          "name": "1.1 Check Live Cashfree Credentials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/payments/cashfree/check-credentials",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "cashfree", "check-credentials"]
+            },
+            "description": "Probes Cashfree PG remote server to test if CASHFREE_APP_ID and CASHFREE_SECRET_KEY in .env are valid."
+          }
+        },
+        {
+          "name": "1.2 Create Cart Order with Cashfree",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"society_id\": 1,\n  \"vendor_id\": 1296,\n  \"customer_name\": \"Postman Test User\",\n  \"customer_phone\": \"9876543210\",\n  \"customer_email\": \"customer@digilocal.in\",\n  \"delivery_address\": \"Tower A, Flat 302, Manglam Ananda\",\n  \"payment_method\": \"CASHFREE\",\n  \"items\": [\n    {\n      \"item_id\": 1726,\n      \"quantity\": 2,\n      \"price\": 150\n    }\n  ],\n  \"total_amount\": 300,\n  \"delivery_fee\": 15,\n  \"service_fee\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/orders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Creates order with Cashfree payment method, automatically returning payment_session_id and payment_url."
+          }
+        },
+        {
+          "name": "1.3 Standalone Create Payment Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 320,\n  \"vendor_id\": 1296,\n  \"customer_name\": \"Ramesh Sharma\",\n  \"customer_phone\": \"9876543210\",\n  \"customer_email\": \"customer@digilocal.in\",\n  \"return_url\": \"https://digilocal.in/payments/cashfree/return?order_id={order_id}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/cashfree/create-order-session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "cashfree", "create-order-session"]
+            },
+            "description": "Creates a standalone Cashfree payment session for an existing order or cart."
+          }
+        },
+        {
+          "name": "1.4 Verify Cashfree Order Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"4821\",\n  \"cashfree_order_id\": \"4821\",\n  \"cashfree_payment_id\": \"CF_PAY_98765432\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/cashfree/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "cashfree", "verify"]
+            },
+            "description": "Verifies payment status with Cashfree servers, marks order as PAID, records ledger, and notifies merchant."
+          }
+        },
+        {
+          "name": "1.5 Direct Scan & Pay to Vendor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"vendor_id\": 1296,\n  \"amount\": 150,\n  \"customer_name\": \"Ramesh Sharma\",\n  \"customer_phone\": \"9876543210\",\n  \"notes\": \"Direct counter payment for flowers\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/cashfree/pay-vendor-direct",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "cashfree", "pay-vendor-direct"]
+            },
+            "description": "Generates a direct payment session for scan-and-pay or bill clearance."
+          }
+        },
+        {
+          "name": "1.6 Verify Direct Vendor Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"CF_DIR_1790245678_1234\",\n  \"vendor_id\": 1296,\n  \"amount\": 150,\n  \"customer_name\": \"Ramesh Sharma\",\n  \"customer_phone\": \"9876543210\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/cashfree/verify-direct",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "cashfree", "verify-direct"]
+            }
+          }
+        },
+        {
+          "name": "1.7 Get Vendor Cashfree Payment History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/vendors/1296/cashfree-payments?limit=50&offset=0&status=ALL",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vendors", "1296", "cashfree-payments"],
+              "query": [
+                { "key": "limit", "value": "50" },
+                { "key": "offset", "value": "0" },
+                { "key": "status", "value": "ALL" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "1.8 Get Admin Cashfree Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/payments/cashfree-ledger?limit=100&offset=0&status=ALL",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "payments", "cashfree-ledger"],
+              "query": [
+                { "key": "limit", "value": "100" },
+                { "key": "offset", "value": "0" },
+                { "key": "status", "value": "ALL" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Message Central SMS OTP",
+      "item": [
+        {
+          "name": "2.1 Resident User - Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"purpose\": \"login\",\n  \"country_code\": \"91\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/send-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "send-otp"]
+            }
+          }
+        },
+        {
+          "name": "2.2 Resident User - Verify OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\",\n  \"verification_id\": \"v-1790245678-abcde\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "verify-otp"]
+            }
+          }
+        },
+        {
+          "name": "2.3 Resident User - Login with OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\",\n  \"verification_id\": \"v-1790245678-abcde\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "login"]
+            }
+          }
+        },
+        {
+          "name": "2.4 Vendor - Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"purpose\": \"login\",\n  \"country_code\": \"91\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vendors/send-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vendors", "send-otp"]
+            }
+          }
+        },
+        {
+          "name": "2.5 Vendor - Login with OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\",\n  \"verification_id\": \"v-1790245678-abcde\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/vendors/login-with-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "vendors", "login-with-otp"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

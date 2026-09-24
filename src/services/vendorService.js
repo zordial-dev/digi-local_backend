@@ -64,13 +64,12 @@ class VendorService {
     // Fetch vendor orders safely using LEFT JOIN
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, 
-              COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, 'Rahul Sharma'), c.customer_name, 'Raj Kumar') as customer_name,
-              COALESCE(u.phone, c.phone_number, '9876543210') as phone,
-              COALESCE(o.delivery_address, c.address, 'Tower A-402') as delivery_address,
+              COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, 'Rahul Sharma'), 'Resident Customer') as customer_name,
+              COALESCE(u.phone, o.customer_phone, '9876543210') as phone,
+              COALESCE(o.delivery_address, u.address, 'Tower A-402') as delivery_address,
               o.total_amount, o.status, COALESCE(o.created_at, o.order_timestamp) as created_at
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
-       LEFT JOIN customers c ON o.customer_id = c.customer_id
        WHERE o.vendor_id = ?
        ORDER BY o.order_id DESC`,
       [actualVendorId]
@@ -162,6 +161,7 @@ class VendorService {
     // Normalize vendor classification and zone coverage attributes
     vendor.shop_id = String(vendor.vendor_id);
     vendor.id = String(vendor.vendor_id);
+    vendor.public_id = vendor.public_id || ('vnd@' + String(vendor.vendor_id).padStart(4, '0'));
     vendor.store_name = vendor.store_name || vendor.shop_name || "DigiLocal Partner Store";
     vendor.vendor_name = vendor.vendor_name || vendor.owner_name || '';
     vendor.owner_name = vendor.vendor_name || vendor.owner_name || '';
@@ -469,9 +469,8 @@ class VendorService {
 
     const actualVendorId = Number(vendorRes.rows[0].vendor_id);
 
-    // Delete associated catalog items and items
+    // Delete associated items
     await query(`DELETE FROM items WHERE vendor_id = ?`, [actualVendorId]).catch(() => {});
-    await query(`DELETE FROM catalog_items WHERE vendor_id = ?`, [actualVendorId]).catch(() => {});
     
     // Delete vendor record
     await query(`DELETE FROM vendors WHERE vendor_id = ?`, [actualVendorId]);
@@ -502,7 +501,7 @@ class VendorService {
 
     const buyerVendor = vendorRes.rows && vendorRes.rows[0] ? vendorRes.rows[0] : null;
     const buyerVendorId = buyerVendor ? String(buyerVendor.vendor_id) : rawIdStr;
-    const buyerPublicId = buyerVendor ? (buyerVendor.public_id || `VND-${buyerVendorId}`) : rawIdStr;
+    const buyerPublicId = buyerVendor ? (buyerVendor.public_id || ('vnd@' + String(buyerVendorId).padStart(4, '0'))) : rawIdStr;
     const buyerStoreName = buyerVendor ? (buyerVendor.store_name || buyerVendor.vendor_name || 'Buyer Vendor') : 'Buyer Vendor Store';
     const buyerPhone = buyerVendor ? buyerVendor.phone_number : rawIdStr;
     const buyerEmail = buyerVendor ? buyerVendor.email : '';

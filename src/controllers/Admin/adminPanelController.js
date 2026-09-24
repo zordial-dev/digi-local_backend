@@ -127,6 +127,7 @@ function serializeVendorForAdmin(v) {
 
   return {
     vendor_id: Number(v.vendor_id),
+    public_id: v.public_id || (v.vendor_id ? ('vnd@' + String(v.vendor_id).padStart(4, '0')) : ''),
     id: Number(v.vendor_id),
     vendor_name: v.vendor_name || v.owner_name || '',
     owner_name: v.owner_name || v.vendor_name || '',
@@ -611,8 +612,8 @@ async function getVendorById(req, res) {
       `SELECT v.*, s.society_name 
        FROM vendors v 
        LEFT JOIN societies s ON v.society_id = s.society_id 
-       WHERE v.vendor_id = ?`,
-      [targetId]
+       WHERE v.vendor_id = ? OR CAST(v.vendor_id AS TEXT) = ? OR v.public_id = ?`,
+      [targetId, String(targetId), String(targetId)]
     );
 
     if (!result.rows || result.rows.length === 0) {
@@ -806,8 +807,8 @@ async function listUsers(req, res) {
     `;
     const params = [];
     if (search) {
-      sql += ` WHERE u.name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR u.user_id = ? OR u.society_name LIKE ? OR u.area LIKE ? OR u.city LIKE ? OR u.state LIKE ? OR u.pincode LIKE ?`;
-      params.push(`%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+      sql += ` WHERE u.name LIKE ? OR u.phone LIKE ? OR u.email LIKE ? OR u.user_id = ? OR u.public_id = ? OR u.society_name LIKE ? OR u.area LIKE ? OR u.city LIKE ? OR u.state LIKE ? OR u.pincode LIKE ?`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, search, search, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
     sql += ` ORDER BY u.created_at DESC LIMIT ? OFFSET ?`;
     params.push(limitNum, offset);
@@ -816,8 +817,8 @@ async function listUsers(req, res) {
       let fbSql = `SELECT * FROM users`;
       const fbParams = [];
       if (search) {
-        fbSql += ` WHERE name LIKE ? OR phone LIKE ? OR email LIKE ? OR user_id = ? OR society_name LIKE ? OR area LIKE ?`;
-        fbParams.push(`%${search}%`, `%${search}%`, `%${search}%`, search, `%${search}%`, `%${search}%`);
+        fbSql += ` WHERE name LIKE ? OR phone LIKE ? OR email LIKE ? OR user_id = ? OR public_id = ? OR society_name LIKE ? OR area LIKE ?`;
+        fbParams.push(`%${search}%`, `%${search}%`, `%${search}%`, search, search, `%${search}%`, `%${search}%`);
       }
       fbSql += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
       fbParams.push(limitNum, offset);
@@ -828,8 +829,10 @@ async function listUsers(req, res) {
       const city = u.city || u.soc_city || '';
       const state = u.state || u.soc_state || '';
       const pincode = u.pincode || u.soc_pincode || '';
+      const resolvedUserPublicId = u.public_id || (u.user_id?.startsWith('usr@') ? u.user_id : ('usr@' + String(u.user_id).slice(-4)));
       return {
         user_id: String(u.user_id),
+        public_id: resolvedUserPublicId,
         name: u.name || '',
         email: u.email || '',
         country_code: '+91',
@@ -868,10 +871,10 @@ async function getUserById(req, res) {
               s.society_name AS soc_name
        FROM users u
        LEFT JOIN societies s ON u.society_id = s.society_id
-       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
-      [targetId, String(targetId), String(targetId)]
+       WHERE u.user_id = ? OR u.public_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
+      [targetId, String(targetId), String(targetId), String(targetId)]
     ).catch(async () => {
-      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId)]);
+      return query(`SELECT * FROM users WHERE user_id = ? OR public_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [targetId, String(targetId), String(targetId), String(targetId)]);
     }).catch(() => ({ rows: [] }));
 
     if (!result.rows || result.rows.length === 0) {
@@ -881,8 +884,10 @@ async function getUserById(req, res) {
     const city = u.city || u.soc_city || '';
     const state = u.state || u.soc_state || '';
     const pincode = u.pincode || u.soc_pincode || '';
+    const resolvedUserPublicId = u.public_id || (u.user_id?.startsWith('usr@') ? u.user_id : ('usr@' + String(u.user_id).slice(-4)));
     const userObj = {
       user_id: String(u.user_id),
+      public_id: resolvedUserPublicId,
       name: u.name || '',
       email: u.email || '',
       country_code: '+91',
@@ -1077,7 +1082,7 @@ async function getUserPaymentsAdmin(req, res) {
     const { userId, id } = req.params;
     const targetId = userId || id;
     const paymentsRes = await query(
-      `SELECT * FROM payment_transactions WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY created_at DESC`,
+      `SELECT * FROM payments WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY created_at DESC`,
       [targetId, String(targetId)]
     ).catch(() => ({ rows: [] }));
     return respond(res, 200, paymentsRes.rows || [], 'User payment ledger retrieved successfully.');

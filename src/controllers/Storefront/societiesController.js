@@ -21,6 +21,9 @@ async function getAllSocieties(req, res) {
       SELECT s.society_id, 
              s.society_name, 
              s.location, 
+             COALESCE(s.address, s.location) as address,
+             COALESCE(s.city, 'Noida') as city,
+             COALESCE(s.state, 'Uttar Pradesh') as state,
              COALESCE(s.public_id, 'SOC-' || s.society_id) as public_id,
              COALESCE(s.pincode, '201310') as pincode,
              COALESCE(s.total_flats, 500) as total_flats,
@@ -50,7 +53,7 @@ async function getAllSocieties(req, res) {
       `;
       params.push(q, q, q, q, q, q);
     }
-    sql += ` GROUP BY s.society_id, s.society_name, s.location, s.public_id, s.pincode, s.total_flats, s.secretary_name, s.secretary_mobile ORDER BY s.society_name ASC`;
+    sql += ` GROUP BY s.society_id, s.society_name, s.location, s.address, s.city, s.state, s.public_id, s.pincode, s.total_flats, s.secretary_name, s.secretary_mobile ORDER BY s.society_name ASC`;
 
     const countSql = `SELECT COUNT(*) as total FROM (${sql}) sub`;
     const countRes = await query(countSql, params);
@@ -66,6 +69,9 @@ async function getAllSocieties(req, res) {
       society_id: Number(soc.society_id),
       society_name: soc.society_name,
       location: soc.location,
+      address: soc.address || soc.location,
+      city: soc.city || 'Noida',
+      state: soc.state || 'Uttar Pradesh',
       public_id: soc.public_id || `GW-${soc.society_id}`,
       pincode: soc.pincode || '201310',
       total_flats: Number(soc.total_flats || 500),
@@ -127,6 +133,10 @@ async function getSocietyById(req, res) {
       society_id: Number(soc.society_id),
       society_name: soc.society_name,
       location: soc.location,
+      address: soc.address || soc.location,
+      city: soc.city || 'Noida',
+      state: soc.state || 'Uttar Pradesh',
+      pincode: soc.pincode || '201310',
       secretary_name: soc.secretary_name || soc.rwa_name || 'Society Secretary',
       secretary_mobile: soc.secretary_mobile || soc.rwa_phone || '9876543210'
     });
@@ -166,10 +176,15 @@ async function createSociety(req, res) {
       });
     }
 
+    const city = String(body.city || 'Noida').trim();
+    const state = String(body.state || 'Uttar Pradesh').trim();
+    const address = String(body.address || location || `${society_name}, ${city}`).trim();
+    const pincode = String(body.pincode || '201310').trim();
+
     const result = await query(
-      `INSERT INTO societies (society_name, location, secretary_name, secretary_mobile) 
-       VALUES (?, ?, ?, ?) RETURNING *`,
-      [society_name, location, secretary_name, secretary_mobile]
+      `INSERT INTO societies (society_name, location, address, city, state, pincode, secretary_name, secretary_mobile) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      [society_name, location, address, city, state, pincode, secretary_name, secretary_mobile]
     );
     memoryCache.clear();
 
@@ -182,6 +197,10 @@ async function createSociety(req, res) {
         society_id: newId,
         society_name,
         location,
+        address,
+        city,
+        state,
+        pincode,
         secretary_name,
         secretary_mobile
       }

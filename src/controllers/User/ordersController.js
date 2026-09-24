@@ -361,9 +361,9 @@ async function createOrder(req, res) {
 
     for (const pItem of populatedItems) {
       let validItemId = Number(pItem.item_id) || 1;
-      const itemCheck = await query(`SELECT item_id FROM catalog_items WHERE item_id = ?`, [validItemId]).catch(() => ({ rows: [] }));
+      const itemCheck = await query(`SELECT item_id FROM items WHERE item_id = ?`, [validItemId]).catch(() => ({ rows: [] }));
       if (!itemCheck.rows || itemCheck.rows.length === 0) {
-        const fallbackCheck = await query(`SELECT item_id FROM catalog_items LIMIT 1`).catch(() => ({ rows: [] }));
+        const fallbackCheck = await query(`SELECT item_id FROM items LIMIT 1`).catch(() => ({ rows: [] }));
         if (fallbackCheck.rows && fallbackCheck.rows.length > 0) {
           validItemId = Number(fallbackCheck.rows[0].item_id);
         }

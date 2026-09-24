@@ -12,7 +12,6 @@ CREATE TABLE IF NOT EXISTS locations (
 CREATE TABLE IF NOT EXISTS societies (
     society_id BIGSERIAL PRIMARY KEY,
     society_name VARCHAR(255) NOT NULL,
-    code VARCHAR(50),
     address TEXT,
     city VARCHAR(100),
     state VARCHAR(100),
@@ -90,6 +89,7 @@ CREATE TABLE IF NOT EXISTS users (
     phone VARCHAR(20) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     person_type VARCHAR(50) DEFAULT 'user',
+    public_id VARCHAR(50),
     status VARCHAR(20) DEFAULT 'active',
     society_id BIGINT REFERENCES societies(society_id) ON DELETE SET NULL,
     society_name VARCHAR(255),

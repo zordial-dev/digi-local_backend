@@ -1,7 +1,8 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens } = require('../../utils/auth');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
-const { sendOTP: sendMsg91OTP, verifyOTP: verifyMsg91OTP } = require('../../services/msg91Service');
+const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP } = require('../../services/messageCentralService');
+const { generateUniquePublicId } = require('../../utils/idGenerator');
 
 /**
  * POST /api/vendors/register
@@ -126,9 +127,13 @@ async function registerVendor(req, res) {
           society_id = Number(foundSoc.rows[0].society_id);
         } else {
           const newSocLocation = rawAddress ? `${rawAddress}, ${city || 'City'}` : (city || 'Local Area');
+          const newSocCity = city || 'Noida';
+          const newSocState = state || 'Uttar Pradesh';
+          const newSocPincode = pincode || '201310';
+          const newSocAddress = rawAddress || newSocLocation;
           const newSocRes = await query(
-            `INSERT INTO societies (society_name, location, secretary_name, secretary_mobile) VALUES (?, ?, ?, ?) RETURNING *`,
-            [rawStr, newSocLocation, vendor_name, phone_number]
+            `INSERT INTO societies (society_name, location, address, city, state, pincode, secretary_name, secretary_mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+            [rawStr, newSocLocation, newSocAddress, newSocCity, newSocState, newSocPincode, vendor_name, phone_number]
           );
           society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || 1);
         }
@@ -164,11 +169,14 @@ async function registerVendor(req, res) {
         [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, vendor_id]
       );
     } else {
+      // Generate standardized Option B public_id (vnd@XXXX)
+      const vendorPublicId = await generateUniquePublicId('vendor', query);
+
       // Insert new vendor record (gst_number takes gstin, pan_number takes pan_number; no cross-substitution)
       const vendorRes = await query(
-        `INSERT INTO vendors (society_id, vendor_name, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-        [society_id, vendor_name, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
+        `INSERT INTO vendors (society_id, vendor_name, public_id, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
+        [society_id, vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
       );
       const newVendorRow = vendorRes.rows[0] || {};
       vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -200,12 +208,17 @@ async function registerVendor(req, res) {
       [vendor_id]
     ).catch(() => { });
 
-    // Auto-create corresponding Resident User account in users table so vendor can immediately log into User Panel as customer
+    // Auto-create corresponding Resident User account in users table with standardized Option B public_id
+    const userPublicId = await generateUniquePublicId('user', query);
     await query(
-      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [`usr_v_${vendor_id}`, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
+      `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
     ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
+
+    // Fetch final vendor record to ensure accurate public_id
+    const finalVendorRes = await query(`SELECT public_id FROM vendors WHERE vendor_id = ?`, [vendor_id]).catch(() => ({ rows: [] }));
+    const finalPublicId = finalVendorRes.rows[0]?.public_id || ('vnd@' + String(vendor_id).padStart(4, '0'));
 
     const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor', 'user', 'customer'], isVendor: true, isUser: true };
     const tokens = generateTokens(authUser);
@@ -215,8 +228,10 @@ async function registerVendor(req, res) {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       vendor_id,
+      public_id: finalPublicId,
       vendor: {
         vendor_id,
+        public_id: finalPublicId,
         store_name,
         vendor_name,
         shop_number,
@@ -264,7 +279,7 @@ async function getVendorStatus(req, res) {
     if (!vendorId) return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
 
     const result = await query(
-      `SELECT vendor_id, store_name, vendor_name, area, city, status, hold_reason, hold_email_subject, has_resubmitted, resubmitted_at, created_at FROM vendors WHERE vendor_id = ? OR public_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+      `SELECT vendor_id, public_id, store_name, vendor_name, area, city, status, hold_reason, hold_email_subject, has_resubmitted, resubmitted_at, created_at FROM vendors WHERE vendor_id = ? OR public_id = ? OR CAST(vendor_id AS TEXT) = ?`,
       [vendorId, String(vendorId), String(vendorId)]
     );
 
@@ -293,6 +308,7 @@ async function getVendorStatus(req, res) {
       return res.status(403).json({
         success: false,
         vendor_id: Number(v.vendor_id),
+        public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
         status: 'blocked',
         code: 'VENDOR_BLOCKED',
         is_blocked: true,
@@ -325,6 +341,7 @@ async function getVendorStatus(req, res) {
 
     return res.status(200).json({
       vendor_id: Number(v.vendor_id),
+      public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
       status: currentStatus,
       is_accepted: isApproved,
       is_pending: isPending,
@@ -398,10 +415,10 @@ async function checkVendorPhone(req, res) {
     const last10 = digitsOnly.slice(-10);
 
     const result = await query(
-      `SELECT vendor_id, store_name, vendor_name, email, phone_number, status 
+      `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status 
        FROM vendors 
-       WHERE phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?) OR LOWER(email) = LOWER(?)`,
-      [cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget]
+       WHERE phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?) OR LOWER(email) = LOWER(?) OR public_id = ?`,
+      [cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget, cleanTarget]
     );
 
     if (result.rows && result.rows.length > 0) {
@@ -410,6 +427,7 @@ async function checkVendorPhone(req, res) {
       return res.status(200).json({
         exists: true,
         vendor_id: Number(v.vendor_id),
+        public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
         store_name: v.store_name || '',
         vendor_name: v.vendor_name || '',
         phone_number: v.phone_number || '',
@@ -457,8 +475,9 @@ async function loginVendor(req, res) {
           OR phone_number = ? 
           OR phone_number = ? 
           OR (LENGTH(?) >= 10 AND phone_number LIKE ?) 
-          OR CAST(vendor_id AS TEXT) = ?`,
-      [cleanTarget, cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget]
+          OR CAST(vendor_id AS TEXT) = ?
+          OR public_id = ?`,
+      [cleanTarget, cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget, cleanTarget]
     );
 
     if (!result.rows || result.rows.length === 0) {
@@ -500,15 +519,19 @@ async function loginVendor(req, res) {
     const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
     const tokens = generateTokens(authUser);
 
+    const vendorPublicId = v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0'));
+
     return res.status(200).json({
       success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       vendor_id: Number(v.vendor_id),
+      public_id: vendorPublicId,
       status: statusLower,
       vendor: {
         vendor_id: Number(v.vendor_id),
+        public_id: vendorPublicId,
         store_name: v.store_name,
         vendor_name: v.vendor_name,
         email: v.email,
@@ -766,10 +789,13 @@ async function sendVendorOtp(req, res) {
       });
     }
 
-    const result = await sendMsg91OTP(cleanTarget, countryCode);
+    const result = await sendCentralOTP(cleanTarget, countryCode);
     return res.status(200).json({
       success: true,
-      message: 'OTP sent successfully',
+      provider: 'message_central',
+      message: 'OTP sent successfully via Message Central',
+      verification_id: result.verificationId,
+      verificationId: result.verificationId,
       data: result
     });
   } catch (err) {
@@ -784,7 +810,7 @@ async function sendVendorOtp(req, res) {
  */
 async function loginVendorWithOtp(req, res) {
   try {
-    const { phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, otp, code, otp_code, country_code, countryCode } = req.body || {};
+    const { phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, otp, code, otp_code, country_code, countryCode, verification_id, verificationId } = req.body || {};
     const target = phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone;
     const cleanOtp = String(otp || code || otp_code || '').trim();
 
@@ -799,17 +825,15 @@ async function loginVendorWithOtp(req, res) {
     const digitsOnly = cleanTarget.replace(/\D/g, '');
     const last10 = digitsOnly.slice(-10);
 
-    // Verify OTP code
-    const isSimulated = process.env.OTP_VERIFICATION_MODE === 'simulation' || cleanOtp === '123456' || cleanOtp === '111111' || cleanOtp === '000000';
-    if (!isSimulated) {
-      try {
-        const verifyRes = await verifyMsg91OTP(cleanTarget, cleanOtp, country_code || countryCode);
-        if (!verifyRes || verifyRes.type === 'error') {
-          return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
-        }
-      } catch (otpErr) {
-        return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code.' });
+    // Verify OTP code via Message Central (Real verification, no dummy bypasses)
+    const verId = verification_id || verificationId;
+    try {
+      const verifyRes = await verifyCentralOTP(cleanTarget, cleanOtp, country_code || countryCode, verId);
+      if (!verifyRes || !verifyRes.valid) {
+        return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
       }
+    } catch (otpErr) {
+      return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code.' });
     }
 
     // Lookup vendor in database
@@ -843,6 +867,8 @@ async function loginVendorWithOtp(req, res) {
     const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
     const tokens = generateTokens(authUser);
 
+    const vendorPublicId = v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0'));
+
     return res.status(200).json({
       success: true,
       message: 'Vendor login successful',
@@ -850,9 +876,11 @@ async function loginVendorWithOtp(req, res) {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       vendor_id: Number(v.vendor_id),
+      public_id: vendorPublicId,
       status: statusLower,
       vendor: {
         vendor_id: Number(v.vendor_id),
+        public_id: vendorPublicId,
         store_name: v.store_name,
         vendor_name: v.vendor_name,
         email: v.email,

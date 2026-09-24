@@ -149,11 +149,10 @@ async function query(sqlText, params = []) {
         if (uSql.includes('INTO VENDORS')) insertedId = firstRow.vendor_id;
         else if (uSql.includes('INTO SOCIETIES')) insertedId = firstRow.society_id;
         else if (uSql.includes('INTO USERS')) insertedId = firstRow.user_id;
-        else if (uSql.includes('INTO ITEMS') || uSql.includes('INTO CATALOG_ITEMS')) insertedId = firstRow.item_id;
+        else if (uSql.includes('INTO ITEMS')) insertedId = firstRow.item_id;
         else if (uSql.includes('INTO ORDERS')) insertedId = firstRow.order_id;
         else if (uSql.includes('INTO SUBSCRIPTIONS')) insertedId = firstRow.subscription_id || firstRow.id;
         else if (uSql.includes('INTO PAYMENTS')) insertedId = firstRow.payment_id || firstRow.id;
-        else if (uSql.includes('INTO CUSTOMERS')) insertedId = firstRow.customer_id || firstRow.id;
         else if (uSql.includes('INTO ENQUIRIES')) insertedId = firstRow.enquiry_id || firstRow.id;
         else {
           insertedId = firstRow.id || firstRow.enquiry_id || firstRow.vendor_id || firstRow.society_id || firstRow.item_id || firstRow.order_id || firstRow.subscription_id || firstRow.payment_id || null;
@@ -434,6 +433,10 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS total_ratings_sum DECIMAL(10,2) DEFAULT 0.00`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS strikes INT DEFAULT 0`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS public_id VARCHAR(50)`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS public_id VARCHAR(50)`,
+    `CREATE INDEX IF NOT EXISTS idx_users_public_id ON users(public_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_vendors_public_id ON vendors(public_id)`,
     `ALTER TABLE users ALTER COLUMN email DROP NOT NULL`,
     `ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'PENDING'`,
@@ -611,9 +614,18 @@ async function setupTablesPg() {
     `).catch(() => {});
   } catch (_) {}
 
-  // Backfill public_id if missing (Optimized single SQL updates)
+  // Backfill public_id if missing using standardized Option B format (vnd@XXXX for vendors, usr@XXXX for users)
   await pgPool.query(`UPDATE societies SET public_id = SUBSTRING(MD5(RANDOM()::text), 1, 5) WHERE public_id IS NULL`).catch(() => {});
-  await pgPool.query(`UPDATE vendors SET public_id = SUBSTRING(MD5(RANDOM()::text), 1, 6) WHERE public_id IS NULL`).catch(() => {});
+  await pgPool.query(`
+    UPDATE vendors 
+    SET public_id = 'vnd@' || LPAD(FLOOR(1000 + RANDOM() * 9000)::text, 4, '0') 
+    WHERE public_id IS NULL OR public_id = ''
+  `).catch(() => {});
+  await pgPool.query(`
+    UPDATE users 
+    SET public_id = 'usr@' || LPAD(FLOOR(1000 + RANDOM() * 9000)::text, 4, '0') 
+    WHERE public_id IS NULL OR public_id = ''
+  `).catch(() => {});
 }
 
 /**
@@ -691,7 +703,6 @@ async function removeDuplicateVendors() {
     for (const dup of duplicatesToRemove) {
       const { duplicateVendorId, keptVendorId } = dup;
       await query(`UPDATE items SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
-      await query(`UPDATE catalog_items SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
       await query(`UPDATE orders SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
       await query(`UPDATE subscriptions SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
       await query(`UPDATE payments SET vendor_id = ? WHERE vendor_id = ?`, [keptVendorId, duplicateVendorId]).catch(() => {});
@@ -766,12 +777,11 @@ async function cleanDatabaseTables(options = {}) {
     'payments',
     'subscriptions',
     'items',
-    'catalog_items',
     'enquiries',
     'support_tickets',
     'ticket_messages',
     'ticket_attachments',
-    'audit_logs',
+    'backend_audit_logs',
     'notifications',
     'vendors',
     'societies',

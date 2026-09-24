@@ -1,8 +1,9 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP, normalizePhone } = require('../../utils/auth');
 const { formatISTISO } = require('../../utils/time');
-const { sendOTP: sendMsg91OTP, verifyOTP: verifyMsg91OTP } = require('../../services/msg91Service');
+const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP } = require('../../services/messageCentralService');
 const logger = require('../../utils/logger');
+const { generateUniquePublicId } = require('../../utils/idGenerator');
 
 /**
  * B0. Send OTP to Resident User Phone via MSG91
@@ -57,19 +58,21 @@ async function sendOtp(req, res) {
       }
     }
 
-    const msg91Result = await sendMsg91OTP(cleanTarget, country_code || countryCode);
+    const centralResult = await sendCentralOTP(cleanTarget, country_code || countryCode);
 
     res.status(200).json({
       success: true,
-      message: 'OTP sent successfully',
+      message: 'OTP sent successfully via Message Central',
       target: cleanTarget,
-      provider: 'msg91',
-      data: msg91Result
+      provider: 'message_central',
+      verification_id: centralResult.verificationId,
+      verificationId: centralResult.verificationId,
+      data: centralResult
     });
   } catch (err) {
-    console.error('❌ [MSG91 OTP ERROR] Error handling send OTP:', err.message);
+    console.error('❌ [MESSAGE CENTRAL OTP ERROR] Error handling send OTP:', err.message);
     logger.error('Error in send OTP route:', { error: err.message });
-    res.status(500).json({ success: false, message: err.message || 'Failed to send OTP via MSG91' });
+    res.status(500).json({ success: false, message: err.message || 'Failed to send OTP via Message Central' });
   }
 }
 
@@ -119,9 +122,10 @@ async function checkPhone(req, res) {
  */
 async function verifyOtp(req, res) {
   try {
-    const { otp, code, otp_code, phone, mobile, identifier, phone_number, country_code, countryCode } = req.body;
+    const { otp, code, otp_code, phone, mobile, identifier, phone_number, country_code, countryCode, verification_id, verificationId } = req.body;
     const cleanOtp = String(otp || code || otp_code || '').trim();
     const target = String(phone || mobile || identifier || phone_number || '').trim();
+    const verId = verification_id || verificationId;
 
     if (!target || !cleanOtp) {
       return res.status(400).json({
@@ -130,17 +134,18 @@ async function verifyOtp(req, res) {
       });
     }
 
-    const msg91Result = await verifyMsg91OTP(target, cleanOtp, country_code || countryCode);
+    const centralResult = await verifyCentralOTP(target, cleanOtp, country_code || countryCode, verId);
 
     return res.status(200).json({
       success: true,
       message: 'OTP verified successfully',
       valid: true,
-      data: msg91Result,
+      provider: 'message_central',
+      data: centralResult,
       phone_number: target
     });
   } catch (err) {
-    console.error('❌ [MSG91 VERIFY ERROR]:', err.message);
+    console.error('❌ [MESSAGE CENTRAL VERIFY ERROR]:', err.message);
     res.status(400).json({
       success: false,
       message: err.message || 'Invalid or expired OTP'
@@ -168,10 +173,15 @@ async function loginUser(req, res) {
       if (!userPhone) {
         return res.status(400).json({ error: 'Mobile number is required for OTP login' });
       }
-      console.log(`🔐 [LOGIN ATTEMPT] Authenticating ${userPhone} via MSG91 OTP`);
-      const msg91Res = await verifyMsg91OTP(userPhone, loginOtp).catch(() => null);
-      if (!msg91Res) {
-        return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
+      console.log(`🔐 [LOGIN ATTEMPT] Authenticating ${userPhone} via Message Central OTP`);
+      const verId = req.body.verification_id || req.body.verificationId;
+      try {
+        const verifyRes = await verifyCentralOTP(userPhone, loginOtp, null, verId);
+        if (!verifyRes || !verifyRes.valid) {
+          return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
+        }
+      } catch (otpErr) {
+        return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code.' });
       }
     } else if (password) {
       if (!userPhone) {
@@ -223,10 +233,12 @@ async function loginUser(req, res) {
         };
 
         // Auto-persist in users table for seamless future user API calls
+        const userPublicId = await generateUniquePublicId('user', query);
+        user.public_id = userPublicId;
         await query(
-          `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-          [user.user_id, user.name, user.email, user.phone, user.password_hash || user.password, user.society_id, user.society_name, user.flat]
+          `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+          [user.user_id, userPublicId, user.name, user.email, user.phone, user.password_hash || user.password, user.society_id, user.society_name, user.flat]
         ).catch(() => {});
       }
     }
@@ -266,12 +278,15 @@ async function loginUser(req, res) {
       method: loginOtp ? 'msg91_otp' : 'password'
     });
 
+    const resolvedUserPublicId = user.public_id || (user.user_id?.startsWith('usr@') ? user.user_id : ('usr@' + String(user.user_id).slice(-4)));
+
     res.status(200).json({
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       user: {
         user_id: String(user.user_id),
+        public_id: resolvedUserPublicId,
         name: user.name || '',
         email: user.email || '',
         phone: user.phone || '',
@@ -331,6 +346,7 @@ async function registerUser(req, res) {
       return res.status(400).json({ error: 'An account with this mobile number already exists' });
     }
 
+    const publicId = await generateUniquePublicId('user', query);
     const userId = `usr_${Date.now().toString().slice(-6)}`;
     const pwdHash = password ? await hashPassword(password) : await hashPassword('UserDefaultPass123!');
     const socId = (society_id !== undefined && society_id !== null && !isNaN(parseInt(society_id, 10))) ? parseInt(society_id, 10) : null;
@@ -343,20 +359,20 @@ async function registerUser(req, res) {
     const userEmail = String(email || '').trim();
 
     await query(
-      `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, state, pincode, address, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userState, userPincode, userAddress]
+      `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, state, pincode, address, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+      [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userState, userPincode, userAddress]
     ).catch(async () => {
       // Fallback if state/city/pincode/address columns missing in older Postgres schema
       return query(
-        `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, city, pincode, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat, userCity, userPincode]
+        `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, city, pincode, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat, userCity, userPincode]
       ).catch(() => {
         return query(
-          `INSERT INTO users (user_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-          [userId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
+          `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+          [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
         );
       });
     });
@@ -383,6 +399,7 @@ async function registerUser(req, res) {
 
     logger.auth(`User registered successfully: ${userName} (${userPhone})`, {
       userId,
+      publicId,
       phone: userPhone,
       method: inputOtp ? 'msg91_otp' : 'password'
     });
@@ -392,8 +409,11 @@ async function registerUser(req, res) {
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
+      user_id: String(userId),
+      public_id: publicId,
       user: {
         user_id: String(userId),
+        public_id: publicId,
         name: userName,
         email: userEmail,
         phone: userPhone,
@@ -591,9 +611,11 @@ async function getUserProfile(req, res) {
     const finalCity = user.city || user.resolved_city || '';
     const finalState = user.state || user.resolved_state || '';
     const finalPincode = user.pincode || user.resolved_pincode || '';
+    const resolvedProfilePublicId = user.public_id || (user.user_id?.startsWith('usr@') ? user.user_id : ('usr@' + String(user.user_id).slice(-4)));
 
     res.status(200).json({
       user_id: String(user.user_id),
+      public_id: resolvedProfilePublicId,
       name: user.name || '',
       email: user.email || '',
       phone: user.phone || '',
@@ -651,10 +673,10 @@ async function getUserStatus(req, res) {
               COALESCE(NULLIF(u.pincode, ''), s.pincode, '') AS resolved_pincode
        FROM users u 
        LEFT JOIN societies s ON u.society_id = s.society_id 
-       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
-      [userId, String(userId), String(userId)]
+       WHERE u.user_id = ? OR u.public_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ?`,
+      [userId, String(userId), String(userId), String(userId)]
     ).catch(async () => {
-      return query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [userId, String(userId), String(userId)]);
+      return query(`SELECT * FROM users WHERE user_id = ? OR public_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`, [userId, String(userId), String(userId), String(userId)]);
     });
 
     if (!result.rows || result.rows.length === 0) {
@@ -668,10 +690,13 @@ async function getUserStatus(req, res) {
 
     const { strike_reasons, strike_reasons_list } = await fetchStrikeDetailsForUser(u.user_id);
 
+    const resolvedStatusPublicId = u.public_id || (u.user_id?.startsWith('usr@') ? u.user_id : ('usr@' + String(u.user_id).slice(-4)));
+
     if (isBlocked) {
       return res.status(403).json({
         success: false,
         user_id: String(u.user_id),
+        public_id: resolvedStatusPublicId,
         status: 'blocked',
         code: 'USER_BLOCKED',
         is_blocked: true,
@@ -707,6 +732,7 @@ async function getUserStatus(req, res) {
     return res.status(200).json({
       success: true,
       user_id: String(u.user_id),
+      public_id: resolvedStatusPublicId,
       name: u.name || '',
       email: u.email || '',
       phone: u.phone || '',

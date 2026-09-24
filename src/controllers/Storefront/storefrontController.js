@@ -153,6 +153,7 @@ async function getVendorStorefront(req, res) {
         const cleanVendorObj = {
             ...vendor,
             vendor_id: Number(vendor.vendor_id),
+            public_id: vendor.public_id || (vendor.vendor_id ? ('vnd@' + String(vendor.vendor_id).padStart(4, '0')) : ''),
             shop_id: String(vendor.vendor_id),
             id: Number(vendor.vendor_id),
 

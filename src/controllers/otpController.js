@@ -1,10 +1,10 @@
 'use strict';
 const { query } = require('../models/db');
-const { sendOTP, verifyOTP } = require('../services/msg91Service');
+const { sendOTP, verifyOTP } = require('../services/messageCentralService');
 
 /**
  * POST /api/otp/send-otp
- * Sends an OTP SMS via MSG91 to the specified phone number.
+ * Sends an OTP SMS via Message Central VerifyNow to the specified phone number.
  */
 const sendOtpController = async (req, res) => {
   try {
@@ -71,7 +71,10 @@ const sendOtpController = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: 'OTP sent successfully',
+      provider: 'message_central',
+      message: 'OTP sent successfully via Message Central',
+      verification_id: result.verificationId,
+      verificationId: result.verificationId,
       data: result
     });
   } catch (error) {
@@ -85,13 +88,14 @@ const sendOtpController = async (req, res) => {
 
 /**
  * POST /api/otp/verify-otp
- * Verifies the OTP code submitted by the user via MSG91.
+ * Verifies the OTP code submitted by the user via Message Central.
  */
 const verifyOtpController = async (req, res) => {
   try {
     const phone = req.body.phone || req.body.mobile || req.body.phone_number;
     const otp = req.body.otp || req.body.otp_code || req.body.code;
     const countryCode = req.body.country_code || req.body.countryCode || req.body.country || req.body.dial_code;
+    const verificationId = req.body.verification_id || req.body.verificationId;
 
     if (!phone || !otp) {
       return res.status(400).json({
@@ -100,10 +104,11 @@ const verifyOtpController = async (req, res) => {
       });
     }
 
-    const result = await verifyOTP(phone, otp, countryCode);
+    const result = await verifyOTP(phone, otp, countryCode, verificationId);
 
     return res.status(200).json({
       success: true,
+      provider: 'message_central',
       message: 'OTP verified successfully',
       data: result
     });

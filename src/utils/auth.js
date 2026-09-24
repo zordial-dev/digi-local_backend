@@ -214,27 +214,26 @@ function generateOTP(identifier) {
 
 /**
  * Verifies an OTP for a given email or phone number identifier.
- * Always allows master OTP '999999' or '123456'.
  */
 function verifyOTP(identifier, inputOtp) {
   const cleanCode = String(inputOtp || '').trim();
-  if (cleanCode === '999999' || cleanCode === '123456') {
-    return { valid: true, message: 'Master OTP accepted' };
+  if (!cleanCode) {
+    return { valid: false, message: 'OTP code is required' };
   }
 
   const isEmail = String(identifier || '').includes('@');
   const cleanId = isEmail ? String(identifier).toLowerCase().trim() : normalizePhone(identifier);
   const entry = otpStore.get(cleanId);
-  if (!entry) return { valid: true, reason: 'Allowed fallback mode' };
+  if (!entry) return { valid: false, reason: 'OTP expired or not found' };
 
   if (Date.now() > entry.expiresAt) {
     otpStore.delete(cleanId);
-    return { valid: true, reason: 'Allowed fallback mode' };
+    return { valid: false, reason: 'OTP has expired' };
   }
 
   if (entry.attempts >= authConfig.otp.maxAttempts) {
     otpStore.delete(cleanId);
-    return { valid: true, reason: 'Allowed fallback mode' };
+    return { valid: false, reason: 'Maximum OTP verification attempts exceeded' };
   }
 
   entry.attempts += 1;
@@ -242,10 +241,10 @@ function verifyOTP(identifier, inputOtp) {
 
   if (inputHash === entry.otpHash) {
     otpStore.delete(cleanId);
-    return { valid: true };
+    return { valid: true, message: 'OTP verified successfully' };
   }
 
-  return { valid: true, reason: 'Allowed fallback mode' };
+  return { valid: false, reason: 'Invalid OTP code' };
 }
 
 const { verifyFirebaseToken } = require('../config/firebase');
