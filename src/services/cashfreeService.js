@@ -9,10 +9,13 @@ const getAppId = (override) => String(override || process.env.CASHFREE_APP_ID ||
 const getSecretKey = (override) => String(override || process.env.CASHFREE_SECRET_KEY || '').trim().replace(/^["']|["']$/g, '');
 const getApiVersion = () => String(process.env.CASHFREE_API_VERSION || '2023-08-01').trim().replace(/^["']|["']$/g, '');
 const getEnv = (override, customSecret) => {
+  if (override) {
+    const o = String(override).toUpperCase().trim();
+    if (['TEST', 'SANDBOX', 'MOCK', 'SIMULATION', 'PRODUCTION'].includes(o)) return o;
+  }
   const secret = getSecretKey(customSecret);
   if (secret.startsWith('cfsk_ma_prod_')) return 'PRODUCTION';
   if (secret.startsWith('cfsk_ma_test_')) return 'SANDBOX';
-  if (override) return String(override).toUpperCase().trim();
   return String(process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase().trim();
 };
 const getBaseUrl = (overrideEnv, customSecret) => (getEnv(overrideEnv, customSecret) === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg');
@@ -177,10 +180,11 @@ async function createPaymentSession(payload = {}, options = {}) {
   const activeEnv = options.env || payload.env;
   const currentEnv = getEnv(activeEnv);
 
-  // Pure Local Test mode (explicitly requested)
-  if (currentEnv === 'TEST' || options.mock === true) {
-    console.log(`ℹ️ [CASHFREE SERVICE] Pure Test Mode active for Order #${orderId}`);
-    return generateSimulationSession(payload, 'Test Mode Active');
+  // Pure Local Test mode (explicitly requested or mock)
+  const isMockRequested = currentEnv === 'TEST' || currentEnv === 'MOCK' || currentEnv === 'SIMULATION' || options.mock === true || payload.mock === true || options.is_dummy === true || payload.is_dummy === true || options.dummy === true || payload.dummy === true;
+  if (isMockRequested) {
+    console.log(`ℹ️ [CASHFREE SERVICE] Test/Dummy Mode active for Order #${orderId}`);
+    return generateSimulationSession(payload, 'Test/Dummy Mode Active');
   }
 
   try {
@@ -418,7 +422,12 @@ async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
     String(orderId).startsWith('CF_ORD_TEST') ||
     String(orderId).startsWith('CF_TEST') ||
     String(orderId).startsWith('TEST_') ||
-    currentEnv === 'TEST';
+    currentEnv === 'TEST' ||
+    currentEnv === 'MOCK' ||
+    currentEnv === 'SIMULATION' ||
+    options.mock === true ||
+    options.is_dummy === true ||
+    options.dummy === true;
 
   if (isSimulationOrder) {
     console.log(`ℹ️ [CASHFREE VERIFY] Simulating successful payment verification for Order #${orderId}`);

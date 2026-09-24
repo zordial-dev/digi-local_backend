@@ -413,7 +413,8 @@ async function createOrder(req, res) {
       }, {
         env: req.body.env,
         app_id: req.body.app_id,
-        secret_key: req.body.secret_key
+        secret_key: req.body.secret_key,
+        mock: req.body.mock === true || req.body.env === 'TEST' || req.body.is_dummy === true || req.body.dummy === true
       }).catch(cfErr => ({ success: false, error: cfErr.message }));
 
       if (cashfreeSession && cashfreeSession.success && cashfreeSession.payment_session_id) {

@@ -94,7 +94,8 @@ async function createOrderPaymentSession(req, res) {
     }, {
       env: req.body.env,
       app_id: req.body.app_id,
-      secret_key: req.body.secret_key
+      secret_key: req.body.secret_key,
+      mock: req.body.mock === true || req.body.env === 'TEST' || req.body.is_dummy === true || req.body.dummy === true
     });
 
     if (!session || !session.success || !session.payment_session_id) {
@@ -178,7 +179,8 @@ async function verifyOrderPayment(req, res) {
     const verification = await cashfreeService.verifyPaymentStatus(lookupOrderId, cashfree_payment_id, {
       env: req.body.env,
       app_id: req.body.app_id,
-      secret_key: req.body.secret_key
+      secret_key: req.body.secret_key,
+      mock: req.body.mock === true || req.body.env === 'TEST' || req.body.is_dummy === true || req.body.dummy === true
     });
 
     if (!verification.success || !verification.verified) {
@@ -348,7 +350,8 @@ async function payVendorDirect(req, res) {
     }, {
       env: req.body.env,
       app_id: req.body.app_id,
-      secret_key: req.body.secret_key
+      secret_key: req.body.secret_key,
+      mock: req.body.mock === true || req.body.env === 'TEST' || req.body.is_dummy === true || req.body.dummy === true
     });
 
     if (!session || !session.success || !session.payment_session_id) {
@@ -415,7 +418,8 @@ async function verifyDirectPayment(req, res) {
     const verification = await cashfreeService.verifyPaymentStatus(order_id, cashfree_payment_id, {
       env: req.body.env,
       app_id: req.body.app_id,
-      secret_key: req.body.secret_key
+      secret_key: req.body.secret_key,
+      mock: req.body.mock === true || req.body.env === 'TEST' || req.body.is_dummy === true || req.body.dummy === true
     });
 
     if (!verification.success || !verification.verified) {
