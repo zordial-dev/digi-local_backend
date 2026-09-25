@@ -107,7 +107,7 @@ async function registerVendor(req, res) {
     const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
     const account_holder_name = String(body.account_holder_name || body.accountHolderName || vendor_name || '').trim();
     const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
-    const qr_code_url = String(body.qr_code_url || body.qr_code || body.upi_qr_code || body.qrCodeUrl || '').trim();
+    const qr_code = String(body.qr_code || body.qr_code_url || body.upi_qr_code || body.qrCodeUrl || '').trim();
 
     const hashedPassword = await hashPassword(password);
     const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
@@ -151,7 +151,6 @@ async function registerVendor(req, res) {
     const can_add_items = vendor_type === 'product';
 
     const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || ['UPI', 'COD']);
-    const payment_instructions = String(body.payment_instructions || body.instructions || '').trim();
 
     const kolkataISTNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T');
 
@@ -174,9 +173,9 @@ async function registerVendor(req, res) {
 
       // Insert new vendor record (gst_number takes gstin, pan_number takes pan_number; no cross-substitution)
       const vendorRes = await query(
-        `INSERT INTO vendors (society_id, vendor_name, public_id, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, ifsc, bank_name, account_holder_name, upi_id, qr_code_url, upi_qr_code, qr_code, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, status, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-        [society_id, vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, qr_code_url, qr_code_url, whatsapp_number, accepted_payment_methods, payment_instructions, vendor_type, can_add_items, kolkataISTNow]
+        `INSERT INTO vendors (society_id, vendor_name, public_id, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, status, created_at) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
+        [society_id, vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, kolkataISTNow]
       );
       const newVendorRow = vendorRes.rows[0] || {};
       vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -245,12 +244,9 @@ async function registerVendor(req, res) {
         pan_number,
         account_holder_name,
         upi_id,
-        qr_code_url,
-        upi_qr_code: qr_code_url,
-        qr_code: qr_code_url,
+        qr_code: qr_code,
         whatsapp_number,
         accepted_payment_methods: body.accepted_payment_methods || ['UPI', 'COD'],
-        payment_instructions,
         vendor_type,
         can_add_items,
         status: 'PENDING'

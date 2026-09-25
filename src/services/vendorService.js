@@ -174,7 +174,7 @@ class VendorService {
     vendor.pincode = vendor.pincode || '';
     vendor.bank_name = vendor.bank_name || '';
     vendor.account_number = vendor.account_number || vendor.bank_account_number || '';
-    vendor.ifsc_code = vendor.ifsc_code || vendor.ifsc || '';
+    vendor.ifsc_code = vendor.ifsc_code || '';
     vendor.account_holder_name = vendor.account_holder_name || '';
     vendor.gstin = String(vendor.gstin || vendor.gst_number || '').trim().toUpperCase();
     vendor.gst_number = vendor.gstin;
@@ -213,11 +213,11 @@ class VendorService {
     const {
       store_name, logo, logo_url, store_logo, shop_image, image_url, image, photo, avatar, avatar_url, description, phone_number, phone,
       gst_number, gstin, gst, gstNumber, pan_number,
-      opening_time, closing_time, opening_timing, closing_timing, working_days, business_type,
+      opening_time, closing_time, working_days, business_type,
       min_order_value, max_quantity_limit, delivery_charge, gst_percentage, service_charge_percentage,
       vendor_name, contact_person, merchant_name, owner_name, email,
       address, location_address, area, city, state, pincode, location,
-      bank_name, account_number, bank_account_number, ifsc_code, ifsc, account_holder_name,
+      bank_name, account_number, bank_account_number, ifsc_code, account_holder_name,
       whatsapp_number, shop_number, shop_no, category, vendor_type, location_type,
       is_global_coverage, delivery_radius_km, selected_zones, upi_id
     } = settings;
@@ -243,8 +243,8 @@ class VendorService {
 
     const finalGst = String(gst_number || gstin || gst || gstNumber || '').trim().toUpperCase();
     const finalPan = String(pan_number || '').trim().toUpperCase();
-    const finalOpening = opening_time || opening_timing || '';
-    const finalClosing = closing_time || closing_timing || '';
+    const finalOpening = opening_time || '';
+    const finalClosing = closing_time || '';
     const finalWorkingDays = working_days || '';
     const finalBusinessType = business_type || '';
     const finalVendorType = vendor_type || '';
@@ -353,13 +353,10 @@ class VendorService {
            account_number = COALESCE(NULLIF(?, ''), account_number),
            bank_account_number = COALESCE(NULLIF(?, ''), bank_account_number, account_number),
            ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
-           ifsc = COALESCE(NULLIF(?, ''), ifsc, ifsc_code),
            account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
            upi_id = COALESCE(NULLIF(?, ''), upi_id),
            opening_time = COALESCE(NULLIF(?, ''), opening_time),
-           closing_time = COALESCE(NULLIF(?, ''), closing_time),
-           opening_timing = COALESCE(NULLIF(?, ''), opening_timing), 
-           closing_timing = COALESCE(NULLIF(?, ''), closing_timing), 
+           closing_time = COALESCE(NULLIF(?, ''), closing_time), 
            working_days = COALESCE(NULLIF(?, ''), working_days),
            business_type = COALESCE(NULLIF(?, ''), business_type),
            vendor_type = COALESCE(NULLIF(?, ''), vendor_type),
@@ -396,11 +393,8 @@ class VendorService {
         finalAccountNumber,
         finalAccountNumber,
         finalIfscCode,
-        finalIfscCode,
         finalAccountHolderName,
         finalUpiId,
-        finalOpening,
-        finalClosing,
         finalOpening,
         finalClosing,
         finalWorkingDays,

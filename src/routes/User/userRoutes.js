@@ -1,13 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const usersController = require('../../controllers/User/usersController');
+const otpController = require('../../controllers/otpController');
 
 const { authenticateToken } = require('../../middleware/auth');
 
-// B0. Send OTP to Resident User Phone or Email
-router.post('/send-otp', usersController.sendOtp);
+// Dedicated Mobile OTP Routes
+router.post(['/mobile/send-otp', '/mobile/send'], otpController.sendMobileOtp);
+router.post(['/mobile/verify-otp', '/mobile/verify'], otpController.verifyMobileOtp);
 
-// B0.1 Verify Resident User OTP
+// Dedicated Email OTP Routes
+router.post(['/email/send-otp', '/email/send'], otpController.sendEmailOtp);
+router.post(['/email/verify-otp', '/email/verify'], otpController.verifyEmailOtp);
+
+// Universal / Legacy OTP Routes
+router.post('/send-otp', usersController.sendOtp);
 router.post('/verify-otp', usersController.verifyOtp);
 
 // B0.2 Check Resident User Phone Registration

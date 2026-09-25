@@ -2077,13 +2077,15 @@ async function sendTestEmail(req, res) {
     });
 
     if (result.sent) {
-      return respond(res, 200, {
+      return res.status(200).json({
+        success: true,
         sent: true,
         messageId: result.messageId,
         recipient: targetEmail,
         subject: emailSubject,
+        message: 'Email dispatched successfully.',
         timestamp: new Date().toISOString()
-      }, 'Test email sent successfully.');
+      });
     } else {
       return sendStandardError(res, 502, `Failed to send email: ${result.reason || 'SMTP failure'}`, 'EMAIL_DISPATCH_FAILED');
     }

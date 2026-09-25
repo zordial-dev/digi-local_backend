@@ -39,8 +39,6 @@ const updateSettingsSchema = {
     gst: z.string().trim().optional(),
     gstNumber: z.string().trim().optional(),
     pan_number: z.string().trim().optional(),
-    opening_timing: z.string().trim().optional(),
-    closing_timing: z.string().trim().optional(),
     opening_time: z.string().trim().optional(),
     closing_time: z.string().trim().optional(),
     working_days: z.string().trim().optional(),

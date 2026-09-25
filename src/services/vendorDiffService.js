@@ -23,11 +23,10 @@ const FIELD_LABELS = {
     bank_name: 'Bank Name',
     account_holder_name: 'Account Holder Name',
     upi_id: 'UPI ID',
-    qr_code_url: 'UPI QR Code Image',
+    qr_code: 'UPI QR Code',
     whatsapp_number: 'WhatsApp Number',
     vendor_type: 'Vendor Type',
-    accepted_payment_methods: 'Accepted Payment Methods',
-    payment_instructions: 'Payment Instructions'
+    accepted_payment_methods: 'Accepted Payment Methods'
 };
 
 /**
@@ -75,7 +74,7 @@ async function recordVendorFieldChanges(vendorId, oldData = {}, newData = {}, ba
             else if (key === 'bank_name') newVal = newData.bankName || newData.bank;
             else if (key === 'account_holder_name') newVal = newData.accountHolderName;
             else if (key === 'upi_id') newVal = newData.upiId || newData.upi;
-            else if (key === 'qr_code_url') newVal = newData.qr_code || newData.upi_qr_code || newData.qrCodeUrl;
+            else if (key === 'qr_code') newVal = newData.qr_code || newData.upi_qr_code || newData.qrCodeUrl || newData.qr_code_url;
         }
 
         // If field was not provided in update payload, skip comparing it

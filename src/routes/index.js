@@ -18,6 +18,7 @@ const cmsRoutes = require('./Cms/cmsRoutes');
 const ratingRoutes = require('./Rating/ratingRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
+const otpController = require('../controllers/otpController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
 const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
@@ -219,9 +220,16 @@ router.get('/api/settings', adminPanelController.getPlatformConfig);
 router.put('/api/settings', adminPanelController.updateBrandingConfig);
 router.put('/api/settings/profile', adminPanelController.updateAdminProfile);
 router.post('/api/settings/change-password', adminPanelController.changeAdminPassword);
-router.put('/api/settings/email', adminPanelController.updateSettingsSection);
-router.get(['/api/test/email/status', '/api/settings/email/status', '/api/email/status'], adminPanelController.checkEmailStatus);
-router.post(['/api/test/email/send', '/api/settings/email/send-test', '/api/email/send-test'], adminPanelController.sendTestEmail);
+router.get(['/api/email/status', '/api/test/email/status', '/api/settings/email/status'], adminPanelController.checkEmailStatus);
+router.post(['/api/email/send', '/api/emails/send', '/api/send-email', '/api/test/email/send', '/api/settings/email/send-test', '/api/email/send-test'], adminPanelController.sendTestEmail);
+
+// Direct Email OTP Endpoints
+router.post(['/api/email/send-otp', '/api/email/otp/send', '/api/email/request-otp'], otpController.sendEmailOtp);
+router.post(['/api/email/verify-otp', '/api/email/otp/verify'], otpController.verifyEmailOtp);
+
+// Direct Mobile OTP Endpoints
+router.post(['/api/mobile/send-otp', '/api/mobile/otp/send'], otpController.sendMobileOtp);
+router.post(['/api/mobile/verify-otp', '/api/mobile/otp/verify'], otpController.verifyMobileOtp);
 router.put('/api/settings/tax', adminPanelController.updateSettingsSection);
 router.put('/api/settings/subscription-plans', adminPanelController.updateSettingsSection);
 router.put('/api/settings/system', adminPanelController.updateSettingsSection);

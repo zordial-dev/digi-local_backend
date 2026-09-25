@@ -711,8 +711,7 @@ async function updatePaymentDetails(req, res) {
     const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
     const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
     const account_holder_name = String(body.account_holder_name || body.accountHolderName || '').trim();
-    const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
-    const qr_code_url = String(body.qr_code_url || body.qrCodeUrl || body.qr_code || '').trim();
+    const qr_code = String(body.qr_code || body.qr_code_url || body.qrCodeUrl || body.upi_qr_code || '').trim();
 
     if (!vendorId) {
       return res.status(400).json({ error: 'Vendor ID is required to update payment details.' });
@@ -731,13 +730,12 @@ async function updatePaymentDetails(req, res) {
         account_number = COALESCE(NULLIF(?, ''), account_number),
         bank_account_number = COALESCE(NULLIF(?, ''), bank_account_number),
         ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
-        ifsc = COALESCE(NULLIF(?, ''), ifsc),
         bank_name = COALESCE(NULLIF(?, ''), bank_name),
         account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
         upi_id = COALESCE(NULLIF(?, ''), upi_id),
-        qr_code_url = COALESCE(NULLIF(?, ''), qr_code_url)
+        qr_code = COALESCE(NULLIF(?, ''), qr_code)
       WHERE vendor_id = ?`,
-      [account_number, account_number, ifsc_code, ifsc_code, bank_name, account_holder_name, upi_id, qr_code_url, vendorId]
+      [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, vendorId]
     );
 
     return res.status(200).json({

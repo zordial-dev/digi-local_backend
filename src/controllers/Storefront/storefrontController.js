@@ -20,8 +20,8 @@ async function getSocietyVendorsStorefront(req, res) {
 
         let sql = `SELECT v.vendor_id, v.society_id, v.vendor_name, v.gst_number, v.phone_number, v.email,
                           v.store_name, v.logo, v.description, v.status, v.account_number, v.ifsc_code,
-                          v.bank_name, v.account_holder_name, v.upi_id, v.qr_code_url, v.upi_qr_code, v.qr_code,
-                          v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
+                          v.bank_name, v.account_holder_name, v.upi_id, v.qr_code,
+                          v.whatsapp_number, v.accepted_payment_methods,
                           v.vendor_type, v.can_add_items,
                           v.area, s.society_name 
                     FROM vendors v
@@ -277,8 +277,8 @@ async function searchVendorsLocationAware(req, res) {
 
         let sql = `SELECT v.vendor_id, v.society_id, v.vendor_name, v.gst_number, v.phone_number, v.email,
                           v.store_name, v.logo, v.description, v.status, v.account_number, v.ifsc_code,
-                          v.bank_name, v.account_holder_name, v.upi_id, v.qr_code_url, v.upi_qr_code, v.qr_code,
-                          v.whatsapp_number, v.accepted_payment_methods, v.payment_instructions,
+                          v.bank_name, v.account_holder_name, v.upi_id, v.qr_code,
+                          v.whatsapp_number, v.accepted_payment_methods,
                           v.vendor_type, v.can_add_items, v.location_address, v.location, v.city, v.state, v.pincode,
                           s.latitude, s.longitude, v.area,
                           s.society_name, s.location as society_location

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
+const otpController = require('../../controllers/otpController');
 const adminPanelController = require('../../controllers/Admin/adminPanelController');
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
 const storefrontController = require('../../controllers/Storefront/storefrontController');
@@ -69,6 +70,14 @@ router.get('/status', vendorAuthController.getVendorStatus);
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.post('/resubmit', vendorAuthController.resubmitVendorRequest);
 router.put('/resubmit', vendorAuthController.resubmitVendorRequest);
+
+// Dedicated Mobile OTP Endpoints
+router.post(['/mobile/send-otp', '/mobile/send'], otpController.sendMobileOtp);
+router.post(['/mobile/verify-otp', '/mobile/verify'], otpController.verifyMobileOtp);
+
+// Dedicated Email OTP Endpoints
+router.post(['/email/send-otp', '/email/send'], otpController.sendEmailOtp);
+router.post(['/email/verify-otp', '/email/verify'], otpController.verifyEmailOtp);
 
 // 3. Static Auth Endpoints (Must come BEFORE /:vendorId)
 router.post(['/send-otp', '/request-otp', '/otp-send'], vendorAuthController.sendVendorOtp);
