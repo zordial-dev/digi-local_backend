@@ -1994,7 +1994,10 @@ async function checkEmailStatus(req, res) {
       port,
       secure: port === 465,
       auth: { user, pass },
-      tls: { rejectUnauthorized: false }
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 6000,
+      greetingTimeout: 6000,
+      socketTimeout: 8000
     });
 
     await transporter.verify();

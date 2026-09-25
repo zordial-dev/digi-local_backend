@@ -27,7 +27,10 @@ function createTransporter() {
         port,
         secure: port === 465,   // true for 465 (SSL), false for 587 (TLS)
         auth: { user, pass },
-        tls: { rejectUnauthorized: false }
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+        socketTimeout: 10000
     });
 }
 
@@ -46,7 +49,30 @@ async function sendEmail({ to, subject, html }) {
         console.log(`[EmailService] Email sent to ${to} | MessageId: ${info.messageId}`);
         return { sent: true, messageId: info.messageId };
     } catch (err) {
-        console.error(`[EmailService] Failed to send email to ${to}:`, err.message);
+        console.warn(`[EmailService] First attempt failed (${err.message}). Retrying with alternate port...`);
+        try {
+            const currentPort = parseInt(process.env.SMTP_PORT || '587', 10);
+            const altPort = currentPort === 465 ? 587 : 465;
+            const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
+            const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
+            let host = (process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com').trim();
+            const altTransporter = nodemailer.createTransport({
+                host,
+                port: altPort,
+                secure: altPort === 465,
+                auth: { user, pass },
+                tls: { rejectUnauthorized: false },
+                connectionTimeout: 6000,
+                greetingTimeout: 6000,
+                socketTimeout: 8000
+            });
+            const rawFrom = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${user}>`;
+            const info = await altTransporter.sendMail({ from: rawFrom.trim(), to, subject, html });
+            console.log(`[EmailService] Sent on alternate port ${altPort} to ${to} | MessageId: ${info.messageId}`);
+            return { sent: true, messageId: info.messageId };
+        } catch (retryErr) {
+            console.error(`[EmailService] Alternate port retry also failed:`, retryErr.message);
+        }
         return { sent: false, reason: err.message };
     }
 }
