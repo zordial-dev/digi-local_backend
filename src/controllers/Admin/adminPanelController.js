@@ -1970,7 +1970,128 @@ async function updateBrandingConfig(req, res) { return respond(res, 200, {}, 'Br
 async function updateAdminProfile(req, res) { return respond(res, 200, {}, 'Admin profile updated.'); }
 async function changeAdminPassword(req, res) { return respond(res, 200, {}, 'Password changed.'); }
 async function updateSettingsSection(req, res) { return respond(res, 200, {}, 'Settings updated.'); }
-async function sendTestEmail(req, res) { return respond(res, 200, {}, 'Test email sent.'); }
+
+async function checkEmailStatus(req, res) {
+  try {
+    const nodemailer = require('nodemailer');
+    const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
+    const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
+    const host = (process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com').trim();
+    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    const from = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${user}>`;
+    const region = process.env.AWS_REGION || 'ap-south-1';
+
+    if (!user || !pass) {
+      return respond(res, 200, {
+        status: 'UNCONFIGURED',
+        connected: false,
+        message: 'SMTP credentials missing in .env.'
+      }, 'SMTP is not configured.');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure: port === 465,
+      auth: { user, pass },
+      tls: { rejectUnauthorized: false }
+    });
+
+    await transporter.verify();
+
+    return respond(res, 200, {
+      status: 'CONNECTED',
+      connected: true,
+      service: 'AWS SES SMTP',
+      host,
+      port,
+      region,
+      auth_user: user ? `${user.substring(0, 4)}...${user.slice(-4)}` : null,
+      default_from: from,
+      timestamp: new Date().toISOString()
+    }, 'SMTP mail service is connected and healthy.');
+  } catch (err) {
+    return sendStandardError(res, 502, `SMTP connection check failed: ${err.message}`, 'SMTP_CONNECTION_FAILED');
+  }
+}
+
+async function sendTestEmail(req, res) {
+  try {
+    const { sendEmail } = require('../../services/emailService');
+    const { to, email, recipient, subject, message, text, html, template } = req.body || {};
+    const targetEmail = (to || email || recipient || '').trim();
+
+    if (!targetEmail) {
+      return sendStandardError(res, 400, 'Recipient email is required. Provide "to" or "email" in JSON body.', 'VALIDATION_ERROR');
+    }
+
+    const emailSubject = subject || 'DigiLocal Platform - Test Email Notification';
+    let emailHtml = html;
+
+    if (!emailHtml) {
+      if (template === 'otp') {
+        const { otpTemplate } = require('../../templates/emailTemplates');
+        emailHtml = otpTemplate({ name: 'DigiLocal Tester', otp: '482910' });
+      } else if (template === 'welcome') {
+        const { welcomeTemplate } = require('../../templates/emailTemplates');
+        emailHtml = welcomeTemplate({ vendor_name: 'Merchant Partner', store_name: 'Test Super Store' });
+      } else if (template === 'invoice') {
+        const { invoiceTemplate } = require('../../templates/emailTemplates');
+        emailHtml = invoiceTemplate({
+          customer_name: 'Resident Customer',
+          order_id: 'ORD-98210',
+          total_amount: '499.00',
+          items: [
+            { item_name: 'Fresh Farm Milk 1L', quantity: 2, price: 65 },
+            { item_name: 'Artisan Bread Loaf', quantity: 1, price: 50 }
+          ],
+          store_name: 'Daily Fresh Grocers'
+        });
+      } else {
+        const textMsg = message || text || 'This is a test notification confirming that the DigiLocal AWS SES SMTP mail service is operating correctly.';
+        emailHtml = `
+          <div style="font-family: Arial, sans-serif; padding: 24px; color: #1a202c; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="background-color: #0A1428; padding: 18px 24px; border-radius: 6px 6px 0 0; text-align: center;">
+              <h2 style="color: #C5A880; margin: 0; font-size: 20px; letter-spacing: 2px;">DIGILOCAL</h2>
+              <p style="color: #a0aec0; margin: 4px 0 0; font-size: 12px;">Hyperlocal Society Marketplace</p>
+            </div>
+            <div style="padding: 24px 12px;">
+              <h3 style="color: #2b6cb0; margin-top: 0;">✅ SMTP Mail Service Test Successful</h3>
+              <p style="line-height: 1.6; color: #4a5568;">${textMsg}</p>
+              <div style="background-color: #edf2f7; padding: 12px 16px; border-radius: 6px; font-size: 13px; font-family: monospace; margin: 16px 0;">
+                <div><strong>Recipient:</strong> ${targetEmail}</div>
+                <div><strong>Dispatched At:</strong> ${new Date().toISOString()}</div>
+                <div><strong>SMTP Host:</strong> ${process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com'}</div>
+              </div>
+              <p style="font-size: 12px; color: #718096; margin-top: 24px;">If you received this email, the DigiLocal transactional email pipeline is fully functional.</p>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    const result = await sendEmail({
+      to: targetEmail,
+      subject: emailSubject,
+      html: emailHtml
+    });
+
+    if (result.sent) {
+      return respond(res, 200, {
+        sent: true,
+        messageId: result.messageId,
+        recipient: targetEmail,
+        subject: emailSubject,
+        timestamp: new Date().toISOString()
+      }, 'Test email sent successfully.');
+    } else {
+      return sendStandardError(res, 502, `Failed to send email: ${result.reason || 'SMTP failure'}`, 'EMAIL_DISPATCH_FAILED');
+    }
+  } catch (err) {
+    console.error('[sendTestEmail Error]:', err);
+    return sendStandardError(res, 500, `Internal error sending test email: ${err.message}`, 'INTERNAL_SERVER_ERROR');
+  }
+}
 async function getDashboardData(req, res) {
   try {
     const [vendorsRes, pendingRes, usersRes, societiesRes, ordersRes, revRes] = await Promise.all([
@@ -2026,6 +2147,7 @@ module.exports = {
   changeAdminPassword,
   updateSettingsSection,
   sendTestEmail,
+  checkEmailStatus,
   getDashboardData,
   getVendorDetails,
   serializeVendorForAdmin,

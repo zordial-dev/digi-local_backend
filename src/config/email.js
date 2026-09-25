@@ -11,17 +11,23 @@ const transporter = nodemailer.createTransport({
   }
 });
 
+const { sendEmail } = require('../services/emailService');
+
 /**
  * Internal async dispatcher that handles real SMTP delivery or simulation logging.
  */
 const sendMailAsync = async ({ to, subject, html, taskName = 'email' }) => {
-  const from = process.env.EMAIL_FROM || `DigiLocal Platform <${process.env.EMAIL_USER || 'no-reply@digilocal.in'}>`;
+  // Primary: Use unified emailService (AWS SES / SMTP)
+  const result = await sendEmail({ to, subject, html });
+  if (result.sent) return result;
 
-  if (!process.env.EMAIL_USER || process.env.EMAIL_USER === 'your_gmail@gmail.com') {
-    return;
+  // Fallback: Gmail transporter if EMAIL_USER is explicitly configured
+  if (process.env.EMAIL_USER && process.env.EMAIL_USER !== 'your_gmail@gmail.com') {
+    const from = process.env.EMAIL_FROM || `DigiLocal Platform <${process.env.EMAIL_USER}>`;
+    return await transporter.sendMail({ from, to, subject, html });
   }
 
-  await transporter.sendMail({ from, to, subject, html });
+  return result;
 };
 
 /**

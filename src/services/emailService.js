@@ -51,4 +51,40 @@ async function sendEmail({ to, subject, html }) {
     }
 }
 
-module.exports = { sendEmail };
+/**
+ * Sends a Login Security Alert email to a User or Vendor when they log in.
+ * Executed non-blocking (fire-and-forget).
+ */
+async function sendLoginAlertEmail({ to, name, role = 'user', store_name = null, loginMethod = 'Password', ipAddress = null, userAgent = null }) {
+    if (!to || !to.includes('@') || to.endsWith('.internal')) {
+        return { sent: false, reason: 'No valid recipient email address' };
+    }
+
+    try {
+        const { loginAlertTemplate } = require('../templates/emailTemplates');
+        const istTime = new Date().toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            dateStyle: 'medium',
+            timeStyle: 'short'
+        }) + ' IST';
+
+        const portalDesc = role === 'vendor' ? 'Vendor Portal' : 'User Portal';
+        const subject = `🔐 Security Alert: Login to your DigiLocal ${portalDesc}`;
+        const html = loginAlertTemplate({
+            name,
+            role,
+            store_name,
+            loginMethod,
+            loginTime: istTime,
+            ipAddress,
+            userAgent
+        });
+
+        return await sendEmail({ to, subject, html });
+    } catch (err) {
+        console.warn(`[Login Alert Email Error] Failed to send login email to ${to}:`, err.message);
+        return { sent: false, reason: err.message };
+    }
+}
+
+module.exports = { sendEmail, sendLoginAlertEmail };

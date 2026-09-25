@@ -17,14 +17,34 @@ This document provides frontend engineers (Web, Android, iOS, React Native, and 
 
 ## 🧪 2. How to Test Dummy / Mock Payments
 
-To test the complete end-to-end payment lifecycle **without deducting real money** and **without needing active bank accounts or live Cashfree merchant credentials**:
+To test the complete end-to-end payment lifecycle **without deducting real money** and **without needing active bank accounts or live Cashfree merchant credentials**, choose one of the following approaches:
 
-1. Pass `"mock": true` (or `"env": "TEST"`) in the request body when creating any order or payment session.
+### Option A: Dedicated 1-Click Dummy Transaction API (Fastest)
+* **Endpoint**: `POST` or `GET` `/api/payments/cashfree/dummy-transaction` (or `/api/payments/dummy-transaction`)
+* **Instant Browser Test**: Open in any browser:
+  `http://localhost:5000/api/payments/cashfree/dummy-transaction?amount=50&auto_complete=true`
+* **cURL / Postman**:
+  ```bash
+  curl -X POST http://localhost:5000/api/payments/cashfree/dummy-transaction \
+    -H "Content-Type: application/json" \
+    -d '{"amount": 50.00, "customer_name": "Aarushi Verma", "auto_complete": true}'
+  ```
+  Immediately marks the order as `PAID` & `CONFIRMED`, creates a ledger record in `payments`, and alerts the vendor!
+
+### Option B: Order Flow with "mock": true
+1. Pass `"mock": true` (or `"env": "TEST"`) in the request body when creating any order (`POST /api/orders`) or payment session (`POST /api/payments/cashfree/create-order-session`).
 2. The backend responds immediately with:
    - A mock `payment_session_id` (format: `session_test_<timestamp>_<random>`)
    - A test `payment_url` (`https://payments-test.cashfree.com/order/#<order_id>`)
    - `"mode": "test_sandbox"`
-3. Pass `"mock": true` when calling the verification endpoint (`/api/payments/cashfree/verify`). The backend marks the order as `CONFIRMED` and `PAID`, triggers real-time Socket.IO notifications to the vendor, and records a settlement ledger entry.
+3. Pass `"mock": true` when calling the verification endpoint (`POST /api/payments/cashfree/verify`). The backend marks the order as `CONFIRMED` and `PAID`, triggers real-time Socket.IO notifications to the vendor, and records a settlement ledger entry.
+
+### Option C: Interactive Web Test Bench UI
+Open in your browser: **[`http://localhost:5000/cashfree-test`](http://localhost:5000/cashfree-test)**
+* Test credentials live against Cashfree servers.
+* Click **"⚡ 1-Click Dummy Txn"** to simulate an end-to-end transaction.
+* Open the Cashfree Web SDK modal or test hosted checkout links.
+* Inspect platform-wide payments in the live ledger.
 
 ---
 

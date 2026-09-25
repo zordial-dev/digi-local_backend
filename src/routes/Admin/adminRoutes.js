@@ -148,6 +148,7 @@ router.put('/settings', adminPanelController.updateBrandingConfig);
 router.put('/settings/profile', adminPanelController.updateAdminProfile);
 router.post('/settings/change-password', adminPanelController.changeAdminPassword);
 router.put('/settings/email', adminPanelController.updateSettingsSection);
+router.get('/settings/email/status', adminPanelController.checkEmailStatus);
 router.post('/settings/email/send-test', adminPanelController.sendTestEmail);
 router.put('/settings/tax', adminPanelController.updateSettingsSection);
 router.put('/settings/subscription-plans', adminPanelController.updateSettingsSection);

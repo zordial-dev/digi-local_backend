@@ -452,7 +452,7 @@ async function getVendorPublicProfile(req, res, next) {
 async function loginVendor(req, res) {
   try {
     const { email, phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, password, pass, otp, code, otp_code } = req.body || {};
-    const target = email || phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone;
+    const target = phone_number || phone || mobile || phone_no || mobile_number || user_phone || identifier || number || email;
     const loginPassword = password || pass;
     const loginOtp = otp || code || otp_code;
 
@@ -520,6 +520,23 @@ async function loginVendor(req, res) {
     const tokens = generateTokens(authUser);
 
     const vendorPublicId = v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0'));
+
+    // Non-blocking Login Security Alert Email
+    const vendorEmail = v.email || (req.body.email ? String(req.body.email).trim() : null);
+    if (vendorEmail && vendorEmail.includes('@') && !vendorEmail.endsWith('.internal')) {
+      const { sendLoginAlertEmail } = require('../../services/emailService');
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress;
+      const userAgent = req.headers['user-agent'] || 'Vendor Portal App';
+      sendLoginAlertEmail({
+        to: vendorEmail,
+        name: v.vendor_name || v.owner_name,
+        role: 'vendor',
+        store_name: v.store_name,
+        loginMethod: 'Password',
+        ipAddress: clientIp,
+        userAgent
+      }).catch(err => console.warn('[Vendor Login Email Warning]:', err.message));
+    }
 
     return res.status(200).json({
       success: true,
@@ -869,6 +886,23 @@ async function loginVendorWithOtp(req, res) {
     const tokens = generateTokens(authUser);
 
     const vendorPublicId = v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0'));
+
+    // Non-blocking Login Security Alert Email
+    const vendorEmail = v.email || (req.body.email ? String(req.body.email).trim() : null);
+    if (vendorEmail && vendorEmail.includes('@') && !vendorEmail.endsWith('.internal')) {
+      const { sendLoginAlertEmail } = require('../../services/emailService');
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress;
+      const userAgent = req.headers['user-agent'] || 'Vendor Portal App';
+      sendLoginAlertEmail({
+        to: vendorEmail,
+        name: v.vendor_name || v.owner_name,
+        role: 'vendor',
+        store_name: v.store_name,
+        loginMethod: 'OTP (Message Central)',
+        ipAddress: clientIp,
+        userAgent
+      }).catch(err => console.warn('[Vendor OTP Login Email Warning]:', err.message));
+    }
 
     return res.status(200).json({
       success: true,

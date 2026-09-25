@@ -165,6 +165,60 @@ function verificationTemplate({ name, verificationUrl }) {
   return baseContainer('✉️ Verify Your Email Address', '#0A1428', content);
 }
 
+/**
+ * 8. Login Security Alert Template
+ */
+function loginAlertTemplate({ name, role = 'user', store_name = null, loginMethod = 'Password', loginTime = null, ipAddress = null, userAgent = null }) {
+  const isVendor = role === 'vendor';
+  const roleTitle = isVendor ? `Merchant Partner (${store_name || 'Vendor'})` : 'Resident User';
+  const portalName = isVendor ? 'DigiLocal Vendor Merchant Portal / App' : 'DigiLocal Resident Website / App';
+
+  const content = `
+    <p style="font-size: 14px; line-height: 1.6; color: #333;">Hello <strong>${name || (isVendor ? store_name : 'Valued Resident')}</strong>,</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #444;">
+      A successful login to your <strong>${portalName}</strong> account was detected.
+    </p>
+
+    <div style="background-color: #FAF9F6; border: 1px solid #E0D5C3; border-radius: 12px; padding: 20px; margin: 22px 0;">
+      <h3 style="margin: 0 0 14px; font-size: 14px; color: #0A1428; text-transform: uppercase; letter-spacing: 1px;">🔐 Session Details</h3>
+      <table style="width: 100%; font-size: 13px; color: #4A5568; line-height: 1.8; border-collapse: collapse;">
+        <tr>
+          <td style="width: 35%; font-weight: 600; color: #2D3748;">Account Type:</td>
+          <td>${roleTitle}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Authentication Method:</td>
+          <td><span style="background-color: #E2E8F0; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px;">${loginMethod}</span></td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Login Time:</td>
+          <td>${loginTime || new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST'}</td>
+        </tr>
+        ${ipAddress && ipAddress !== '127.0.0.1' && ipAddress !== '::1' ? `
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">IP Address:</td>
+          <td><code>${ipAddress}</code></td>
+        </tr>` : ''}
+        ${userAgent ? `
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Device / Browser:</td>
+          <td style="word-break: break-word; font-size: 12px; color: #718096;">${userAgent.substring(0, 100)}</td>
+        </tr>` : ''}
+      </table>
+    </div>
+
+    <div style="background-color: #FFF8E6; border-left: 4px solid #D69E2E; padding: 14px 18px; border-radius: 6px; margin: 20px 0; font-size: 13px; color: #744210; line-height: 1.6;">
+      <strong>Security Notice:</strong> If this login was authorized by you, no action is required. If you did not perform this login, please immediately change your password or reach out to our security team.
+    </div>
+
+    <div style="text-align: center; margin: 28px 0 10px;">
+      <a href="mailto:support@digilocal.in?subject=Unauthorized%20Login%20Alert" style="background-color: #0A1428; color: #C5A880; font-weight: 700; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 13px; display: inline-block;">REPORT SUSPICIOUS ACTIVITY</a>
+    </div>
+  `;
+
+  return baseContainer('🔐 Security Alert: Successful Login Detected', '#0A1428', content);
+}
+
 module.exports = {
   otpTemplate,
   welcomeTemplate,
@@ -172,5 +226,6 @@ module.exports = {
   renewalSuccessTemplate,
   invoiceTemplate,
   passwordResetSuccessTemplate,
-  verificationTemplate
+  verificationTemplate,
+  loginAlertTemplate
 };

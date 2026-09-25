@@ -281,6 +281,22 @@ async function loginUser(req, res) {
 
     const resolvedUserPublicId = user.public_id || (user.user_id?.startsWith('usr@') ? user.user_id : ('usr@' + String(user.user_id).slice(-4)));
 
+    // Non-blocking Login Security Alert Email
+    const userEmail = user.email || (req.body.email ? String(req.body.email).trim() : null);
+    if (userEmail && userEmail.includes('@') && !userEmail.endsWith('.internal')) {
+      const { sendLoginAlertEmail } = require('../../services/emailService');
+      const clientIp = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress;
+      const userAgent = req.headers['user-agent'] || 'Resident Web/Mobile App';
+      sendLoginAlertEmail({
+        to: userEmail,
+        name: user.name,
+        role: 'user',
+        loginMethod: loginOtp ? 'OTP (Message Central)' : 'Password',
+        ipAddress: clientIp,
+        userAgent
+      }).catch(err => console.warn('[User Login Email Warning]:', err.message));
+    }
+
     res.status(200).json({
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
