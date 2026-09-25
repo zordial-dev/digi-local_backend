@@ -5,11 +5,11 @@ const nodemailer = require('nodemailer');
  * Creates and returns a configured Nodemailer transporter.
  * Seamlessly supports AWS SES SMTP credentials as well as standard SMTP / Gmail.
  */
-function createTransporter() {
+function createTransporter(portOverride = null) {
     const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
     const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
     let host = (process.env.SMTP_HOST || '').trim();
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
+    const port = portOverride || parseInt(process.env.SMTP_PORT || '465', 10);
 
     if (user && (!host || host === 'smtp.gmail.com') && process.env.AWS_SMTP_USERNAME) {
         host = process.env.AWS_REGION 
