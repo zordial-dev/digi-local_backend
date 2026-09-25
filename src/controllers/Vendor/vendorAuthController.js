@@ -789,7 +789,8 @@ async function sendVendorOtp(req, res) {
       });
     }
 
-    const result = await sendCentralOTP(cleanTarget, countryCode);
+    const otpLength = Number(req.body?.otp_length || req.body?.otpLength || 6);
+    const result = await sendCentralOTP(cleanTarget, countryCode, 'SMS', otpLength);
     return res.status(200).json({
       success: true,
       provider: 'message_central',

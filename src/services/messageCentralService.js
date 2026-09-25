@@ -120,8 +120,9 @@ async function getAuthToken() {
  * @param {string} phone - 10-digit mobile number
  * @param {string} [countryCode='91'] - Country calling code
  * @param {string} [flowType='SMS'] - Verification channel: SMS, WHATSAPP, etc.
+ * @param {number} [otpLength=6] - Number of OTP digits (defaults to 6)
  */
-async function sendOTP(phone, countryCode = '91', flowType = 'SMS') {
+async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 6) {
   const { mobileNumber, countryCode: cc } = formatPhone(phone, countryCode);
 
   if (!mobileNumber || mobileNumber.length < 10) {
@@ -131,16 +132,23 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS') {
   const customerId = getCustomerId();
   const baseUrl = getBaseUrl();
   const activeFlow = flowType || process.env.MESSAGECENTRAL_FLOW_TYPE || 'SMS';
+  const activeOtpLength = Number(otpLength || 6);
 
   try {
     const token = await getAuthToken();
-    const sendUrl = `${baseUrl}/verification/v3/send?countryCode=${cc}&customerId=${encodeURIComponent(customerId)}&flowType=${activeFlow}&mobileNumber=${mobileNumber}`;
+    const sendUrl = `${baseUrl}/verification/v3/send?countryCode=${cc}&customerId=${encodeURIComponent(customerId)}&flowType=${activeFlow}&mobileNumber=${mobileNumber}&otpLength=${activeOtpLength}`;
 
-    console.log(`📤 [MESSAGE CENTRAL] Sending OTP via ${activeFlow} to +${cc} ${mobileNumber}...`);
+    console.log(`📤 [MESSAGE CENTRAL] Sending ${activeOtpLength}-digit OTP via ${activeFlow} to +${cc} ${mobileNumber}...`);
 
     const response = await axios.post(
       sendUrl,
-      {},
+      {
+        countryCode: cc,
+        customerId,
+        flowType: activeFlow,
+        mobileNumber,
+        otpLength: activeOtpLength
+      },
       {
         headers: {
           authToken: token,

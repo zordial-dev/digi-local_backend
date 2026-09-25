@@ -39,7 +39,7 @@
 
 1. **Message Central CPaaS Integration:**
    - Real SMS delivery is triggered to Indian mobile numbers (`+91`).
-   - OTP codes are typically 4 to 6 digits generated securely by Message Central.
+   - OTP codes are standard 6 digits generated securely by Message Central (`otpLength=6`).
 2. **Session Identification (`verification_id`):**
    - Whenever you call `send-otp`, the server returns a `verification_id` (also aliased as `verificationId`).
    - **Recommended:** Store this `verification_id` and pass it back in subsequent verification/login requests for the fastest response.

@@ -758,6 +758,405 @@ async function checkCredentials(req, res) {
   }
 }
 
+/**
+ * 9. Creates a Dummy / Simulated Transaction for Testing
+ * POST & GET /api/payments/cashfree/dummy-transaction
+ * POST & GET /api/payments/dummy-transaction
+ */
+async function createDummyTransaction(req, res) {
+  try {
+    const isGet = req.method === 'GET';
+    const params = isGet ? req.query : (req.body || {});
+
+    const amount = Number(params.amount || params.total_amount || 50.00);
+    let vendorId = params.vendor_id ? Number(params.vendor_id) : null;
+    const customerName = params.customer_name || 'Aarushi Verma';
+    const customerPhone = params.customer_phone || params.phone || '9876543210';
+    const customerEmail = params.customer_email || params.email || 'resident.test@digilocal.in';
+    const deliveryAddress = params.delivery_address || params.address || 'Flat 402, Tower B, Greenwood Residency';
+    const notes = params.notes || params.note || 'Test Dummy Cashfree Transaction';
+    const autoComplete = params.auto_complete !== undefined
+      ? (params.auto_complete === true || params.auto_complete === 'true' || params.auto_complete === '1')
+      : true;
+
+    // Resolve a valid vendor
+    let storeName = 'DigiLocal Partner Store';
+    if (!vendorId) {
+      const vRes = await query(`SELECT vendor_id, store_name FROM vendors ORDER BY vendor_id ASC LIMIT 1`).catch(() => ({ rows: [] }));
+      if (vRes.rows && vRes.rows.length > 0) {
+        vendorId = Number(vRes.rows[0].vendor_id);
+        storeName = vRes.rows[0].store_name || storeName;
+      } else {
+        vendorId = 1296;
+      }
+    } else {
+      const vRes = await query(`SELECT store_name FROM vendors WHERE vendor_id = ?`, [vendorId]).catch(() => ({ rows: [] }));
+      if (vRes.rows && vRes.rows.length > 0) {
+        storeName = vRes.rows[0].store_name || storeName;
+      }
+    }
+
+    const timestamp = Date.now();
+    const rand4 = Math.floor(1000 + Math.random() * 9000);
+    const dummyOrderId = `ORD_DUMMY_${timestamp}_${rand4}`;
+    const dummySessionId = `session_dummy_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
+    const dummyPaymentId = `CF_PAY_DUMMY_${timestamp}_${rand4}`;
+    const paymentUrl = `https://payments-test.cashfree.com/order/#${dummyOrderId}`;
+
+    const orderStatus = autoComplete ? 'CONFIRMED' : 'PENDING';
+    const paymentStatus = autoComplete ? 'PAID' : 'PENDING';
+
+    // 1. Insert dummy order record into orders table
+    await query(
+      `INSERT INTO orders (
+         order_id, user_id, vendor_id, total_amount, status,
+         payment_status, payment_method, cashfree_order_id, cashfree_payment_id,
+         customer_name, customer_phone, delivery_address, created_at, paid_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ${autoComplete ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
+      [
+        dummyOrderId,
+        `usr_${customerPhone}`,
+        vendorId,
+        amount,
+        orderStatus,
+        paymentStatus,
+        dummyOrderId,
+        autoComplete ? dummyPaymentId : null,
+        customerName,
+        customerPhone,
+        deliveryAddress
+      ]
+    ).catch(async () => {
+      return query(
+        `INSERT INTO orders (order_id, user_id, vendor_id, total_amount, status, delivery_address, created_at, customer_name)
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+        [dummyOrderId, `usr_${customerPhone}`, vendorId, amount, orderStatus, deliveryAddress, customerName]
+      ).catch(() => {});
+    });
+
+    // 2. Insert dummy order details (lookup valid item_id for foreign key)
+    let validItemId = 1;
+    const itemCheck = await query(`SELECT item_id FROM items WHERE vendor_id = ? LIMIT 1`, [vendorId]).catch(() => ({ rows: [] }));
+    if (itemCheck.rows && itemCheck.rows.length > 0) {
+      validItemId = Number(itemCheck.rows[0].item_id);
+    } else {
+      const anyItem = await query(`SELECT item_id FROM items LIMIT 1`).catch(() => ({ rows: [] }));
+      if (anyItem.rows && anyItem.rows.length > 0) {
+        validItemId = Number(anyItem.rows[0].item_id);
+      }
+    }
+
+    await query(
+      `INSERT INTO order_details (order_id, item_id, item_name, quantity, price, unit_price, item_total)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [dummyOrderId, validItemId, 'Dummy Test Item', 1, amount, amount, amount]
+    ).catch(() => {});
+
+    // 3. Record in payments table if auto_complete
+    let paymentRecord = null;
+    if (autoComplete) {
+      try {
+        const pRes = await query(
+          `INSERT INTO payments (
+             order_id, vendor_id, user_id, amount, currency, payment_status,
+             payment_method, payment_gateway, cashfree_order_id, cashfree_payment_id,
+             customer_name, customer_phone, customer_email, notes, created_at
+           ) VALUES (?, ?, ?, ?, 'INR', 'SUCCESS', 'CASHFREE', 'CASHFREE', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           RETURNING *`,
+          [
+            dummyOrderId,
+            vendorId,
+            `usr_${customerPhone}`,
+            amount,
+            dummyOrderId,
+            dummyPaymentId,
+            customerName,
+            customerPhone,
+            customerEmail,
+            notes
+          ]
+        );
+        paymentRecord = pRes.rows?.[0] || null;
+      } catch (pErr) {
+        console.warn('Could not insert payment into payments table:', pErr.message);
+      }
+
+      // Notify vendor
+      if (vendorId) {
+        notificationService.notifyVendorNewOrder({
+          vendor_id: vendorId,
+          order_id: dummyOrderId,
+          total_amount: amount,
+          customer_name: customerName,
+          items_count: 1
+        }).catch(() => {});
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      mode: 'dummy_simulation',
+      is_dummy: true,
+      message: autoComplete
+        ? `✅ Dummy transaction created & completed as PAID! Order #${dummyOrderId} confirmed and recorded in payments ledger.`
+        : `✅ Dummy payment session created! Order #${dummyOrderId} is PENDING payment. Test verification with POST /api/payments/cashfree/verify.`,
+      order_id: dummyOrderId,
+      amount: amount,
+      currency: 'INR',
+      status: orderStatus,
+      payment_status: paymentStatus,
+      payment_method: 'CASHFREE',
+      payment_session_id: dummySessionId,
+      cashfree_order_id: dummyOrderId,
+      cashfree_payment_id: autoComplete ? dummyPaymentId : null,
+      payment_url: paymentUrl,
+      vendor: {
+        vendor_id: vendorId,
+        store_name: storeName
+      },
+      customer: {
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_email: customerEmail,
+        delivery_address: deliveryAddress
+      },
+      payment: paymentRecord,
+      testing_guide: {
+        verify_endpoint: 'POST /api/payments/cashfree/verify',
+        verify_payload: {
+          order_id: dummyOrderId,
+          cashfree_order_id: dummyOrderId,
+          cashfree_payment_id: dummyPaymentId,
+          mock: true
+        },
+        view_ledger_endpoint: 'GET /api/admin/payments/cashfree-ledger',
+        view_vendor_payments_endpoint: `GET /api/vendors/${vendorId}/cashfree-payments`
+      }
+    });
+  } catch (err) {
+    console.error('❌ [CREATE DUMMY TRANSACTION ERROR]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to create dummy transaction',
+      details: err.message
+    });
+  }
+}
+
+/**
+ * 10. Simulates Payment Completion for an Existing Order
+ * POST /api/payments/cashfree/simulate-payment
+ */
+async function simulatePaymentCompletion(req, res) {
+  try {
+    const { order_id, amount, payment_method, note } = req.body || {};
+
+    if (!order_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: order_id'
+      });
+    }
+
+    const orderRes = await query(
+      `SELECT o.*, v.store_name FROM orders o LEFT JOIN vendors v ON o.vendor_id = v.vendor_id WHERE o.order_id = ?`,
+      [order_id]
+    ).catch(() => ({ rows: [] }));
+
+    if (!orderRes.rows || orderRes.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Order #${order_id} not found in database.`
+      });
+    }
+
+    const ord = orderRes.rows[0];
+    const verifiedAmount = Number(amount || ord.total_amount || 0);
+    const dummyPaymentId = `CF_PAY_SIM_${Date.now()}`;
+    const selectedMethod = payment_method || 'CASHFREE';
+
+    await query(
+      `UPDATE orders 
+       SET payment_status = 'PAID',
+           status = CASE WHEN status = 'CANCELLED' THEN status ELSE 'CONFIRMED' END,
+           cashfree_order_id = COALESCE(cashfree_order_id, ?),
+           cashfree_payment_id = ?,
+           payment_method = ?,
+           paid_at = CURRENT_TIMESTAMP
+       WHERE order_id = ?`,
+      [order_id, dummyPaymentId, selectedMethod, order_id]
+    );
+
+    let paymentRecord = null;
+    try {
+      const pRes = await query(
+        `INSERT INTO payments (
+           order_id, vendor_id, user_id, amount, currency, payment_status,
+           payment_method, payment_gateway, cashfree_order_id, cashfree_payment_id,
+           customer_name, customer_phone, notes, created_at
+         ) VALUES (?, ?, ?, ?, 'INR', 'SUCCESS', ?, 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [
+          order_id,
+          ord.vendor_id,
+          ord.user_id || 'usr_anonymous',
+          verifiedAmount,
+          selectedMethod,
+          order_id,
+          dummyPaymentId,
+          ord.customer_name || 'Resident Customer',
+          ord.customer_phone || '',
+          note || `Simulated payment for order #${order_id}`
+        ]
+      );
+      paymentRecord = pRes.rows?.[0] || null;
+    } catch (pErr) {
+      console.warn('Could not insert payment:', pErr.message);
+    }
+
+    if (ord.vendor_id) {
+      notificationService.notifyVendorNewOrder({
+        vendor_id: ord.vendor_id,
+        order_id: order_id,
+        total_amount: verifiedAmount,
+        customer_name: ord.customer_name || 'Resident Customer',
+        items_count: 1
+      }).catch(() => {});
+    }
+
+    return res.status(200).json({
+      success: true,
+      verified: true,
+      simulated: true,
+      message: `✅ Order #${order_id} simulated as PAID successfully!`,
+      order_id: order_id,
+      amount: verifiedAmount,
+      payment_status: 'PAID',
+      payment_method: selectedMethod,
+      cashfree_payment_id: dummyPaymentId,
+      order_status: 'CONFIRMED',
+      payment: paymentRecord
+    });
+  } catch (err) {
+    console.error('❌ [SIMULATE PAYMENT COMPLETION ERROR]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to simulate payment completion',
+      details: err.message
+    });
+  }
+}
+
+/**
+ * 11. Returns API Route Directory & Documentation for Payments
+ * GET /api/payments/routes
+ */
+async function getPaymentRoutesCatalog(req, res) {
+  const routes = [
+    {
+      name: 'Create Dummy Transaction (Instant Test)',
+      method: 'POST / GET',
+      endpoint: '/api/payments/cashfree/dummy-transaction',
+      aliases: ['/api/payments/dummy-transaction', '/api/payments/cashfree/create-dummy-transaction'],
+      description: 'Creates a simulated test transaction end-to-end. Can auto-complete to PAID status and populate payments ledger.',
+      sample_payload: {
+        amount: 50.00,
+        vendor_id: 1296,
+        customer_name: 'Aarushi Verma',
+        customer_phone: '9876543210',
+        customer_email: 'resident.test@digilocal.in',
+        auto_complete: true
+      }
+    },
+    {
+      name: 'Simulate Payment Completion',
+      method: 'POST',
+      endpoint: '/api/payments/cashfree/simulate-payment',
+      aliases: ['/api/payments/simulate-payment'],
+      description: 'Marks an existing order as PAID, CONFIRMED, generates cashfree_payment_id, and records in payments ledger.',
+      sample_payload: {
+        order_id: 'ORD_12345',
+        amount: 50.00
+      }
+    },
+    {
+      name: 'Check Live Cashfree Credentials',
+      method: 'GET / POST',
+      endpoint: '/api/payments/cashfree/check-credentials',
+      description: 'Probes Cashfree PG remote server to test if CASHFREE_APP_ID and CASHFREE_SECRET_KEY in .env are valid and live.',
+      query_params: '?env=PRODUCTION or ?env=SANDBOX'
+    },
+    {
+      name: 'Create Cart Order with Cashfree Session',
+      method: 'POST',
+      endpoint: '/api/orders',
+      description: 'Places a customer cart order. Pass payment_method: "CASHFREE". Pass "mock": true for test mode.',
+      sample_payload: {
+        vendor_id: 1296,
+        total_amount: 150.00,
+        payment_method: 'CASHFREE',
+        mock: true,
+        items: [{ item_id: 1, item_name: 'Item', quantity: 1, price: 150 }]
+      }
+    },
+    {
+      name: 'Create Dedicated Order Session',
+      method: 'POST',
+      endpoint: '/api/payments/cashfree/create-order-session',
+      description: 'Creates a Cashfree PG v3 payment session for an existing or new order. Pass "mock": true for test mode.'
+    },
+    {
+      name: 'Verify Order Payment',
+      method: 'POST',
+      endpoint: '/api/payments/cashfree/verify',
+      description: 'Verifies payment status with Cashfree servers or simulated test orders. Marks order as PAID and logs to ledger.'
+    },
+    {
+      name: 'Direct Resident-to-Vendor Payment (Scan & Pay)',
+      method: 'POST',
+      endpoint: '/api/payments/cashfree/pay-vendor-direct',
+      description: 'Creates a direct payment session for QR scan or counter payment.'
+    },
+    {
+      name: 'Verify Direct Payment',
+      method: 'POST',
+      endpoint: '/api/payments/cashfree/verify-direct',
+      description: 'Verifies direct scan-and-pay payment.'
+    },
+    {
+      name: 'Cashfree Webhook Handler',
+      method: 'POST',
+      endpoint: '/api/payments/cashfree/webhook',
+      description: 'Cashfree PG webhook listener for real-time payment status updates.'
+    },
+    {
+      name: 'Platform Payments Ledger',
+      method: 'GET',
+      endpoint: '/api/admin/payments/cashfree-ledger',
+      description: 'Admin payments ledger with volume, transaction counts, and filters.'
+    },
+    {
+      name: 'Vendor Cashfree Payments',
+      method: 'GET',
+      endpoint: '/api/vendors/:vendorId/cashfree-payments',
+      description: 'Vendor payments history with received amount, pending amount, and transaction list.'
+    },
+    {
+      name: 'Interactive Test Bench UI',
+      method: 'GET (Browser)',
+      endpoint: '/cashfree-test',
+      description: 'Full interactive UI test bench with SDK modal, direct pay, verification inspector, and ledger view.'
+    }
+  ];
+
+  return res.status(200).json({
+    success: true,
+    total_routes: routes.length,
+    base_url: `${req.protocol}://${req.get('host')}`,
+    routes
+  });
+}
+
 module.exports = {
   createOrderPaymentSession,
   verifyOrderPayment,
@@ -766,5 +1165,8 @@ module.exports = {
   cashfreeWebhook,
   getVendorCashfreePayments,
   getAdminCashfreeLedger,
-  checkCredentials
+  checkCredentials,
+  createDummyTransaction,
+  simulatePaymentCompletion,
+  getPaymentRoutesCatalog
 };

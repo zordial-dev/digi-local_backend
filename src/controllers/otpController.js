@@ -67,7 +67,8 @@ const sendOtpController = async (req, res) => {
       }
     }
 
-    const result = await sendOTP(phone, countryCode);
+    const otpLength = Number(req.body.otp_length || req.body.otpLength || 6);
+    const result = await sendOTP(phone, countryCode, 'SMS', otpLength);
 
     return res.status(200).json({
       success: true,

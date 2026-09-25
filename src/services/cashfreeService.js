@@ -428,9 +428,13 @@ async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
   const currentEnv = getEnv(options.env);
   const isSimulationOrder = String(orderId).includes('_SIM_') ||
     String(orderId).includes('_TEST_') ||
+    String(orderId).includes('_DUMMY_') ||
+    String(orderId).includes('DUMMY') ||
     String(orderId).startsWith('CF_ORD_TEST') ||
     String(orderId).startsWith('CF_TEST') ||
     String(orderId).startsWith('TEST_') ||
+    String(orderId).startsWith('ORD_DUMMY') ||
+    String(orderId).startsWith('DUMMY_') ||
     currentEnv === 'TEST' ||
     currentEnv === 'MOCK' ||
     currentEnv === 'SIMULATION' ||

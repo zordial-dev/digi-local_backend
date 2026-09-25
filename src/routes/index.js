@@ -130,6 +130,11 @@ router.get(['/api/vendors/:vendorId/cashfree-payments', '/api/vendor/:vendorId/c
 router.get('/api/admin/payments/cashfree-ledger', cashfreePaymentController.getAdminCashfreeLedger);
 router.all(['/api/payments/cashfree/check-credentials', '/api/payments/cashfree/test-credentials'], cashfreePaymentController.checkCredentials);
 
+// ── Dummy / Test Transaction Routes ───────────────────────────
+router.all(['/api/payments/cashfree/dummy-transaction', '/api/payments/dummy-transaction', '/api/payments/cashfree/create-dummy-transaction'], cashfreePaymentController.createDummyTransaction);
+router.post(['/api/payments/cashfree/simulate-payment', '/api/payments/simulate-payment'], cashfreePaymentController.simulatePaymentCompletion);
+router.get(['/api/payments/routes', '/api/payments/cashfree/routes'], cashfreePaymentController.getPaymentRoutesCatalog);
+
 router.get('/api/payments/transactions', adminPanelController.getPaymentTransactions);
 router.get('/api/payments/revenue-dashboard', adminPanelController.getRevenueDashboard);
 router.post('/api/payments/refund', adminPanelController.processRefund);

@@ -520,6 +520,11 @@
       </div>
       <div class="status-bar">
         <button class="btn-ghost"
+          style="padding: 6px 12px; font-weight: 700; color: #10b981; border: 1px solid #10b981; background: rgba(16, 185, 129, 0.1);"
+          onclick="runInstantDummyTransaction()">
+          ⚡ 1-Click Dummy Txn
+        </button>
+        <button class="btn-ghost"
           style="padding: 6px 12px; font-weight: 700; color: #f59e0b; border: 1px solid #f59e0b;"
           onclick="checkCashfreeCredentials()">
           🔑 Test PG Credentials
@@ -1291,6 +1296,40 @@
       document.getElementById('vf_order_id').value = orderId;
       switchTab('verifyPay');
       verifyPayment();
+    }
+
+    // 5. Instant Dummy Transaction Runner
+    async function runInstantDummyTransaction(autoComplete = true) {
+      logActivity('Initiating dummy transaction test against /api/payments/cashfree/dummy-transaction...', 'info');
+      try {
+        const res = await fetch('/api/payments/cashfree/dummy-transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            amount: 50.00,
+            customer_name: 'Aarushi Verma',
+            customer_phone: '9876543210',
+            auto_complete: autoComplete
+          })
+        });
+        const data = await res.json();
+        document.getElementById('jsonInspector').innerText = JSON.stringify(data, null, 2);
+        if (data.success) {
+          logActivity(data.message, 'success');
+          if (data.payment_session_id) {
+            document.getElementById('dispSessionId').innerText = data.payment_session_id;
+            document.getElementById('checkoutBox').classList.add('active');
+            document.getElementById('sessionStatusBadge').className = 'badge-status badge-success';
+            document.getElementById('sessionStatusBadge').innerText = data.payment_status;
+          }
+          alert(`✅ DUMMY TRANSACTION SUCCESS!\n\nOrder ID: ${data.order_id}\nAmount: ₹${data.amount}\nPayment Status: ${data.payment_status}\nCashfree Payment ID: ${data.cashfree_payment_id || 'N/A'}\n\nStatus: Order confirmed and recorded in payments ledger.`);
+          fetchPaymentsLedger();
+        } else {
+          logActivity(`❌ Dummy transaction failed: ${data.error}`, 'error');
+        }
+      } catch (err) {
+        logActivity(`Network error creating dummy transaction: ${err.message}`, 'error');
+      }
     }
 
     // Copy JSON Helper

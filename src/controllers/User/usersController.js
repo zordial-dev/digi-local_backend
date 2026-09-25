@@ -58,7 +58,8 @@ async function sendOtp(req, res) {
       }
     }
 
-    const centralResult = await sendCentralOTP(cleanTarget, country_code || countryCode);
+    const otpLength = Number(req.body.otp_length || req.body.otpLength || 6);
+    const centralResult = await sendCentralOTP(cleanTarget, country_code || countryCode, 'SMS', otpLength);
 
     res.status(200).json({
       success: true,
