@@ -9,7 +9,7 @@ function createTransporter(portOverride = null) {
     const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
     const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
     let host = (process.env.SMTP_HOST || '').trim();
-    const port = portOverride || parseInt(process.env.SMTP_PORT || '465', 10);
+    const port = portOverride || parseInt(process.env.SMTP_PORT || '2587', 10);
 
     if (user && (!host || host === 'smtp.gmail.com') && process.env.AWS_SMTP_USERNAME) {
         host = process.env.AWS_REGION 
@@ -25,12 +25,12 @@ function createTransporter(portOverride = null) {
     return nodemailer.createTransport({
         host,
         port,
-        secure: port === 465,   // true for 465 (SSL), false for 587 (TLS)
+        secure: port === 465,   // true for 465 (SSL), false for 2587 / 587 (TLS/STARTTLS)
         auth: { user, pass },
         tls: { rejectUnauthorized: false },
-        connectionTimeout: 8000,
-        greetingTimeout: 8000,
-        socketTimeout: 10000
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 7000
     });
 }
 
@@ -38,43 +38,40 @@ function createTransporter(portOverride = null) {
  * Sends an email using the configured SMTP transporter (AWS SES or standard SMTP).
  */
 async function sendEmail({ to, subject, html }) {
-    const transporter = createTransporter();
-    if (!transporter) return { sent: false, reason: 'SMTP credentials not configured in .env' };
+    const defaultPort = parseInt(process.env.SMTP_PORT || '2587', 10);
+    const candidatePorts = [defaultPort, 2587, 587, 465].filter((v, i, a) => a.indexOf(v) === i);
 
-    try {
-        const rawFrom = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER}>`;
-        const from = rawFrom.trim();
+    const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
+    const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
+    let host = (process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com').trim();
+    const rawFrom = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${user}>`;
+    const from = rawFrom.trim();
 
-        const info = await transporter.sendMail({ from, to, subject, html });
-        console.log(`[EmailService] Email sent to ${to} | MessageId: ${info.messageId}`);
-        return { sent: true, messageId: info.messageId };
-    } catch (err) {
-        console.warn(`[EmailService] First attempt failed (${err.message}). Retrying with alternate port...`);
+    let lastError = null;
+
+    for (const port of candidatePorts) {
         try {
-            const currentPort = parseInt(process.env.SMTP_PORT || '587', 10);
-            const altPort = currentPort === 465 ? 587 : 465;
-            const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
-            const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
-            let host = (process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com').trim();
-            const altTransporter = nodemailer.createTransport({
+            const transporter = nodemailer.createTransport({
                 host,
-                port: altPort,
-                secure: altPort === 465,
+                port,
+                secure: port === 465,
                 auth: { user, pass },
                 tls: { rejectUnauthorized: false },
-                connectionTimeout: 6000,
-                greetingTimeout: 6000,
-                socketTimeout: 8000
+                connectionTimeout: 5000,
+                greetingTimeout: 5000,
+                socketTimeout: 7000
             });
-            const rawFrom = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${user}>`;
-            const info = await altTransporter.sendMail({ from: rawFrom.trim(), to, subject, html });
-            console.log(`[EmailService] Sent on alternate port ${altPort} to ${to} | MessageId: ${info.messageId}`);
+
+            const info = await transporter.sendMail({ from, to, subject, html });
+            console.log(`[EmailService] Email delivered to ${to} via port ${port} | MessageId: ${info.messageId}`);
             return { sent: true, messageId: info.messageId };
-        } catch (retryErr) {
-            console.error(`[EmailService] Alternate port retry also failed:`, retryErr.message);
+        } catch (err) {
+            lastError = err;
+            console.warn(`[EmailService] Port ${port} attempt failed (${err.message}). Trying next port...`);
         }
-        return { sent: false, reason: err.message };
     }
+
+    return { sent: false, reason: lastError?.message || 'SMTP delivery failed on all ports' };
 }
 
 /**
