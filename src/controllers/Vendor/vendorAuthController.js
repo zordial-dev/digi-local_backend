@@ -400,10 +400,10 @@ async function resubmitVendorRequest(req, res) {
 
 async function checkVendorPhone(req, res) {
   try {
-    const rawTarget = req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.number || req.body?.identifier || req.query?.phone || req.query?.mobile || req.query?.number;
+    const rawTarget = req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.number || req.body?.identifier || req.body?.email || req.query?.phone || req.query?.mobile || req.query?.number || req.query?.email || req.query?.identifier;
 
     if (!rawTarget) {
-      return res.status(400).json({ exists: false, error: 'Phone number or identifier is required.' });
+      return res.status(400).json({ exists: false, is_registered: false, error: 'Phone number, email, or identifier is required.' });
     }
 
     const cleanTarget = String(rawTarget).trim();
@@ -422,11 +422,13 @@ async function checkVendorPhone(req, res) {
       const statusLower = (v.status || 'pending').toLowerCase();
       return res.status(200).json({
         exists: true,
+        is_registered: true,
         vendor_id: Number(v.vendor_id),
         public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
         store_name: v.store_name || '',
         vendor_name: v.vendor_name || '',
         phone_number: v.phone_number || '',
+        email: v.email || '',
         status: statusLower,
         message: 'Vendor store account found.'
       });
@@ -434,11 +436,12 @@ async function checkVendorPhone(req, res) {
 
     return res.status(200).json({
       exists: false,
-      message: 'No vendor store account found with this phone number.'
+      is_registered: false,
+      message: 'No vendor store account found with this credential.'
     });
   } catch (err) {
     console.error('Error in checkVendorPhone:', err);
-    return res.status(500).json({ exists: false, error: 'Failed to check vendor phone.' });
+    return res.status(500).json({ exists: false, is_registered: false, error: 'Failed to check vendor registration.' });
   }
 }
 async function getVendorPublicProfile(req, res, next) {
@@ -769,18 +772,25 @@ async function checkCoverage(req, res) { return res.status(200).json({ is_servic
 
 /**
  * POST /api/vendors/send-otp
- * Sends SMS OTP to vendor phone number for login or verification
+ * Sends SMS or Email OTP to vendor for login or verification
  */
 async function sendVendorOtp(req, res) {
   try {
-    const rawTarget = req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.number || req.body?.identifier;
+    const rawTarget = req.body?.phone || req.body?.mobile || req.body?.phone_number || req.body?.number || req.body?.identifier || req.body?.email;
     const countryCode = req.body?.country_code || req.body?.countryCode || req.body?.country;
 
     if (!rawTarget) {
-      return res.status(400).json({ success: false, error: 'Phone number is required.' });
+      return res.status(400).json({ success: false, error: 'Phone number or email is required.' });
     }
 
     const cleanTarget = String(rawTarget).trim();
+    if (cleanTarget.includes('@')) {
+      req.body.email = cleanTarget;
+      req.body.role = 'vendor';
+      const otpController = require('../otpController');
+      return otpController.sendEmailOtp(req, res);
+    }
+
     const digitsOnly = cleanTarget.replace(/\D/g, '');
     const last10 = digitsOnly.slice(-10);
 
@@ -798,7 +808,10 @@ async function sendVendorOtp(req, res) {
       return res.status(404).json({
         success: false,
         exists: false,
-        error: 'No vendor store account found with this phone number. Please register first.'
+        is_registered: false,
+        code: 'VENDOR_NOT_FOUND',
+        error: 'No vendor store account found with this phone number. Please register first.',
+        message: 'No vendor store account found with this phone number. Please register first.'
       });
     }
 
@@ -820,48 +833,69 @@ async function sendVendorOtp(req, res) {
 
 /**
  * POST /api/vendors/otp-login & /api/vendors/login-with-otp
- * Authenticates vendor using phone number and SMS OTP code
+ * Authenticates vendor using phone number / email and OTP code
  */
 async function loginVendorWithOtp(req, res) {
   try {
-    const { phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, otp, code, otp_code, country_code, countryCode, verification_id, verificationId } = req.body || {};
-    const target = phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone;
+    const { phone, mobile, phone_number, number, identifier, phone_no, mobile_number, user_phone, email, otp, code, otp_code, country_code, countryCode, verification_id, verificationId } = req.body || {};
+    const target = phone || mobile || phone_number || number || identifier || phone_no || mobile_number || user_phone || email;
     const cleanOtp = String(otp || code || otp_code || '').trim();
 
     if (!target) {
-      return res.status(400).json({ error: 'Phone number is required for OTP login.' });
+      return res.status(400).json({ error: 'Phone number or email is required for OTP login.' });
     }
     if (!cleanOtp) {
       return res.status(400).json({ error: 'OTP code is required for OTP login.' });
     }
 
     const cleanTarget = String(target).trim();
+    const isEmail = cleanTarget.includes('@');
+
+    // 1. Verify OTP code
+    if (isEmail) {
+      const { verifyOTP } = require('../../utils/auth');
+      const verifyRes = verifyOTP(cleanTarget.toLowerCase(), cleanOtp);
+      if (!verifyRes || !verifyRes.valid) {
+        return res.status(400).json({
+          success: false,
+          error: verifyRes?.reason || 'Invalid or expired OTP code. Please enter the correct verification code.'
+        });
+      }
+    } else {
+      const verId = verification_id || verificationId;
+      try {
+        const verifyRes = await verifyCentralOTP(cleanTarget, cleanOtp, country_code || countryCode, verId);
+        if (!verifyRes || !verifyRes.valid) {
+          return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
+        }
+      } catch (otpErr) {
+        return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code.' });
+      }
+    }
+
     const digitsOnly = cleanTarget.replace(/\D/g, '');
     const last10 = digitsOnly.slice(-10);
 
-    // Verify OTP code via Message Central (Real verification, no dummy bypasses)
-    const verId = verification_id || verificationId;
-    try {
-      const verifyRes = await verifyCentralOTP(cleanTarget, cleanOtp, country_code || countryCode, verId);
-      if (!verifyRes || !verifyRes.valid) {
-        return res.status(400).json({ error: 'Invalid or expired OTP code. Please enter the correct verification code.' });
-      }
-    } catch (otpErr) {
-      return res.status(400).json({ error: otpErr.message || 'Invalid or expired OTP code.' });
-    }
-
-    // Lookup vendor in database
+    // 2. Lookup vendor strictly in vendors database
     const result = await query(
       `SELECT * FROM vendors 
        WHERE phone_number = ? 
           OR phone_number = ? 
           OR (LENGTH(?) >= 10 AND phone_number LIKE ?) 
+          OR LOWER(email) = LOWER(?)
           OR CAST(vendor_id AS TEXT) = ?`,
-      [cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget]
+      [cleanTarget, digitsOnly, last10, `%${last10}`, cleanTarget, cleanTarget]
     );
 
     if (!result.rows || result.rows.length === 0) {
-      return res.status(404).json({ error: 'No vendor store account found with this phone number. Please register first.' });
+      return res.status(404).json({
+        success: false,
+        exists: false,
+        is_registered: false,
+        code: 'VENDOR_NOT_FOUND',
+        error: 'No vendor store account found with this credential. Please register your vendor store first.',
+        message: 'No vendor store account found with this credential. Please register your vendor store first.'
+      });
     }
 
     const v = result.rows[0];

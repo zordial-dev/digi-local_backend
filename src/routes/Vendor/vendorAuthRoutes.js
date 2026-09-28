@@ -84,10 +84,14 @@ router.post(['/send-otp', '/request-otp', '/otp-send'], vendorAuthController.sen
 router.post(['/otp-login', '/login-with-otp', '/login-otp'], loginBruteForceGuard, vendorAuthController.loginVendorWithOtp);
 router.post('/check-coverage', vendorAuthController.checkCoverage);
 router.post('/check-phone', vendorAuthController.checkVendorPhone);
+router.post('/check-email', vendorAuthController.checkVendorPhone);
 router.post('/check-vendor', vendorAuthController.checkVendorPhone);
+router.post('/check-vendor-phone', vendorAuthController.checkVendorPhone);
+router.post('/check-vendor-email', vendorAuthController.checkVendorPhone);
 router.post('/check-mobile', vendorAuthController.checkVendorPhone);
 router.post('/check-user', vendorAuthController.checkVendorPhone);
 router.post('/verify-phone', vendorAuthController.checkVendorPhone);
+router.get(['/check-phone', '/check-email', '/check-vendor', '/check-vendor-phone', '/check-vendor-email'], vendorAuthController.checkVendorPhone);
 
 router.post('/register', validateRequest(registerSchema), vendorAuthController.registerVendor);
 router.post('/login', loginBruteForceGuard, validateRequest(loginSchema), vendorAuthController.loginVendor);
