@@ -71,13 +71,21 @@ router.put('/payment-details', vendorPanelController.updatePaymentDetails);
 router.post('/resubmit', vendorAuthController.resubmitVendorRequest);
 router.put('/resubmit', vendorAuthController.resubmitVendorRequest);
 
+// Middleware: force role='vendor' on vendor-scoped OTP routes so the guard always checks only the vendors table
+function injectVendorRole(req, res, next) {
+  if (!req.body) req.body = {};
+  req.body.role = 'vendor';
+  next();
+}
+
 // Dedicated Mobile OTP Endpoints
-router.post(['/mobile/send-otp', '/mobile/send'], otpController.sendMobileOtp);
-router.post(['/mobile/verify-otp', '/mobile/verify'], otpController.verifyMobileOtp);
+router.post(['/mobile/send-otp', '/mobile/send'], injectVendorRole, otpController.sendMobileOtp);
+router.post(['/mobile/verify-otp', '/mobile/verify'], injectVendorRole, otpController.verifyMobileOtp);
 
 // Dedicated Email OTP Endpoints
-router.post(['/email/send-otp', '/email/send'], otpController.sendEmailOtp);
-router.post(['/email/verify-otp', '/email/verify'], otpController.verifyEmailOtp);
+router.post(['/email/send-otp', '/email/send'], injectVendorRole, otpController.sendEmailOtp);
+router.post(['/email/verify-otp', '/email/verify'], injectVendorRole, otpController.verifyEmailOtp);
+
 
 // 3. Static Auth Endpoints (Must come BEFORE /:vendorId)
 router.post(['/send-otp', '/request-otp', '/otp-send'], vendorAuthController.sendVendorOtp);

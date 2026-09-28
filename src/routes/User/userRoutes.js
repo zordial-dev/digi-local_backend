@@ -5,13 +5,20 @@ const otpController = require('../../controllers/otpController');
 
 const { authenticateToken } = require('../../middleware/auth');
 
+// Middleware: force role='user' on user-scoped OTP routes so the guard always checks only the users table
+function injectUserRole(req, res, next) {
+  if (!req.body) req.body = {};
+  req.body.role = 'user';
+  next();
+}
+
 // Dedicated Mobile OTP Routes
-router.post(['/mobile/send-otp', '/mobile/send'], otpController.sendMobileOtp);
-router.post(['/mobile/verify-otp', '/mobile/verify'], otpController.verifyMobileOtp);
+router.post(['/mobile/send-otp', '/mobile/send'], injectUserRole, otpController.sendMobileOtp);
+router.post(['/mobile/verify-otp', '/mobile/verify'], injectUserRole, otpController.verifyMobileOtp);
 
 // Dedicated Email OTP Routes
-router.post(['/email/send-otp', '/email/send'], otpController.sendEmailOtp);
-router.post(['/email/verify-otp', '/email/verify'], otpController.verifyEmailOtp);
+router.post(['/email/send-otp', '/email/send'], injectUserRole, otpController.sendEmailOtp);
+router.post(['/email/verify-otp', '/email/verify'], injectUserRole, otpController.verifyEmailOtp);
 
 // Universal / Legacy OTP Routes
 router.post('/send-otp', usersController.sendOtp);
