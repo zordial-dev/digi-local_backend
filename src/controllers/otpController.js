@@ -109,7 +109,16 @@ const sendMobileOtpController = async (req, res) => {
     const mode = (purpose || '').toLowerCase();
     const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
-    // Verify account existence in database
+    // For login intent, role MUST be specified to prevent cross-table leakage
+    if (!isRegistrationIntent && !['vendor', 'user'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: '"role" is required for login. Pass role: "vendor" or role: "user".',
+        message: '"role" is required for login. Pass role: "vendor" or role: "user".'
+      });
+    }
+
+    // Verify account existence in database (role is guaranteed non-null for login)
     const { user, vendor, exists: accountExists } = await findAccountByPhone(cleanTarget, role || null);
 
     if (isRegistrationIntent) {
@@ -185,6 +194,15 @@ const verifyMobileOtpController = async (req, res) => {
 
     // 1. Verify OTP code with Message Central
     const result = await verifyCentralOTP(phone, cleanOtp, countryCode, verificationId);
+
+    // For login intent, role MUST be specified to prevent cross-table leakage
+    if (!isRegistrationIntent && !['vendor', 'user'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: '"role" is required for login. Pass role: "vendor" or role: "user".',
+        message: '"role" is required for login. Pass role: "vendor" or role: "user".'
+      });
+    }
 
     if (isRegistrationIntent) {
       return res.status(200).json({
@@ -324,7 +342,16 @@ const sendEmailOtpController = async (req, res) => {
     const mode = (purpose || '').toLowerCase();
     const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
-    // Verify existence in database
+    // For login intent, role MUST be specified to prevent cross-table leakage
+    if (!isRegistrationIntent && !['vendor', 'user'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: '"role" is required for login. Pass role: "vendor" or role: "user".',
+        message: '"role" is required for login. Pass role: "vendor" or role: "user".'
+      });
+    }
+
+    // Verify existence in database (role is guaranteed non-null for login)
     const { user, vendor, exists: accountExists } = await findAccountByEmail(cleanEmail, role || null);
 
     if (isRegistrationIntent) {
@@ -429,6 +456,15 @@ const verifyEmailOtpController = async (req, res) => {
         verified: false,
         error: verifyResult?.reason || 'Invalid or expired OTP code',
         message: verifyResult?.reason || 'Invalid or expired OTP code'
+      });
+    }
+
+    // For login intent, role MUST be specified to prevent cross-table leakage
+    if (!isRegistrationIntent && !['vendor', 'user'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: '"role" is required for login. Pass role: "vendor" or role: "user".',
+        message: '"role" is required for login. Pass role: "vendor" or role: "user".'
       });
     }
 
