@@ -6,6 +6,72 @@ const { sendEmail } = require('../services/emailService');
 const { otpTemplate } = require('../templates/emailTemplates');
 
 /**
+ * Helper: Searches database for account by phone number.
+ */
+async function findAccountByPhone(phone, targetRole = null) {
+  const cleanTarget = String(phone || '').trim();
+  const cleanedDigits = cleanTarget.replace(/\D/g, '');
+  const last10 = cleanedDigits.slice(-10);
+
+  let user = null;
+  let vendor = null;
+
+  if (!targetRole || targetRole === 'vendor') {
+    const vendorRes = await query(
+      `SELECT * FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR phone_number LIKE ?`,
+      [cleanTarget, cleanedDigits, last10, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
+    if (vendorRes.rows && vendorRes.rows.length > 0) {
+      vendor = vendorRes.rows[0];
+    }
+  }
+
+  if (!targetRole || targetRole === 'user') {
+    const userRes = await query(
+      `SELECT * FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
+      [cleanTarget, cleanedDigits, last10, `%${last10}`]
+    ).catch(() => ({ rows: [] }));
+    if (userRes.rows && userRes.rows.length > 0) {
+      user = userRes.rows[0];
+    }
+  }
+
+  return { user, vendor, exists: !!(user || vendor) };
+}
+
+/**
+ * Helper: Searches database for account by email.
+ */
+async function findAccountByEmail(email, targetRole = null) {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+
+  let user = null;
+  let vendor = null;
+
+  if (!targetRole || targetRole === 'vendor') {
+    const vendorRes = await query(
+      `SELECT * FROM vendors WHERE LOWER(email) = ?`,
+      [cleanEmail]
+    ).catch(() => ({ rows: [] }));
+    if (vendorRes.rows && vendorRes.rows.length > 0) {
+      vendor = vendorRes.rows[0];
+    }
+  }
+
+  if (!targetRole || targetRole === 'user') {
+    const userRes = await query(
+      `SELECT * FROM users WHERE LOWER(email) = ?`,
+      [cleanEmail]
+    ).catch(() => ({ rows: [] }));
+    if (userRes.rows && userRes.rows.length > 0) {
+      user = userRes.rows[0];
+    }
+  }
+
+  return { user, vendor, exists: !!(user || vendor), cleanEmail };
+}
+
+/**
  * ─────────────────────────────────────────────────────────────────────────────
  * 1. MOBILE OTP CONTROLLERS (SMS via Message Central VerifyNow)
  * ─────────────────────────────────────────────────────────────────────────────
@@ -20,6 +86,7 @@ const sendMobileOtpController = async (req, res) => {
     const phone = req.body.phone || req.body.mobile || req.body.phone_number || req.body.identifier || req.body.number;
     const countryCode = req.body.country_code || req.body.countryCode || req.body.country || req.body.dial_code;
     const purpose = req.body.purpose || req.body.type || req.body.mode;
+    const role = (req.body.role || req.body.portal || req.body.user_type || '').toLowerCase();
 
     if (!phone) {
       return res.status(400).json({
@@ -29,7 +96,6 @@ const sendMobileOtpController = async (req, res) => {
       });
     }
 
-    // Validate phone number format
     const cleanedPhone = String(phone).replace(/\D/g, '');
     if (cleanedPhone.length < 10) {
       return res.status(400).json({
@@ -40,22 +106,11 @@ const sendMobileOtpController = async (req, res) => {
     }
 
     const cleanTarget = String(phone).trim();
-    const last10 = cleanedPhone.slice(-10);
     const mode = (purpose || '').toLowerCase();
     const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
-    // Verify account existence in users and vendors table
-    const userRes = await query(
-      `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
-      [cleanTarget, cleanedPhone, last10, `%${last10}`]
-    ).catch(() => ({ rows: [] }));
-
-    const vendorRes = await query(
-      `SELECT vendor_id FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR phone_number LIKE ?`,
-      [cleanTarget, cleanedPhone, last10, `%${last10}`]
-    ).catch(() => ({ rows: [] }));
-
-    const accountExists = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
+    // Verify account existence in database
+    const { user, vendor, exists: accountExists } = await findAccountByPhone(cleanTarget, role || null);
 
     if (isRegistrationIntent) {
       if (accountExists) {
@@ -67,13 +122,15 @@ const sendMobileOtpController = async (req, res) => {
         });
       }
     } else {
+      // Login or Default: ONLY registered phone numbers can receive OTP!
       if (!accountExists) {
-        console.log(`⚠️ [MOBILE OTP BLOCKED] Account "${cleanTarget}" not found in database. Disallowing OTP send.`);
+        const portalLabel = role === 'vendor' ? 'vendor store ' : role === 'user' ? 'user ' : '';
+        console.log(`⚠️ [MOBILE OTP BLOCKED] Unregistered ${portalLabel}account "${cleanTarget}". Disallowing OTP send.`);
         return res.status(404).json({
           success: false,
           exists: false,
-          error: 'No account found with this mobile number. Please register your account first.',
-          message: 'No account found with this mobile number. Please register your account first.'
+          error: `No ${portalLabel}account found with this mobile number. Please register your account first.`,
+          message: `No ${portalLabel}account found with this mobile number. Please register your account first.`
         });
       }
     }
@@ -111,6 +168,9 @@ const verifyMobileOtpController = async (req, res) => {
     const otp = req.body.otp || req.body.otp_code || req.body.code;
     const countryCode = req.body.country_code || req.body.countryCode || req.body.country || req.body.dial_code;
     const verificationId = req.body.verification_id || req.body.verificationId;
+    const purpose = (req.body.purpose || req.body.type || req.body.mode || '').toLowerCase();
+    const role = (req.body.role || req.body.portal || req.body.user_type || '').toLowerCase();
+    const isRegistrationIntent = purpose === 'register' || purpose === 'signup' || purpose === 'check_register';
 
     if (!phone || !otp) {
       return res.status(400).json({
@@ -121,17 +181,100 @@ const verifyMobileOtpController = async (req, res) => {
     }
 
     const cleanOtp = String(otp).trim();
+    const cleanPhone = String(phone).trim();
+
+    // 1. Verify OTP code with Message Central
     const result = await verifyCentralOTP(phone, cleanOtp, countryCode, verificationId);
 
-    return res.status(200).json({
+    if (isRegistrationIntent) {
+      return res.status(200).json({
+        success: true,
+        verified: true,
+        channel: 'mobile_sms',
+        provider: 'message_central',
+        message: 'Mobile OTP verified successfully',
+        phone: cleanPhone,
+        data: result
+      });
+    }
+
+    // 2. For Login / Default: ONLY registered phone numbers can log in!
+    const { user, vendor, exists: accountExists } = await findAccountByPhone(cleanPhone, role || null);
+
+    if (!accountExists) {
+      const portalLabel = role === 'vendor' ? 'vendor store ' : role === 'user' ? 'user ' : '';
+      return res.status(404).json({
+        success: false,
+        verified: false,
+        exists: false,
+        error: `No ${portalLabel}account found with this mobile number. Please register your account first.`,
+        message: `No ${portalLabel}account found with this mobile number. Please register your account first.`
+      });
+    }
+
+    const responsePayload = {
       success: true,
       verified: true,
       channel: 'mobile_sms',
       provider: 'message_central',
-      message: 'Mobile OTP verified successfully',
-      phone: String(phone).trim(),
+      message: 'Mobile OTP verified successfully. Login successful.',
+      phone: cleanPhone,
       data: result
-    });
+    };
+
+    // Return authenticated tokens and respective account payload
+    if (role === 'vendor' || (vendor && !user)) {
+      const statusLower = (vendor.status || 'pending').toLowerCase();
+      if (statusLower === 'blocked') {
+        return res.status(403).json({
+          success: false,
+          error: 'Your vendor account has been blocked by admin.',
+          message: 'Your vendor store account has been blocked. Please contact customer support.'
+        });
+      }
+      const tokens = generateTokens(vendor, 'vendor');
+      const vendorPublicId = vendor.public_id || ('vnd@' + String(vendor.vendor_id).padStart(4, '0'));
+      responsePayload.token = tokens.accessToken;
+      responsePayload.accessToken = tokens.accessToken;
+      responsePayload.refreshToken = tokens.refreshToken;
+      responsePayload.vendor_id = Number(vendor.vendor_id);
+      responsePayload.public_id = vendorPublicId;
+      responsePayload.role = 'vendor';
+      responsePayload.vendor = {
+        vendor_id: Number(vendor.vendor_id),
+        public_id: vendorPublicId,
+        store_name: vendor.store_name,
+        vendor_name: vendor.vendor_name,
+        email: vendor.email,
+        phone_number: vendor.phone_number,
+        status: statusLower,
+        role: 'vendor'
+      };
+    } else {
+      const u = user || vendor;
+      const userStatusLower = (u.status || 'active').toLowerCase();
+      if (userStatusLower === 'blocked' || userStatusLower === 'suspended') {
+        return res.status(403).json({
+          success: false,
+          error: 'Your resident account has been blocked by admin.',
+          message: 'Your account has been blocked. Please contact customer support.'
+        });
+      }
+      const tokens = generateTokens(u, 'user');
+      responsePayload.token = tokens.accessToken;
+      responsePayload.accessToken = tokens.accessToken;
+      responsePayload.refreshToken = tokens.refreshToken;
+      responsePayload.role = 'user';
+      responsePayload.user = {
+        user_id: u.user_id || `usr_v_${u.vendor_id}`,
+        name: u.name || u.vendor_name,
+        email: u.email,
+        phone: u.phone || u.phone_number,
+        role: 'user'
+      };
+    }
+
+    return res.status(200).json(responsePayload);
   } catch (error) {
     console.error('verifyMobileOtpController error:', error.message);
     return res.status(400).json({
@@ -158,6 +301,7 @@ const sendEmailOtpController = async (req, res) => {
     const email = req.body.email || req.body.to || req.body.recipient || req.body.identifier;
     const name = req.body.name || req.body.user_name || req.body.vendor_name || 'Valued User';
     const purpose = req.body.purpose || req.body.type || req.body.mode;
+    const role = (req.body.role || req.body.portal || req.body.user_type || '').toLowerCase();
 
     if (!email) {
       return res.status(400).json({
@@ -181,10 +325,7 @@ const sendEmailOtpController = async (req, res) => {
     const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
     // Verify existence in database
-    const userRes = await query(`SELECT user_id, name FROM users WHERE LOWER(email) = ?`, [cleanEmail]).catch(() => ({ rows: [] }));
-    const vendorRes = await query(`SELECT vendor_id, store_name, vendor_name FROM vendors WHERE LOWER(email) = ?`, [cleanEmail]).catch(() => ({ rows: [] }));
-
-    const accountExists = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
+    const { user, vendor, exists: accountExists } = await findAccountByEmail(cleanEmail, role || null);
 
     if (isRegistrationIntent) {
       if (accountExists) {
@@ -195,20 +336,22 @@ const sendEmailOtpController = async (req, res) => {
           message: 'An account with this email address already exists. Please log in instead.'
         });
       }
-    } else if (mode === 'login' || mode === 'reset_password') {
+    } else {
+      // Login or Default: ONLY registered emails can receive OTP!
       if (!accountExists) {
-        console.log(`⚠️ [EMAIL OTP BLOCKED] Account "${cleanEmail}" not found in database.`);
+        const portalLabel = role === 'vendor' ? 'vendor store ' : role === 'user' ? 'user ' : '';
+        console.log(`⚠️ [EMAIL OTP BLOCKED] Unregistered ${portalLabel}account "${cleanEmail}". Disallowing OTP send.`);
         return res.status(404).json({
           success: false,
           exists: false,
-          error: 'No account found with this email address. Please register your account first.',
-          message: 'No account found with this email address. Please register your account first.'
+          error: `No ${portalLabel}account found with this email address. Please register your account first.`,
+          message: `No ${portalLabel}account found with this email address. Please register your account first.`
         });
       }
     }
 
     // Determine greeting name
-    const greetingName = (userRes.rows[0]?.name) || (vendorRes.rows[0]?.vendor_name) || name;
+    const greetingName = user?.name || vendor?.vendor_name || vendor?.store_name || name;
 
     // Generate 6-digit cryptographic OTP (10 min TTL)
     const code = generateOTP(cleanEmail);
@@ -256,13 +399,15 @@ const sendEmailOtpController = async (req, res) => {
 
 /**
  * POST /api/otp/email/verify-otp (and /api/email/verify-otp, /api/email/otp/verify)
- * Verifies email OTP code. If purpose === 'login', automatically returns JWT auth tokens!
+ * Verifies email OTP code. Authenticates only registered accounts!
  */
 const verifyEmailOtpController = async (req, res) => {
   try {
     const email = req.body.email || req.body.to || req.body.recipient || req.body.identifier;
     const otp = req.body.otp || req.body.code || req.body.otp_code;
-    const purpose = (req.body.purpose || req.body.type || '').toLowerCase();
+    const purpose = (req.body.purpose || req.body.type || req.body.mode || '').toLowerCase();
+    const role = (req.body.role || req.body.portal || req.body.user_type || '').toLowerCase();
+    const isRegistrationIntent = purpose === 'register' || purpose === 'signup' || purpose === 'check_register';
 
     if (!email || !otp) {
       return res.status(400).json({
@@ -275,7 +420,7 @@ const verifyEmailOtpController = async (req, res) => {
     const cleanEmail = String(email).trim().toLowerCase();
     const cleanOtp = String(otp).trim();
 
-    // Verify OTP against in-memory hash store
+    // 1. Verify OTP against in-memory hash store
     const verifyResult = verifyOTP(cleanEmail, cleanOtp);
 
     if (!verifyResult || !verifyResult.valid) {
@@ -287,48 +432,88 @@ const verifyEmailOtpController = async (req, res) => {
       });
     }
 
+    if (isRegistrationIntent) {
+      return res.status(200).json({
+        success: true,
+        verified: true,
+        channel: 'email',
+        message: 'Email OTP verified successfully',
+        email: cleanEmail
+      });
+    }
+
+    // 2. For Login / Default: ONLY registered emails can log in!
+    const { user, vendor, exists: accountExists } = await findAccountByEmail(cleanEmail, role || null);
+
+    if (!accountExists) {
+      const portalLabel = role === 'vendor' ? 'vendor store ' : role === 'user' ? 'user ' : '';
+      return res.status(404).json({
+        success: false,
+        verified: false,
+        exists: false,
+        error: `No ${portalLabel}account found with this email address. Please register your account first.`,
+        message: `No ${portalLabel}account found with this email address. Please register your account first.`
+      });
+    }
+
     const responsePayload = {
       success: true,
       verified: true,
       channel: 'email',
-      message: 'Email OTP verified successfully',
+      message: 'Email OTP verified successfully. Login successful.',
       email: cleanEmail
     };
 
-    // If login intent or account exists, issue authentication credentials
-    if (purpose === 'login' || req.body.include_token) {
-      const userRes = await query(`SELECT * FROM users WHERE LOWER(email) = ?`, [cleanEmail]).catch(() => ({ rows: [] }));
-      const vendorRes = await query(`SELECT * FROM vendors WHERE LOWER(email) = ?`, [cleanEmail]).catch(() => ({ rows: [] }));
-
-      if (userRes.rows && userRes.rows.length > 0) {
-        const u = userRes.rows[0];
-        const tokens = generateTokens(u, 'user');
-        responsePayload.token = tokens.accessToken;
-        responsePayload.accessToken = tokens.accessToken;
-        responsePayload.refreshToken = tokens.refreshToken;
-        responsePayload.user = {
-          user_id: u.user_id,
-          name: u.name,
-          email: u.email,
-          phone: u.phone,
-          role: 'user'
-        };
-      } else if (vendorRes.rows && vendorRes.rows.length > 0) {
-        const v = vendorRes.rows[0];
-        const tokens = generateTokens(v, 'vendor');
-        responsePayload.token = tokens.accessToken;
-        responsePayload.accessToken = tokens.accessToken;
-        responsePayload.refreshToken = tokens.refreshToken;
-        responsePayload.vendor = {
-          vendor_id: v.vendor_id,
-          vendor_name: v.vendor_name,
-          store_name: v.store_name,
-          email: v.email,
-          phone_number: v.phone_number,
-          status: v.status,
-          role: 'vendor'
-        };
+    // Return tokens and account data matching role
+    if (role === 'vendor' || (vendor && !user)) {
+      const statusLower = (vendor.status || 'pending').toLowerCase();
+      if (statusLower === 'blocked') {
+        return res.status(403).json({
+          success: false,
+          error: 'Your vendor account has been blocked by admin.',
+          message: 'Your vendor store account has been blocked. Please contact customer support.'
+        });
       }
+      const tokens = generateTokens(vendor, 'vendor');
+      const vendorPublicId = vendor.public_id || ('vnd@' + String(vendor.vendor_id).padStart(4, '0'));
+      responsePayload.token = tokens.accessToken;
+      responsePayload.accessToken = tokens.accessToken;
+      responsePayload.refreshToken = tokens.refreshToken;
+      responsePayload.vendor_id = Number(vendor.vendor_id);
+      responsePayload.public_id = vendorPublicId;
+      responsePayload.role = 'vendor';
+      responsePayload.vendor = {
+        vendor_id: Number(vendor.vendor_id),
+        public_id: vendorPublicId,
+        store_name: vendor.store_name,
+        vendor_name: vendor.vendor_name,
+        email: vendor.email,
+        phone_number: vendor.phone_number,
+        status: statusLower,
+        role: 'vendor'
+      };
+    } else {
+      const u = user || vendor;
+      const userStatusLower = (u.status || 'active').toLowerCase();
+      if (userStatusLower === 'blocked' || userStatusLower === 'suspended') {
+        return res.status(403).json({
+          success: false,
+          error: 'Your resident account has been blocked by admin.',
+          message: 'Your account has been blocked. Please contact customer support.'
+        });
+      }
+      const tokens = generateTokens(u, 'user');
+      responsePayload.token = tokens.accessToken;
+      responsePayload.accessToken = tokens.accessToken;
+      responsePayload.refreshToken = tokens.refreshToken;
+      responsePayload.role = 'user';
+      responsePayload.user = {
+        user_id: u.user_id || `usr_v_${u.vendor_id}`,
+        name: u.name || u.vendor_name,
+        email: u.email,
+        phone: u.phone || u.phone_number,
+        role: 'user'
+      };
     }
 
     return res.status(200).json(responsePayload);
@@ -385,3 +570,4 @@ module.exports = {
   sendOtpController,
   verifyOtpController
 };
+
