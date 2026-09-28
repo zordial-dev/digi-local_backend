@@ -16,7 +16,6 @@ function initFirebase() {
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
     if (!projectId || !clientEmail || !privateKey) {
-      console.warn('[Firebase] Credentials missing in .env - Firebase Admin SDK initialization skipped.');
       return null;
     }
 
