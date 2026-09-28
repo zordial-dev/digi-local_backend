@@ -45,6 +45,141 @@ function getStaticAuthToken() {
 }
 
 /**
+ * Custom Error for SMS Gateway Credit Exhaustion
+ */
+class SmsCreditExhaustedError extends Error {
+  constructor(message = 'insufficient credits', providerCode = 508) {
+    super('SMS gateway credits exhausted. SMS cannot be delivered.');
+    this.name = 'SmsCreditExhaustedError';
+    this.isCreditExhausted = true;
+    this.statusCode = 503;
+    this.errorCode = 'SMS_CREDITS_EXHAUSTED';
+    this.providerCode = Number(providerCode) || 508;
+  }
+}
+
+/**
+ * Custom Error for Generic SMS Gateway Errors
+ */
+class SmsGatewayError extends Error {
+  constructor(message = 'SMS delivery failed via gateway', providerCode = null) {
+    super(message);
+    this.name = 'SmsGatewayError';
+    this.isGatewayError = true;
+    this.statusCode = 502;
+    this.errorCode = 'SMS_GATEWAY_ERROR';
+    this.providerCode = providerCode ? Number(providerCode) : null;
+  }
+}
+
+/**
+ * Checks if an error or response payload indicates exhausted SMS credits/balance.
+ */
+function isCreditExhaustedError(errOrData) {
+  if (!errOrData) return false;
+
+  const code = (
+    errOrData.responseCode ||
+    errOrData.data?.responseCode ||
+    errOrData.response?.data?.responseCode ||
+    errOrData.response?.data?.data?.responseCode ||
+    errOrData.status ||
+    errOrData.response?.status
+  );
+
+  if (String(code) === '508' || String(code) === '402' || String(code) === '700' || String(code) === '702') {
+    return true;
+  }
+
+  const msg = [
+    errOrData.message,
+    errOrData.errorMessage,
+    errOrData.data?.errorMessage,
+    errOrData.response?.data?.message,
+    errOrData.response?.data?.data?.errorMessage,
+    errOrData.response?.data?.error
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  return (
+    msg.includes('insufficient credit') ||
+    msg.includes('low balance') ||
+    msg.includes('insufficient balance') ||
+    msg.includes('credit exhausted') ||
+    msg.includes('credits spent') ||
+    msg.includes('out of credit') ||
+    msg.includes('balance is low') ||
+    msg.includes('balance low') ||
+    msg.includes('no balance') ||
+    msg.includes('balance exhausted') ||
+    msg.includes('credit limit')
+  );
+}
+
+/**
+ * Formats standard error response payload for controllers
+ */
+function formatSmsErrorResponse(error) {
+  if (error.isCreditExhausted || error.errorCode === 'SMS_CREDITS_EXHAUSTED' || error.name === 'SmsCreditExhaustedError') {
+    return {
+      statusCode: 503,
+      body: {
+        success: false,
+        error_code: 'SMS_CREDITS_EXHAUSTED',
+        error: 'SMS gateway credits exhausted. SMS cannot be delivered.',
+        message: 'SMS service is temporarily unavailable due to gateway limits. Please use Email OTP or contact support.',
+        channel: 'mobile_sms',
+        provider: 'message_central',
+        provider_response_code: Number(error.providerCode) || 508,
+        fallback_available: {
+          email_otp: true
+        },
+        action: 'USE_EMAIL_OTP'
+      }
+    };
+  }
+
+  if (error.isGatewayError || error.errorCode === 'SMS_GATEWAY_ERROR' || error.name === 'SmsGatewayError') {
+    return {
+      statusCode: 502,
+      body: {
+        success: false,
+        error_code: 'SMS_GATEWAY_ERROR',
+        error: error.message || 'SMS delivery failed via gateway.',
+        message: 'SMS service is temporarily unavailable. Please try again or use Email OTP.',
+        channel: 'mobile_sms',
+        provider: 'message_central',
+        provider_response_code: error.providerCode ? Number(error.providerCode) : null,
+        fallback_available: {
+          email_otp: true
+        },
+        action: 'USE_EMAIL_OTP'
+      }
+    };
+  }
+
+  if (error.statusCode === 400) {
+    return {
+      statusCode: 400,
+      body: {
+        success: false,
+        error: error.message || 'Invalid request',
+        message: error.message || 'Invalid request'
+      }
+    };
+  }
+
+  return {
+    statusCode: 500,
+    body: {
+      success: false,
+      error_code: 'INTERNAL_SERVER_ERROR',
+      error: error.message || 'Failed to send mobile OTP',
+      message: error.message || 'Failed to send mobile OTP'
+    }
+  };
+}
+
+/**
  * Normalizes phone number to standard 10-digit format for India.
  */
 function formatPhone(phone, countryCode = '91') {
@@ -111,7 +246,10 @@ async function getAuthToken() {
     return token;
   } catch (err) {
     console.error('❌ [MESSAGE CENTRAL AUTH ERROR]:', err.response?.data || err.message);
-    throw new Error(`Message Central authentication failed: ${err.response?.data?.message || err.message}`);
+    if (isCreditExhaustedError(err)) {
+      throw new SmsCreditExhaustedError('insufficient credits', 508);
+    }
+    throw new SmsGatewayError(`Message Central authentication failed: ${err.response?.data?.message || err.message}`, err.response?.status);
   }
 }
 
@@ -126,7 +264,9 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
   const { mobileNumber, countryCode: cc } = formatPhone(phone, countryCode);
 
   if (!mobileNumber || mobileNumber.length < 10) {
-    throw new Error('Valid 10-digit mobile number is required.');
+    const err = new Error('Valid 10-digit mobile number is required.');
+    err.statusCode = 400;
+    throw err;
   }
 
   const customerId = getCustomerId();
@@ -163,8 +303,16 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
     const innerData = resData.data || {};
     const verificationId = innerData.verificationId || resData.verificationId;
 
+    if (isCreditExhaustedError(resData)) {
+      throw new SmsCreditExhaustedError(resData.message || innerData.errorMessage || 'insufficient credits', resData.responseCode || 508);
+    }
+
     if (!verificationId && resData.responseCode !== 200 && resData.status !== 200) {
-      throw new Error(resData.message || innerData.errorMessage || 'Failed to initiate OTP verification');
+      const errMsg = resData.message || innerData.errorMessage || 'Failed to initiate OTP verification';
+      if (isCreditExhaustedError({ message: errMsg, responseCode: resData.responseCode })) {
+        throw new SmsCreditExhaustedError(errMsg, resData.responseCode || 508);
+      }
+      throw new SmsGatewayError(errMsg, resData.responseCode);
     }
 
     // Cache verificationId for subsequent validation
@@ -196,27 +344,42 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
       raw: resData
     };
   } catch (err) {
+    if (err instanceof SmsCreditExhaustedError || err.isCreditExhausted) {
+      throw err;
+    }
+
+    if (isCreditExhaustedError(err)) {
+      const code = err.response?.data?.responseCode || err.response?.data?.data?.responseCode || 508;
+      const rawMsg = err.response?.data?.message || err.response?.data?.data?.errorMessage || err.message;
+      console.warn(`⚠️ [MESSAGE CENTRAL OUT OF CREDITS]: Code ${code} - ${rawMsg}`);
+      throw new SmsCreditExhaustedError(rawMsg, code);
+    }
+
+    // In staging / local dev, allow simulation ONLY if explicitly enabled via environment variable
+    if (process.env.MOCK_SMS_OTP === 'true' || process.env.ALLOW_OTP_SIMULATION === 'true') {
+      console.warn(`⚠️ [MESSAGE CENTRAL SIMULATION ACTIVE] Generating simulated OTP session for +${cc} ${mobileNumber}.`);
+      const fallbackVerId = `MC_SIM_${Date.now()}`;
+      verificationCache.set(mobileNumber, {
+        verificationId: fallbackVerId,
+        countryCode: cc,
+        createdAt: Date.now()
+      });
+
+      return {
+        success: true,
+        provider: 'message_central',
+        verificationId: fallbackVerId,
+        mobile: mobileNumber,
+        countryCode: cc,
+        timeout: 60,
+        message: 'OTP sent successfully (Testing fallback active: enter 999999 or 123456)',
+        is_fallback: true
+      };
+    }
+
     const errMsg = err.response?.data?.message || err.response?.data?.data?.errorMessage || err.message;
-    console.warn(`⚠️ [MESSAGE CENTRAL NOTICE]: ${errMsg}. Activating Master OTP fallback for +${cc} ${mobileNumber}.`);
-
-    // In staging / dev, or if Message Central credentials fail, provide fallback simulation so frontend dev is never blocked
-    const fallbackVerId = `MC_SIM_${Date.now()}`;
-    verificationCache.set(mobileNumber, {
-      verificationId: fallbackVerId,
-      countryCode: cc,
-      createdAt: Date.now()
-    });
-
-    return {
-      success: true,
-      provider: 'message_central',
-      verificationId: fallbackVerId,
-      mobile: mobileNumber,
-      countryCode: cc,
-      timeout: 60,
-      message: 'OTP sent successfully (Testing fallback active: enter 999999 or 123456)',
-      is_fallback: true
-    };
+    console.error('❌ [MESSAGE CENTRAL ERROR]:', err.response?.data || err.message);
+    throw new SmsGatewayError(errMsg, err.response?.status);
   }
 }
 
@@ -322,5 +485,9 @@ module.exports = {
   sendOTP,
   verifyOTP,
   getAuthToken,
-  formatPhone
+  formatPhone,
+  formatSmsErrorResponse,
+  isCreditExhaustedError,
+  SmsCreditExhaustedError,
+  SmsGatewayError
 };

@@ -163,6 +163,69 @@ Content-Type: application/json
 }
 ```
 
+### ⚠️ Error — SMS Gateway Credits Exhausted (`503 Service Unavailable`)
+
+When Message Central SMS credits/balance are exhausted, the backend returns:
+
+```json
+{
+  "success": false,
+  "error_code": "SMS_CREDITS_EXHAUSTED",
+  "error": "SMS gateway credits exhausted. SMS cannot be delivered.",
+  "message": "SMS service is temporarily unavailable due to gateway limits. Please use Email OTP or contact support.",
+  "channel": "mobile_sms",
+  "provider": "message_central",
+  "provider_response_code": 508,
+  "fallback_available": {
+    "email_otp": true
+  },
+  "action": "USE_EMAIL_OTP"
+}
+```
+
+### ❌ Error — SMS Delivery Failed (`502 Bad Gateway`)
+
+```json
+{
+  "success": false,
+  "error_code": "SMS_GATEWAY_ERROR",
+  "error": "SMS delivery failed via gateway.",
+  "message": "SMS service is temporarily unavailable. Please try again or use Email OTP.",
+  "channel": "mobile_sms",
+  "provider": "message_central",
+  "fallback_available": {
+    "email_otp": true
+  },
+  "action": "USE_EMAIL_OTP"
+}
+```
+
+### 💡 How the Web Developer Should Handle This (React / Next.js)
+
+When `error.response?.status === 503` or `data?.error_code === 'SMS_CREDITS_EXHAUSTED'`:
+1. Do **NOT** transition user to OTP input view (no SMS was sent).
+2. Display a banner or toast notification offering one-click switch to Email OTP:
+
+```javascript
+try {
+  await API.post('/api/otp/mobile/send-otp', {
+    phone: mobileNumber,
+    role: 'user',        // or 'vendor' for vendor website
+    purpose: 'login'
+  });
+  setStep('ENTER_OTP');
+} catch (error) {
+  const data = error.response?.data;
+  if (error.response?.status === 503 && data?.error_code === 'SMS_CREDITS_EXHAUSTED') {
+    // Show friendly prompt to switch to Email OTP
+    toast.error("SMS service is temporarily unavailable. Please log in using Email OTP.");
+    setActiveTab('email'); // Automatically activate Email OTP tab
+    return;
+  }
+  toast.error(data?.message || "Failed to send OTP");
+}
+```
+
 ---
 
 ## ✅ Step 3: Verify Mobile OTP & Login
@@ -625,5 +688,6 @@ const { data } = await axios.get('https://digi-local-backend.onrender.com/api/us
 | **`400 Bad Request`** | Validation Error | Missing `role`, invalid OTP, missing fields, account already exists (registration) |
 | **`403 Forbidden`** | Account Blocked | Account blocked/suspended by admin |
 | **`404 Not Found`** | Not Registered | Phone/email not found in respective table |
-| **`502 Bad Gateway`** | Delivery Failed | SMS provider or email SMTP failure |
+| **`502 Bad Gateway`** | Delivery Failed | SMS provider or email SMTP delivery failure |
+| **`503 Service Unavailable`** | SMS Credits Exhausted | Message Central out of credits (`SMS_CREDITS_EXHAUSTED`). Switch to Email OTP |
 | **`500 Server Error`** | Internal Error | Unhandled backend exception |

@@ -1,7 +1,7 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens } = require('../../utils/auth');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
-const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP } = require('../../services/messageCentralService');
+const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResponse } = require('../../services/messageCentralService');
 const { generateUniquePublicId } = require('../../utils/idGenerator');
 
 /**
@@ -827,7 +827,8 @@ async function sendVendorOtp(req, res) {
     });
   } catch (err) {
     console.error('Error sending vendor OTP:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Failed to send OTP' });
+    const { statusCode, body } = formatSmsErrorResponse(err);
+    return res.status(statusCode).json(body);
   }
 }
 

@@ -1,6 +1,6 @@
 'use strict';
 const { query } = require('../models/db');
-const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP } = require('../services/messageCentralService');
+const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResponse } = require('../services/messageCentralService');
 const { generateOTP, verifyOTP, generateTokens } = require('../utils/auth');
 const { sendEmail } = require('../services/emailService');
 const { otpTemplate } = require('../templates/emailTemplates');
@@ -159,11 +159,8 @@ const sendMobileOtpController = async (req, res) => {
     });
   } catch (error) {
     console.error('sendMobileOtpController error:', error.message);
-    return res.status(500).json({
-      success: false,
-      error: error.message || 'Failed to send mobile OTP',
-      message: error.message || 'Failed to send mobile OTP'
-    });
+    const { statusCode, body } = formatSmsErrorResponse(error);
+    return res.status(statusCode).json(body);
   }
 };
 

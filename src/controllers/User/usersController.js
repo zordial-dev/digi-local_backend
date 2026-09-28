@@ -1,7 +1,7 @@
 const { query } = require('../../models/db');
 const { hashPassword, comparePassword, generateTokens, generateOTP, verifyOTP, normalizePhone } = require('../../utils/auth');
 const { formatISTISO } = require('../../utils/time');
-const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP } = require('../../services/messageCentralService');
+const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResponse } = require('../../services/messageCentralService');
 const logger = require('../../utils/logger');
 const { generateUniquePublicId } = require('../../utils/idGenerator');
 
@@ -73,7 +73,8 @@ async function sendOtp(req, res) {
   } catch (err) {
     console.error('❌ [MESSAGE CENTRAL OTP ERROR] Error handling send OTP:', err.message);
     logger.error('Error in send OTP route:', { error: err.message });
-    res.status(500).json({ success: false, message: err.message || 'Failed to send OTP via Message Central' });
+    const { statusCode, body } = formatSmsErrorResponse(err);
+    return res.status(statusCode).json(body);
   }
 }
 
