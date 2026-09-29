@@ -23,6 +23,7 @@ const enquiryController = require('../controllers/Vendor/enquiryController');
 const serviceController = require('../controllers/Vendor/serviceController');
 const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
+const vendorAuthController = require('../controllers/Vendor/vendorAuthController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
 const { authenticateToken } = require('../middleware/auth');
 const { upload, handleMulterError } = require('../middleware/upload');
@@ -77,6 +78,10 @@ router.get('/api/vendors/categories', storefrontController.getCategories);
 router.get('/api/stores/categories', storefrontController.getCategories);
 router.get('/api/platform/config', adminPanelController.getPlatformConfig);
 router.get('/api/platform/settings', adminPanelController.getPlatformConfig);
+
+// ── Bank & IFSC Lookup Direct Aliases ─────────────────────────
+router.get(['/api/bank/:ifsc', '/api/ifsc/:ifsc', '/api/bank-details/:ifsc'], vendorAuthController.getBankDetailsByIfsc);
+router.get(['/api/bank', '/api/ifsc', '/api/bank-details'], vendorAuthController.getBankDetailsByIfsc);
 
 // ── CMS & Legal Content Direct Aliases ────────────────────────
 router.get('/api/help-support', cmsController.getHelpSupport);

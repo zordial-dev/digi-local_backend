@@ -101,6 +101,10 @@ router.post('/check-user', vendorAuthController.checkVendorPhone);
 router.post('/verify-phone', vendorAuthController.checkVendorPhone);
 router.get(['/check-phone', '/check-email', '/check-vendor', '/check-vendor-phone', '/check-vendor-email'], vendorAuthController.checkVendorPhone);
 
+// ── Bank & IFSC Lookup Endpoints (Public) ───────────────
+router.get(['/bank-details/:ifsc', '/bank/:ifsc', '/ifsc/:ifsc'], vendorAuthController.getBankDetailsByIfsc);
+router.get(['/bank-details', '/bank', '/ifsc'], vendorAuthController.getBankDetailsByIfsc);
+
 router.post('/register', validateRequest(registerSchema), vendorAuthController.registerVendor);
 router.post('/login', loginBruteForceGuard, validateRequest(loginSchema), vendorAuthController.loginVendor);
 router.post('/user-login', loginBruteForceGuard, validateRequest(loginSchema), vendorAuthController.handleUserLogin);

@@ -67,6 +67,21 @@ async function getUserOrders(req, res) {
 
       const statusUpper = String(ord.status || 'PLACED').toUpperCase();
 
+      let statusLabel = 'Order Placed';
+      if (statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED') {
+        statusLabel = 'Order Delivered';
+      } else if (statusUpper === 'ACCEPTED' || statusUpper === 'PREPARING') {
+        statusLabel = 'Order Accepted';
+      } else if (statusUpper === 'IN_PROGRESS' || statusUpper === 'OUT_FOR_DELIVERY') {
+        statusLabel = 'Out for Delivery';
+      } else if (statusUpper === 'CANCELLED') {
+        statusLabel = 'Order Cancelled';
+      } else if (ord.payment_status === 'PAID') {
+        statusLabel = 'Order Placed (Paid)';
+      } else {
+        statusLabel = 'Order Placed';
+      }
+
       orders.push({
         id: String(ord.order_id),
         order_id: String(ord.order_id),
@@ -88,7 +103,7 @@ async function getUserOrders(req, res) {
         total: total,
         total_amount: total,
         status: statusUpper,
-        status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
+        status_label: statusLabel,
         payment_status: ord.payment_status || 'PAID',
         date: formatISTISO(ord.created_at),
         timestamp: formatISTTimeOnly(ord.created_at),
@@ -287,7 +302,7 @@ async function createOrder(req, res) {
     const isCashfree = rawMethod === 'CASHFREE' || rawMethod === 'ONLINE' || rawMethod === 'ONLINE_PAYMENT' || rawMethod === 'CARD' || rawMethod === 'UPI';
     const paymentMethod = isCashfree ? 'CASHFREE' : 'COD';
     const paymentStatus = 'PENDING';
-    const orderStatus = isCashfree ? 'PENDING' : 'PLACED';
+    const orderStatus = 'PLACED';
 
     await query(
       `INSERT INTO orders (
@@ -509,8 +524,10 @@ async function updateOrderStatus(req, res) {
     let targetStatus = norm;
     if (['COMPLETED', 'COMPLETE', 'DELIVERED', 'FULFILLED', 'DONE'].includes(norm)) {
       targetStatus = 'COMPLETED';
-    } else if (['CONFIRMED', 'ACCEPT', 'ACCEPTED', 'PREPARING'].includes(norm)) {
+    } else if (['ACCEPT', 'ACCEPTED', 'PREPARING'].includes(norm)) {
       targetStatus = 'ACCEPTED';
+    } else if (['CONFIRMED', 'PLACED'].includes(norm)) {
+      targetStatus = 'PLACED';
     } else if (['CANCELLED', 'CANCELED', 'REJECTED', 'DECLINED'].includes(norm)) {
       targetStatus = 'CANCELLED';
     } else if (['IN_PROGRESS', 'PROCESSING', 'OUT_FOR_DELIVERY'].includes(norm)) {

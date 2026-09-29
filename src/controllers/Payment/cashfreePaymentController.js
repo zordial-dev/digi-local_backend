@@ -203,12 +203,16 @@ async function verifyOrderPayment(req, res) {
     const customerName = existingOrder?.customer_name || 'Resident Customer';
     const customerPhone = existingOrder?.customer_phone || '';
 
-    // 3. Update orders table to PAID & CONFIRMED
+    // 3. Update orders table to PAID & keep status as PLACED (awaiting vendor acceptance)
     if (existingOrder) {
       await query(
         `UPDATE orders 
          SET payment_status = 'PAID',
-             status = CASE WHEN status = 'CANCELLED' THEN status ELSE 'CONFIRMED' END,
+             status = CASE 
+               WHEN status IN ('CANCELLED', 'REJECTED') THEN status 
+               WHEN status IN ('ACCEPTED', 'IN_PROGRESS', 'COMPLETED') THEN status 
+               ELSE 'PLACED' 
+             END,
              cashfree_order_id = COALESCE(?, cashfree_order_id),
              cashfree_payment_id = ?,
              payment_method = 'CASHFREE',
@@ -263,8 +267,9 @@ async function verifyOrderPayment(req, res) {
     return res.status(200).json({
       success: true,
       verified: true,
-      message: 'Payment verified successfully. Order confirmed.',
+      message: 'Payment verified successfully. Order placed and awaiting vendor acceptance.',
       order_id: targetOrderId,
+      status: freshOrderRes.rows?.[0]?.status || 'PLACED',
       payment_status: 'PAID',
       payment_method: 'CASHFREE',
       cashfree_order_id: lookupOrderId,
@@ -513,7 +518,11 @@ async function confirmDirectUpiPayment(req, res) {
       await query(
         `UPDATE orders 
          SET payment_status = 'PAID',
-             status = 'CONFIRMED',
+             status = CASE 
+               WHEN status IN ('CANCELLED', 'REJECTED') THEN status 
+               WHEN status IN ('ACCEPTED', 'IN_PROGRESS', 'COMPLETED') THEN status 
+               ELSE 'PLACED' 
+             END,
              payment_method = 'UPI',
              cashfree_payment_id = ?,
              paid_at = CURRENT_TIMESTAMP
@@ -525,7 +534,7 @@ async function confirmDirectUpiPayment(req, res) {
         `INSERT INTO orders (
            order_id, vendor_id, total_amount, payment_status, status, payment_method,
            cashfree_payment_id, customer_name, customer_phone, paid_at, created_at
-         ) VALUES (?, ?, ?, 'PAID', 'CONFIRMED', 'UPI', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+         ) VALUES (?, ?, ?, 'PAID', 'PLACED', 'UPI', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
         [finalOrderId, Number(vendor_id) || 1337, numAmount, txnRef, customer_name, customer_phone]
       ).catch(() => {});
     }
@@ -605,11 +614,15 @@ async function cashfreeWebhook(req, res) {
 
     if (paymentStatus === 'SUCCESS' || eventType.includes('SUCCESS') || eventType === 'ORDER_PAID') {
       if (orderId) {
-        // Update order status
+        // Update order status to PLACED (awaiting vendor acceptance)
         await query(
           `UPDATE orders 
            SET payment_status = 'PAID',
-               status = CASE WHEN status = 'CANCELLED' THEN status ELSE 'CONFIRMED' END,
+               status = CASE 
+                 WHEN status IN ('CANCELLED', 'REJECTED') THEN status 
+                 WHEN status IN ('ACCEPTED', 'IN_PROGRESS', 'COMPLETED') THEN status 
+                 ELSE 'PLACED' 
+               END,
                cashfree_order_id = COALESCE(cashfree_order_id, ?),
                cashfree_payment_id = COALESCE(?, cashfree_payment_id),
                paid_at = CURRENT_TIMESTAMP

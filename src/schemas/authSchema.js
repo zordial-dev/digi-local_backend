@@ -44,6 +44,14 @@ const registerSchema = {
     pincode: z.union([z.number(), z.string()]).optional(),
     pin_code: z.union([z.number(), z.string()]).optional(),
     pinCode: z.union([z.number(), z.string()]).optional(),
+    account_number: z.union([z.number(), z.string()]).optional(),
+    bank_account_number: z.union([z.number(), z.string()]).optional(),
+    accountNumber: z.union([z.number(), z.string()]).optional(),
+    ifsc_code: z.string().optional(),
+    ifsc: z.string().optional(),
+    ifscCode: z.string().optional(),
+    bank_name: z.string().optional(),
+    account_holder_name: z.string().optional(),
     payment_method: z.string().optional(),
     transaction_id: z.string().optional()
   }).passthrough()

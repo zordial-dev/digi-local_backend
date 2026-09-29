@@ -252,8 +252,9 @@ Content-Type: application/json
 {
   "success": true,
   "verified": true,
-  "message": "Payment verified successfully. Order confirmed.",
+  "message": "Payment verified successfully. Order placed and awaiting vendor acceptance.",
   "order_id": "ORD_1790592300123",
+  "status": "PLACED",
   "payment_status": "PAID",
   "payment_method": "CASHFREE",
   "cashfree_payment_id": "CF_PAY_928172901",
@@ -261,7 +262,7 @@ Content-Type: application/json
   "order": {
     "order_id": "ORD_1790592300123",
     "vendor_id": 1296,
-    "status": "CONFIRMED",
+    "status": "PLACED",
     "payment_status": "PAID",
     "total_amount": 200.00
   }

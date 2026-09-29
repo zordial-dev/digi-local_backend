@@ -64,6 +64,14 @@ async function registerVendor(req, res) {
       body.shop_image || body.logo || body.shop_images?.[0] || body.images?.[0] || body.shopImage || ''
     ).trim();
 
+    const account_number = String(
+      body.account_number || body.bank_account_number || body.accountNumber || body.bank_account || ''
+    ).trim();
+
+    const ifsc_code = String(
+      body.ifsc_code || body.ifsc || body.ifscCode || body.ifsc_number || ''
+    ).trim().toUpperCase();
+
     // Mandatory Validations
     if (!vendor_name) return res.status(400).json({ error: 'Vendor / owner_name is required for registration.' });
     if (!store_name) return res.status(400).json({ error: 'Store / shop_name is required for registration.' });
@@ -77,6 +85,8 @@ async function registerVendor(req, res) {
     if (!whatsapp_number) return res.status(400).json({ error: 'WhatsApp number is a mandatory field for vendor registration.' });
     if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
     if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
+    if (!account_number) return res.status(400).json({ error: 'Bank account number (account_number) is mandatory for vendor registration.' });
+    if (!ifsc_code) return res.status(400).json({ error: 'Bank IFSC code (ifsc_code) is mandatory for vendor registration.' });
 
     // Store GSTIN & PAN exactly as provided (both are optional; no fallback/dummy values)
     let gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim().toUpperCase();
@@ -102,8 +112,6 @@ async function registerVendor(req, res) {
 
     // Optional Fields
     const category = String(body.category || body.business_category || body.businessCategory || 'General').trim();
-    const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
-    const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
     const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
     const account_holder_name = String(body.account_holder_name || body.accountHolderName || vendor_name || '').trim();
     const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
@@ -163,9 +171,12 @@ async function registerVendor(req, res) {
         `UPDATE vendors SET 
                     vendor_name = ?, store_name = ?, email = ?, phone_number = ?, password = ?, password_hash = ?, 
                     gstin = ?, pan_number = ?, shop_number = ?, shop_no = ?, address = ?, location = ?, city = ?, state = ?, pincode = ?, 
-                    shop_image = ?, logo = ?, category = ?, status = 'PENDING', has_resubmitted = TRUE, resubmitted_at = CURRENT_TIMESTAMP
+                    shop_image = ?, logo = ?, category = ?, 
+                    account_number = ?, bank_account_number = ?, ifsc_code = ?,
+                    bank_name = COALESCE(NULLIF(?, ''), bank_name), account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
+                    status = 'PENDING', has_resubmitted = TRUE, resubmitted_at = CURRENT_TIMESTAMP
                  WHERE vendor_id = ?`,
-        [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, vendor_id]
+        [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, account_number, account_number, ifsc_code, bank_name, account_holder_name, vendor_id]
       );
     } else {
       // Generate standardized Option B public_id (vnd@XXXX)
@@ -960,6 +971,98 @@ async function loginVendorWithOtp(req, res) {
   }
 }
 
+/**
+ * Search and retrieve bank branch and location details using IFSC code
+ * GET /api/vendors/bank/:ifsc
+ * GET /api/vendors/bank-details/:ifsc
+ * GET /api/vendors/ifsc/:ifsc
+ */
+async function getBankDetailsByIfsc(req, res) {
+  try {
+    const rawIfsc = req.params.ifsc || req.query.ifsc || req.query.code || '';
+    const ifsc = String(rawIfsc).trim().toUpperCase();
+
+    if (!ifsc) {
+      return res.status(400).json({
+        success: false,
+        error: 'IFSC code is required.'
+      });
+    }
+
+    // Basic format validation: 11 characters (e.g. SBIN0000001, HDFC0001234)
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscRegex.test(ifsc)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid IFSC code format. An IFSC code must be exactly 11 characters (e.g., SBIN0000001, HDFC0001234).'
+      });
+    }
+
+    // Fetch details from authoritative Indian banking directory via Razorpay public IFSC gateway
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+
+    const response = await fetch(`https://ifsc.razorpay.com/${encodeURIComponent(ifsc)}`, {
+      signal: controller.signal,
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'DigiLocal-Backend/1.0'
+      }
+    });
+    clearTimeout(timeoutId);
+
+    if (response.status === 404) {
+      return res.status(404).json({
+        success: false,
+        error: `No bank branch found for IFSC code "${ifsc}". Please check and enter a valid IFSC code.`
+      });
+    }
+
+    if (!response.ok) {
+      return res.status(502).json({
+        success: false,
+        error: 'Unable to reach IFSC lookup service. Please try again shortly.'
+      });
+    }
+
+    const data = await response.json();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Bank branch details retrieved successfully',
+      data: {
+        ifsc: data.IFSC || ifsc,
+        bank_name: data.BANK || '',
+        bank_code: data.BANKCODE || '',
+        branch: data.BRANCH || '',
+        address: data.ADDRESS || '',
+        city: data.CITY || '',
+        district: data.DISTRICT || '',
+        state: data.STATE || '',
+        centre: data.CENTRE || '',
+        contact: data.CONTACT || '',
+        micr: data.MICR || '',
+        upi: Boolean(data.UPI),
+        rtgs: Boolean(data.RTGS),
+        neft: Boolean(data.NEFT),
+        imps: Boolean(data.IMPS)
+      }
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      return res.status(504).json({
+        success: false,
+        error: 'IFSC lookup request timed out. Please try again.'
+      });
+    }
+    console.error('[IFSC Lookup Error]', err);
+    return res.status(500).json({
+      success: false,
+      error: 'An unexpected error occurred during IFSC lookup.'
+    });
+  }
+}
+
 module.exports = {
   registerVendor,
   getVendorStatus,
@@ -977,5 +1080,7 @@ module.exports = {
   verifyVendorOtp: loginVendorWithOtp,
   resetPassword,
   updateVendorPassword,
-  checkCoverage
+  checkCoverage,
+  getBankDetailsByIfsc
 };
+
