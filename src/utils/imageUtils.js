@@ -66,7 +66,7 @@ function extractImgresUrl(url) {
  * @param {string} defaultFallback - Fallback URL if rawUrl is empty or invalid
  * @returns {string} Clean, direct embeddable image URL
  */
-function normalizeImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop&q=80') {
+function normalizeImageUrl(rawUrl, defaultFallback = null) {
     if (!rawUrl || typeof rawUrl !== 'string') return defaultFallback;
 
     let url = rawUrl.trim();
@@ -151,7 +151,7 @@ function normalizeImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.co
  * @param {string} defaultFallback - Fallback URL if resolution fails
  * @returns {Promise<string>} Direct embeddable image URL
  */
-async function resolveImageUrl(rawUrl, defaultFallback = 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&auto=format&fit=crop&q=80') {
+async function resolveImageUrl(rawUrl, defaultFallback = null) {
     if (!rawUrl || typeof rawUrl !== 'string') return defaultFallback;
 
     let url = rawUrl.trim().replace(/^["']|["']$/g, '').trim();

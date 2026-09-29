@@ -100,11 +100,16 @@ async function createOrderPaymentSession(req, res) {
 
     if (!session || !session.success || !session.payment_session_id) {
       console.warn('⚠️ [CASHFREE PAYMENT CONTROLLER] Session generation failed:', session?.error);
+      const isAuthError = session?.status_code === 401 || (session?.error && session?.error.toLowerCase().includes('authentication'));
       return res.status(400).json({
         success: false,
         error: session?.error || 'Failed to create Cashfree payment session',
         details: session?.raw || session?.error,
-        cashfree: session
+        cashfree: session,
+        ...(isAuthError ? {
+          hint: 'Cashfree API credentials in .env failed remote authentication. Please check CASHFREE_APP_ID and CASHFREE_SECRET_KEY in your .env file.',
+          fix_advice: 'Ensure the full 50+ character secret key is copied from your Cashfree Merchant Dashboard (Developers -> API Keys).'
+        } : {})
       });
     }
 
@@ -130,6 +135,7 @@ async function createOrderPaymentSession(req, res) {
       mode: session.mode,
       vendor_id: targetVendorId,
       store_name: storeName,
+      receiver_upi: '9571240742@fam',
       cashfree: session
     });
   } catch (err) {
@@ -377,7 +383,7 @@ async function payVendorDirect(req, res) {
         vendor_id: vendor.vendor_id,
         store_name: vendor.store_name,
         vendor_name: vendor.vendor_name,
-        upi_id: vendor.upi_id || null
+        upi_id: vendor.upi_id || '9571240742@fam'
       },
       cashfree: session
     });
@@ -479,6 +485,93 @@ async function verifyDirectPayment(req, res) {
     return res.status(500).json({
       success: false,
       error: 'Failed to verify direct payment',
+      details: err.message
+    });
+  }
+}
+
+/**
+ * 4b. Verifies and records a Direct UPI payment (to 9571240742@fam)
+ * POST /api/payments/confirm-direct-upi
+ */
+async function confirmDirectUpiPayment(req, res) {
+  try {
+    const {
+      order_id,
+      amount = 1.00,
+      utr_number,
+      customer_name = 'Resident Customer',
+      customer_phone = '9876543210',
+      vendor_id = 1337,
+      receiver_upi = '9571240742@fam'
+    } = req.body;
+
+    const numAmount = Number(amount) || 1.00;
+    const finalOrderId = order_id || `ORD_UPI_${Date.now()}`;
+    const txnRef = utr_number ? String(utr_number).trim() : `UPI_TXN_${Date.now()}`;
+
+    // 1. Record or update order
+    const existingOrder = await query(`SELECT order_id FROM orders WHERE order_id = ?`, [finalOrderId]).catch(() => ({ rows: [] }));
+    if (existingOrder.rows && existingOrder.rows.length > 0) {
+      await query(
+        `UPDATE orders 
+         SET payment_status = 'PAID',
+             status = 'CONFIRMED',
+             payment_method = 'UPI',
+             cashfree_payment_id = ?,
+             paid_at = CURRENT_TIMESTAMP
+         WHERE order_id = ?`,
+        [txnRef, finalOrderId]
+      );
+    } else {
+      await query(
+        `INSERT INTO orders (
+           order_id, vendor_id, total_amount, payment_status, status, payment_method,
+           cashfree_payment_id, customer_name, customer_phone, paid_at, created_at
+         ) VALUES (?, ?, ?, 'PAID', 'CONFIRMED', 'UPI', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [finalOrderId, Number(vendor_id) || 1337, numAmount, txnRef, customer_name, customer_phone]
+      ).catch(() => {});
+    }
+
+    // 2. Record in payments ledger
+    const pRes = await query(
+      `INSERT INTO payments (
+         order_id, vendor_id, user_id, amount, currency, payment_status,
+         payment_method, payment_gateway, cashfree_payment_id,
+         customer_name, customer_phone, notes, created_at
+       ) VALUES (?, ?, ?, ?, 'INR', 'SUCCESS', 'UPI', 'DIRECT_UPI', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       RETURNING *`,
+      [
+        finalOrderId,
+        Number(vendor_id) || 1337,
+        'usr_' + (customer_phone || 'resident'),
+        numAmount,
+        txnRef,
+        customer_name,
+        customer_phone,
+        `Direct UPI payment to ${receiver_upi} (UTR: ${txnRef})`
+      ]
+    ).catch(err => ({ rows: [{ payment_id: Date.now(), order_id: finalOrderId, amount: numAmount }] }));
+
+    return res.status(200).json({
+      success: true,
+      verified: true,
+      order_id: finalOrderId,
+      amount: numAmount,
+      currency: 'INR',
+      payment_status: 'PAID',
+      payment_method: 'UPI',
+      receiver_upi: receiver_upi,
+      transaction_id: txnRef,
+      utr: txnRef,
+      message: `✅ ₹${numAmount.toFixed(2)} Direct UPI payment to ${receiver_upi} confirmed and logged!`,
+      payment: pRes.rows?.[0] || null
+    });
+  } catch (err) {
+    console.error('❌ [CONFIRM DIRECT UPI ERROR]:', err);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to confirm direct UPI payment',
       details: err.message
     });
   }
@@ -798,7 +891,7 @@ async function createDummyTransaction(req, res) {
 
     const timestamp = Date.now();
     const rand4 = Math.floor(1000 + Math.random() * 9000);
-    const dummyOrderId = `ORD_DUMMY_${timestamp}_${rand4}`;
+    const dummyOrderId = params.order_id || `ORD_DUMMY_${timestamp}_${rand4}`;
     const dummySessionId = `session_dummy_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
     const dummyPaymentId = `CF_PAY_DUMMY_${timestamp}_${rand4}`;
     const paymentUrl = `https://payments-test.cashfree.com/order/#${dummyOrderId}`;
@@ -806,33 +899,68 @@ async function createDummyTransaction(req, res) {
     const orderStatus = autoComplete ? 'CONFIRMED' : 'PENDING';
     const paymentStatus = autoComplete ? 'PAID' : 'PENDING';
 
-    // 1. Insert dummy order record into orders table
-    await query(
-      `INSERT INTO orders (
-         order_id, user_id, vendor_id, total_amount, status,
-         payment_status, payment_method, cashfree_order_id, cashfree_payment_id,
-         customer_name, customer_phone, delivery_address, created_at, paid_at
-       ) VALUES (?, ?, ?, ?, ?, ?, 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ${autoComplete ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
-      [
-        dummyOrderId,
-        `usr_${customerPhone}`,
-        vendorId,
-        amount,
-        orderStatus,
-        paymentStatus,
-        dummyOrderId,
-        autoComplete ? dummyPaymentId : null,
-        customerName,
-        customerPhone,
-        deliveryAddress
-      ]
-    ).catch(async () => {
-      return query(
-        `INSERT INTO orders (order_id, user_id, vendor_id, total_amount, status, delivery_address, created_at, customer_name)
-         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
-        [dummyOrderId, `usr_${customerPhone}`, vendorId, amount, orderStatus, deliveryAddress, customerName]
+    // 1. Check if order already exists in orders table
+    const existingOrderRes = await query(`SELECT order_id, vendor_id, total_amount, customer_name, customer_phone FROM orders WHERE order_id = ?`, [dummyOrderId]).catch(() => ({ rows: [] }));
+    if (existingOrderRes.rows && existingOrderRes.rows.length > 0) {
+      // Update existing order
+      await query(
+        `UPDATE orders 
+         SET payment_status = ?,
+             status = ?,
+             cashfree_order_id = ?,
+             cashfree_payment_id = ?,
+             payment_method = 'CASHFREE',
+             paid_at = ${autoComplete ? 'CURRENT_TIMESTAMP' : 'paid_at'}
+         WHERE order_id = ?`,
+        [paymentStatus, orderStatus, dummyOrderId, autoComplete ? dummyPaymentId : null, dummyOrderId]
       ).catch(() => {});
-    });
+    } else {
+      // Insert dummy order record into orders table
+      await query(
+        `INSERT INTO orders (
+           order_id, user_id, vendor_id, total_amount, status,
+           payment_status, payment_method, cashfree_order_id, cashfree_payment_id,
+           customer_name, customer_phone, delivery_address, created_at, paid_at
+         ) VALUES (?, ?, ?, ?, ?, ?, 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ${autoComplete ? 'CURRENT_TIMESTAMP' : 'NULL'})`,
+        [
+          dummyOrderId,
+          `usr_${customerPhone}`,
+          vendorId,
+          amount,
+          orderStatus,
+          paymentStatus,
+          dummyOrderId,
+          autoComplete ? dummyPaymentId : null,
+          customerName,
+          customerPhone,
+          deliveryAddress
+        ]
+      ).catch(async () => {
+        return query(
+          `INSERT INTO orders (order_id, user_id, vendor_id, total_amount, status, delivery_address, created_at, customer_name)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
+          [dummyOrderId, `usr_${customerPhone}`, vendorId, amount, orderStatus, deliveryAddress, customerName]
+        ).catch(() => {});
+      });
+
+      // 2. Insert dummy order details (lookup valid item_id for foreign key)
+      let validItemId = 1;
+      const itemCheck = await query(`SELECT item_id FROM items WHERE vendor_id = ? LIMIT 1`, [vendorId]).catch(() => ({ rows: [] }));
+      if (itemCheck.rows && itemCheck.rows.length > 0) {
+        validItemId = Number(itemCheck.rows[0].item_id);
+      } else {
+        const anyItem = await query(`SELECT item_id FROM items LIMIT 1`).catch(() => ({ rows: [] }));
+        if (anyItem.rows && anyItem.rows.length > 0) {
+          validItemId = Number(anyItem.rows[0].item_id);
+        }
+      }
+
+      await query(
+        `INSERT INTO order_details (order_id, item_id, item_name, quantity, price, unit_price, item_total)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [dummyOrderId, validItemId, 'Dummy Test Item', 1, amount, amount, amount]
+      ).catch(() => {});
+    }
 
     // 2. Insert dummy order details (lookup valid item_id for foreign key)
     let validItemId = 1;
@@ -1162,6 +1290,7 @@ module.exports = {
   verifyOrderPayment,
   payVendorDirect,
   verifyDirectPayment,
+  confirmDirectUpiPayment,
   cashfreeWebhook,
   getVendorCashfreePayments,
   getAdminCashfreeLedger,

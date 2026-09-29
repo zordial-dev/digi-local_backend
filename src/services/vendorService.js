@@ -190,7 +190,7 @@ class VendorService {
     vendor.shop_no = vendor.shop_number || vendor.shop_no || '';
     if (vendor.logo) vendor.logo = normalizeImageUrl(vendor.logo);
     if (vendor.shop_image) vendor.shop_image = normalizeImageUrl(vendor.shop_image);
-    vendor.logo_url = vendor.logo || vendor.shop_image || '';
+    vendor.logo_url = vendor.logo || vendor.shop_image || null;
 
     return {
       vendor,

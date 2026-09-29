@@ -122,19 +122,77 @@ router.delete('/api/people/:id', adminPanelController.deleteUser);
 const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
 
 // ── Cashfree Payment Gateway Routes (PG v3) ───────────────────
-router.post(['/api/payments/cashfree/create-order-session', '/api/payments/cashfree/create-session'], cashfreePaymentController.createOrderPaymentSession);
-router.post(['/api/payments/cashfree/verify', '/api/payments/cashfree/verify-order'], cashfreePaymentController.verifyOrderPayment);
-router.post('/api/payments/cashfree/pay-vendor-direct', cashfreePaymentController.payVendorDirect);
-router.post('/api/payments/cashfree/verify-direct', cashfreePaymentController.verifyDirectPayment);
-router.post('/api/payments/cashfree/webhook', cashfreePaymentController.cashfreeWebhook);
-router.get(['/api/vendors/:vendorId/cashfree-payments', '/api/vendor/:vendorId/cashfree-payments'], cashfreePaymentController.getVendorCashfreePayments);
-router.get('/api/admin/payments/cashfree-ledger', cashfreePaymentController.getAdminCashfreeLedger);
-router.all(['/api/payments/cashfree/check-credentials', '/api/payments/cashfree/test-credentials'], cashfreePaymentController.checkCredentials);
+router.post([
+  '/api/payments/create-order',
+  '/api/payments/create-order-session',
+  '/api/payments/cashfree/create-order-session',
+  '/api/payments/cashfree/create-session',
+  '/api/payments/cashfree/create-order'
+], cashfreePaymentController.createOrderPaymentSession);
 
-// ── Dummy / Test Transaction Routes ───────────────────────────
-router.all(['/api/payments/cashfree/dummy-transaction', '/api/payments/dummy-transaction', '/api/payments/cashfree/create-dummy-transaction'], cashfreePaymentController.createDummyTransaction);
-router.post(['/api/payments/cashfree/simulate-payment', '/api/payments/simulate-payment'], cashfreePaymentController.simulatePaymentCompletion);
-router.get(['/api/payments/routes', '/api/payments/cashfree/routes'], cashfreePaymentController.getPaymentRoutesCatalog);
+router.post([
+  '/api/payments/verify',
+  '/api/payments/verify-order',
+  '/api/payments/verify-payment',
+  '/api/payments/cashfree/verify',
+  '/api/payments/cashfree/verify-order'
+], cashfreePaymentController.verifyOrderPayment);
+
+router.post([
+  '/api/payments/pay-vendor-direct',
+  '/api/payments/cashfree/pay-vendor-direct'
+], cashfreePaymentController.payVendorDirect);
+
+router.post([
+  '/api/payments/verify-direct',
+  '/api/payments/cashfree/verify-direct'
+], cashfreePaymentController.verifyDirectPayment);
+
+router.post([
+  '/api/payments/confirm-direct-upi',
+  '/api/payments/cashfree/confirm-direct-upi'
+], cashfreePaymentController.confirmDirectUpiPayment);
+
+router.post([
+  '/api/payments/webhook',
+  '/api/payments/cashfree/webhook'
+], cashfreePaymentController.cashfreeWebhook);
+
+router.get([
+  '/api/vendors/:vendorId/cashfree-payments',
+  '/api/vendor/:vendorId/cashfree-payments',
+  '/api/vendors/:vendorId/payments'
+], cashfreePaymentController.getVendorCashfreePayments);
+
+router.get([
+  '/api/admin/payments/cashfree-ledger',
+  '/api/admin/payments/ledger',
+  '/api/payments/ledger'
+], cashfreePaymentController.getAdminCashfreeLedger);
+
+router.all([
+  '/api/payments/check-credentials',
+  '/api/payments/test-credentials',
+  '/api/payments/cashfree/check-credentials',
+  '/api/payments/cashfree/test-credentials'
+], cashfreePaymentController.checkCredentials);
+
+router.get([
+  '/api/payments/routes',
+  '/api/payments/cashfree/routes'
+], cashfreePaymentController.getPaymentRoutesCatalog);
+
+// ── Testing / Simulation Endpoints (keep until explicitly removed) ──────
+router.all([
+  '/api/payments/dummy-transaction',
+  '/api/payments/cashfree/dummy-transaction',
+  '/api/payments/cashfree/create-dummy-transaction'
+], cashfreePaymentController.createDummyTransaction);
+
+router.post([
+  '/api/payments/simulate-payment',
+  '/api/payments/cashfree/simulate-payment'
+], cashfreePaymentController.simulatePaymentCompletion);
 
 router.get('/api/payments/transactions', adminPanelController.getPaymentTransactions);
 router.get('/api/payments/revenue-dashboard', adminPanelController.getRevenueDashboard);

@@ -77,6 +77,10 @@ app.get(['/cashfree-test', '/cashfree-test.html', '/cashfree'], (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'cashfree-test.html'));
 });
 
+app.get(['/checkout', '/checkout.html', '/pay', '/pay.html', '/test-payment'], (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
+});
+
 app.get('/openapi.json', (req, res) => {
     if (fs.existsSync(openApiSpecPath)) {
         res.setHeader('Content-Type', 'application/json');
@@ -180,11 +184,11 @@ async function bootServer() {
 
         const { initSocket } = require('./src/socket');
 
-        const server = app.listen(PORT, () => {
-            console.log(`DigiLocal Server running on PORT ${PORT} | Docs: http://localhost:${PORT}/api-docs`, { port: PORT });
+        const server = app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 DigiLocal Server running on http://localhost:${PORT} | Docs: http://localhost:${PORT}/api-docs`);
         }).on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
-                logger.error(`Port ${PORT} is already in use by another Node process. Run 'npx kill-port ${PORT}' or 'taskkill /F /IM node.exe' to free port ${PORT}.`, { port: PORT });
+                logger.error(`Port ${PORT} is already in use by another Node process. Run 'npx kill-port ${PORT}' or 'taskkill /F /IM node.exe' to free port ${PORT}.`);
                 process.exit(1);
             } else {
                 logger.error('Server boot error', { error: err.message });
@@ -195,11 +199,8 @@ async function bootServer() {
         initSocket(server);
 
         const gracefulShutdown = (signal) => {
-            logger.info(`Received ${signal}. Initiating graceful shutdown...`, { signal });
             server.close(async () => {
-                logger.info('HTTP server closed.');
                 await closeDb();
-                logger.info('Database connections closed cleanly. Shutdown complete.');
                 process.exit(0);
             });
         };

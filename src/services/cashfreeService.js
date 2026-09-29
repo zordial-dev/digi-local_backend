@@ -6,7 +6,14 @@ const crypto = require('crypto');
  */
 
 const getAppId = (override) => String(override || process.env.CASHFREE_APP_ID || '').trim().replace(/^["']|["']$/g, '');
-const getSecretKey = (override) => String(override || process.env.CASHFREE_SECRET_KEY || '').trim().replace(/^["']|["']$/g, '');
+const getSecretKey = (override, customAppId) => {
+  let key = String(override || process.env.CASHFREE_SECRET_KEY || '').trim().replace(/^["']|["']$/g, '');
+  const appId = getAppId(customAppId);
+  if (appId && key.length > appId.length && key.endsWith(appId)) {
+    key = key.slice(0, -appId.length).trim();
+  }
+  return key;
+};
 const getApiVersion = () => String(process.env.CASHFREE_API_VERSION || '2023-08-01').trim().replace(/^["']|["']$/g, '');
 const getEnv = (override, customSecret) => {
   if (override) {
@@ -176,16 +183,6 @@ async function createPaymentSession(payload = {}, options = {}) {
   const orderId = payload.order_id || `CF_ORD_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
   const amount = Number(payload.order_amount || payload.amount || 0);
   const currency = payload.order_currency || 'INR';
-
-  const activeEnv = options.env || payload.env;
-  const currentEnv = getEnv(activeEnv);
-
-  // Pure Local Test mode (explicitly requested or mock)
-  const isMockRequested = currentEnv === 'TEST' || currentEnv === 'MOCK' || currentEnv === 'SIMULATION' || options.mock === true || payload.mock === true || options.is_dummy === true || payload.is_dummy === true || options.dummy === true || payload.dummy === true;
-  if (isMockRequested) {
-    console.log(`ℹ️ [CASHFREE SERVICE] Test/Dummy Mode active for Order #${orderId}`);
-    return generateSimulationSession(payload, 'Test/Dummy Mode Active');
-  }
 
   try {
     const cust = payload.customer_details || {};
@@ -425,40 +422,6 @@ async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
     return { success: false, error: 'Missing order_id for verification' };
   }
 
-  const currentEnv = getEnv(options.env);
-  const isSimulationOrder = String(orderId).includes('_SIM_') ||
-    String(orderId).includes('_TEST_') ||
-    String(orderId).includes('_DUMMY_') ||
-    String(orderId).includes('DUMMY') ||
-    String(orderId).startsWith('CF_ORD_TEST') ||
-    String(orderId).startsWith('CF_TEST') ||
-    String(orderId).startsWith('TEST_') ||
-    String(orderId).startsWith('ORD_DUMMY') ||
-    String(orderId).startsWith('DUMMY_') ||
-    currentEnv === 'TEST' ||
-    currentEnv === 'MOCK' ||
-    currentEnv === 'SIMULATION' ||
-    options.mock === true ||
-    options.is_dummy === true ||
-    options.dummy === true;
-
-  if (isSimulationOrder) {
-    console.log(`ℹ️ [CASHFREE VERIFY] Simulating successful payment verification for Order #${orderId}`);
-    return {
-      success: true,
-      verified: true,
-      mode: 'test_sandbox',
-      payment_status: 'SUCCESS',
-      order_id: orderId,
-      cf_payment_id: paymentId || `CF_PAY_TEST_${Date.now()}`,
-      payment_amount: 0,
-      payment_currency: 'INR',
-      payment_method: 'UPI (Test Sandbox)',
-      payment_time: new Date().toISOString(),
-      message: 'Payment verified successfully in Test mode'
-    };
-  }
-
   try {
     const currentEnv = getEnv(options.env, options.secret_key);
     const activeBaseUrl = getBaseUrl(currentEnv, options.secret_key);
@@ -472,20 +435,6 @@ async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
 
     if (!response.ok || !Array.isArray(data)) {
       console.warn(`⚠️ [CASHFREE VERIFY] Remote inquiry failed for #${orderId}:`, data);
-      if (currentEnv === 'SANDBOX' && (response.status === 401 || (data.message && data.message.toLowerCase().includes('authentication')))) {
-        return {
-          success: true,
-          verified: true,
-          mode: 'sandbox_fallback',
-          payment_status: 'SUCCESS',
-          order_id: orderId,
-          cf_payment_id: paymentId || `CF_PAY_SANDBOX_${Date.now()}`,
-          payment_amount: 0,
-          payment_currency: 'INR',
-          payment_method: 'UPI (Sandbox)',
-          payment_time: new Date().toISOString()
-        };
-      }
       return {
         success: false,
         verified: false,

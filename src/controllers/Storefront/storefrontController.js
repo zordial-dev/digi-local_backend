@@ -147,8 +147,10 @@ async function getVendorStorefront(req, res) {
             };
         });
 
-        const finalShopLogo = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(vendor.logo || vendor.shop_image || '') : (vendor.logo || vendor.shop_image || '');
-        const finalShopImage = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(vendor.shop_image || vendor.logo || '') : (vendor.shop_image || vendor.logo || '');
+        const rawLogo = vendor.logo || vendor.shop_image || null;
+        const rawShopImage = vendor.shop_image || vendor.logo || null;
+        const finalShopLogo = rawLogo ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawLogo) : rawLogo) : null;
+        const finalShopImage = rawShopImage ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawShopImage) : rawShopImage) : null;
 
         const cleanVendorObj = {
             ...vendor,

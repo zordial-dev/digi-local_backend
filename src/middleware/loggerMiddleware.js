@@ -28,15 +28,20 @@ function loggerMiddleware(req, res, next) {
     if (res.statusCode >= 400) {
       const duration = Date.now() - startTime;
       const logLevel = res.statusCode >= 500 ? 'error' : 'warn';
+      const isProduction = process.env.NODE_ENV === 'production';
 
-      logger[logLevel](`HTTP ${req.method} ${url} ${res.statusCode} - ${duration}ms`, {
-        requestId,
-        correlationId,
-        method: req.method,
-        url,
-        statusCode: res.statusCode,
-        responseTimeMs: duration
-      });
+      if (isProduction) {
+        logger[logLevel](`HTTP ${req.method} ${url} ${res.statusCode} - ${duration}ms`, {
+          requestId,
+          correlationId,
+          method: req.method,
+          url,
+          statusCode: res.statusCode,
+          responseTimeMs: duration
+        });
+      } else {
+        logger[logLevel](`HTTP ${req.method} ${url} ${res.statusCode} (${duration}ms)`);
+      }
     }
   });
 
