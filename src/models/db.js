@@ -154,6 +154,7 @@ async function query(sqlText, params = []) {
         else if (uSql.includes('INTO SUBSCRIPTIONS')) insertedId = firstRow.subscription_id || firstRow.id;
         else if (uSql.includes('INTO PAYMENTS')) insertedId = firstRow.payment_id || firstRow.id;
         else if (uSql.includes('INTO ENQUIRIES')) insertedId = firstRow.enquiry_id || firstRow.id;
+        else if (uSql.includes('INTO SERVICES')) insertedId = firstRow.service_id || firstRow.id;
         else {
           insertedId = firstRow.id || firstRow.enquiry_id || firstRow.vendor_id || firstRow.society_id || firstRow.item_id || firstRow.order_id || firstRow.subscription_id || firstRow.payment_id || null;
         }
@@ -524,6 +525,26 @@ async function setupTablesPg() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
+  `).catch(() => { });
+
+  // Ensure services table (for Service Vendors)
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS services (
+      service_id BIGSERIAL PRIMARY KEY,
+      vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+      service_name VARCHAR(255) NOT NULL,
+      category VARCHAR(100),
+      price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+      visiting_charge DECIMAL(10,2) DEFAULT 0.00,
+      estimated_duration VARCHAR(100) DEFAULT '1 hour',
+      service_location VARCHAR(100) DEFAULT 'At Customer''s Doorstep',
+      description TEXT,
+      image_url TEXT,
+      is_available BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_services_vendor_id ON services(vendor_id);
   `).catch(() => { });
 
   // Ensure sub_admins table

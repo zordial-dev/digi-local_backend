@@ -147,6 +147,37 @@ async function getVendorStorefront(req, res) {
             };
         });
 
+        let servicesList = [];
+        try {
+            const servicesResult = await query(
+                `SELECT * FROM services WHERE vendor_id = ? ORDER BY service_id ASC`,
+                [vendor.vendor_id]
+            );
+            servicesList = (servicesResult.rows || []).map(s => {
+                const finalSImg = s.image_url ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(s.image_url) : s.image_url) : null;
+                return {
+                    service_id: Number(s.service_id),
+                    id: Number(s.service_id),
+                    vendor_id: Number(s.vendor_id),
+                    service_name: s.service_name,
+                    name: s.service_name,
+                    category: s.category || 'General Services',
+                    price: parseFloat(s.price || 0),
+                    visiting_charge: parseFloat(s.visiting_charge || 0),
+                    estimated_duration: s.estimated_duration || '1 hour',
+                    service_location: s.service_location || "At Customer's Doorstep",
+                    description: s.description || '',
+                    image_url: finalSImg,
+                    photo_url: finalSImg,
+                    is_available: s.is_available === true || s.is_available === 1 || s.is_available === '1',
+                    created_at: s.created_at,
+                    updated_at: s.updated_at
+                };
+            });
+        } catch (sErr) {
+            servicesList = [];
+        }
+
         const rawLogo = vendor.logo || vendor.shop_image || null;
         const rawShopImage = vendor.shop_image || vendor.logo || null;
         const finalShopLogo = rawLogo ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawLogo) : rawLogo) : null;
@@ -194,11 +225,13 @@ async function getVendorStorefront(req, res) {
             vendor: cleanVendorObj,
             data: {
                 vendor: cleanVendorObj,
-                items: itemsList
+                items: itemsList,
+                services: servicesList
             },
             items: itemsList,
             products: itemsList,
-            catalog: itemsList
+            catalog: itemsList,
+            services: servicesList
         });
     } catch (err) {
         console.error('Error fetching vendor storefront:', err);

@@ -4,6 +4,7 @@ const path = require('path');
 const multer = require('multer');
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
 const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
+const serviceController = require('../../controllers/Vendor/serviceController');
 const { authenticateToken, requireVendorOwner } = require('../../middleware/auth');
 const { validateRequest } = require('../../middleware/validate');
 const { addItemSchema, updateSettingsSchema } = require('../../schemas/vendorSchema');
@@ -132,6 +133,17 @@ router.put(['/items/:itemId/availability', '/products/:itemId/availability', '/:
 
 // DELETE /api/vendorPanel/:vendorId/items/:itemId & /products/:itemId
 router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], authenticateToken, requireVendorOwner, vendorPanelController.deleteItem);
+
+// ── Service Vendor Services Catalog Endpoints ────────────────────
+// POST /api/vendorPanel/:vendorId/services (Supports multipart/form-data camera/gallery uploads and JSON)
+router.post('/:vendorId/services', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.addService);
+router.get('/:vendorId/services', serviceController.getVendorServices);
+router.get('/:vendorId/services/:serviceId', serviceController.getServiceById);
+router.put('/:vendorId/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
+router.patch('/:vendorId/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
+router.patch('/:vendorId/services/:serviceId/availability', authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
+router.put('/:vendorId/services/:serviceId/availability', authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
+router.delete('/:vendorId/services/:serviceId', authenticateToken, requireVendorOwner, serviceController.deleteService);
 
 // PUT /api/vendorPanel/payment-details & /:vendorId/payment-details
 router.put('/payment-details', vendorPanelController.updatePaymentDetails);

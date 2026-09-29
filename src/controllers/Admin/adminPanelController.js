@@ -421,7 +421,7 @@ async function getVendorReapplicationChanges(req, res) {
     return res.status(200).json({
       code: 200,
       status: 'success',
-      message: diffs.total_changed_fields > 0 
+      message: diffs.total_changed_fields > 0
         ? `Retrieved ${diffs.total_changed_fields} field change(s) for vendor reapplication.`
         : 'No field changes recorded for this vendor reapplication.',
       vendor_id: Number(v.vendor_id),
@@ -1349,9 +1349,9 @@ async function unstrikeUser(req, res) {
     );
 
     if (resetAll) {
-      await query(`DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [String(u.user_id), String(u.user_id)]).catch(() => {});
+      await query(`DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [String(u.user_id), String(u.user_id)]).catch(() => { });
     } else {
-      await query(`DELETE FROM user_strikes WHERE strike_id IN (SELECT strike_id FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY strike_number DESC LIMIT 1)`, [String(u.user_id), String(u.user_id)]).catch(() => {});
+      await query(`DELETE FROM user_strikes WHERE strike_id IN (SELECT strike_id FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ? ORDER BY strike_number DESC LIMIT 1)`, [String(u.user_id), String(u.user_id)]).catch(() => { });
     }
 
     const strikesRes = await query(
@@ -2160,7 +2160,7 @@ module.exports = {
   holdVendor,
   listOnHoldVendors,
 
-  resetDatabase: async function(req, res) {
+  resetDatabase: async function (req, res) {
     try {
       const { clean_vendors } = req.body || {};
       const { cleanDatabaseTables } = require('../../models/db');

@@ -1,35 +1,63 @@
-# 💳 DigiLocal — Website Payment Integration API Docs
+# 💳 DigiLocal — Website Payment Integration API Documentation (Production Ready)
 ### For: Website Frontend Developer (React / Next.js / Vue / Vanilla JS)
 
 > **Backend Base URL (Production):** `https://digi-local-backend.onrender.com`  
 > **Backend Base URL (Local Dev):** `http://localhost:5000`  
 > **Payment Gateway:** Cashfree PG v3 (`2023-08-01`)  
+> **Production Status:** Live & Fully Verified (Test Simulation Endpoints Removed)  
 > **Last Updated:** 29 Sep 2026  
 
 ---
 
 ## 🧭 How the Payment Flow Works
 
-When a user on your website buys from a vendor, the end-to-end flow is:
+When a resident user on your website purchases items from a vendor, the flow is:
 
-```
-User clicks Pay → Website calls DigiLocal backend → Backend creates Cashfree session
-→ Website launches Cashfree popup modal → User pays (UPI / Card / Netbanking)
-→ Website calls backend verify endpoint → Backend confirms with Cashfree → Order marked PAID
-→ Show "Payment Successful!" to user
-```
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as 👤 Resident User
+    participant Web as 💻 Website (React / Next.js)
+    participant Backend as ⚙️ DigiLocal Backend
+    participant CF as 💳 Cashfree PG (v3)
+    participant DB as 🗄️ Database
 
-**Four API calls. That's it.**
+    User->>Web: 1. Click "Proceed to Pay" on Cart
+    Web->>Backend: 2. POST /api/orders (Creates order with status PENDING)
+    Backend->>DB: Saves order record (payment_status: PENDING)
+    Backend-->>Web: Returns order_id & total_amount
+
+    Web->>Backend: 3. POST /api/payments/create-order (Generate Cashfree session)
+    Backend->>CF: Remote call to Cashfree PG (/orders)
+    CF-->>Backend: Returns payment_session_id
+    Backend-->>Web: Returns payment_session_id & order_id
+
+    Web->>CF: 4. Launch Cashfree SDK modal (cashfree.checkout)
+    CF-->>User: Displays payment popup (UPI, Cards, Netbanking, Wallets)
+    User->>CF: Enters UPI PIN / Card OTP to approve payment
+    CF-->>Web: Modal completes & returns paymentDetails
+
+    Web->>Backend: 5. POST /api/payments/verify
+    Backend->>CF: Inquires order status (/orders/{id}/payments)
+    CF-->>Backend: Confirms SUCCESS
+    Backend->>DB: Updates order: payment_status='PAID', status='CONFIRMED'
+    Backend->>DB: Records transaction in payments ledger
+    Backend-->>Web: 200 OK (verified: true, payment_status: 'PAID')
+
+    Web-->>User: 6. Displays "Payment Successful! Order Confirmed" screen
+```
 
 ---
 
 ## 📦 Step 0: Install the Cashfree JS SDK
 
+Install the official Cashfree Web SDK in your frontend repository:
+
 ```bash
 npm install @cashfreepayments/cashfree-js
 ```
 
-Or via CDN in your HTML `<head>`:
+Or via CDN script in your HTML `<head>`:
 ```html
 <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
 ```
@@ -38,13 +66,14 @@ Or via CDN in your HTML `<head>`:
 
 ## 🔑 Environment Configuration
 
-| Setting | Value |
-|---|---|
-| Cashfree SDK mode | `'production'` |
-| Backend base URL | `https://digi-local-backend.onrender.com` |
-| Env var name (Next.js) | `NEXT_PUBLIC_API_URL` |
+In your website's `.env.local` or environment variables:
 
-> **Never expose** Cashfree App ID or Secret Key in frontend code. They live securely in the backend `.env`.
+| Variable | Value | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` (or `VITE_API_URL`) | `https://digi-local-backend.onrender.com` | Production backend |
+| Cashfree SDK Mode | `'production'` | Set in `load({ mode: 'production' })` |
+
+> 🔒 **Security Notice:** Never put Cashfree `app_id` or `secret_key` in the frontend code. All sensitive credentials are stored securely in the backend.
 
 ---
 
@@ -54,7 +83,7 @@ Or via CDN in your HTML `<head>`:
 
 ### API 1 — Create Cart Order
 
-Creates the order in our database **before** payment. Returns an `order_id`.
+Creates the order in the database **before** payment.
 
 ```http
 POST /api/orders
@@ -62,7 +91,6 @@ Content-Type: application/json
 ```
 
 #### Request Body
-
 ```json
 {
   "vendor_id": 1296,
@@ -84,16 +112,15 @@ Content-Type: application/json
 |---|---|---|---|
 | `vendor_id` | number | **YES** | The vendor the user is buying from |
 | `items` | array | **YES** | `[{ item_id, item_name, quantity, price }]` |
-| `total_amount` | number | **YES** | Total order value in INR |
+| `total_amount` | number | **YES** | Total order amount in INR |
 | `payment_method` | string | **YES** | Always `"CASHFREE"` for online payment |
-| `customer_name` | string | **YES** | User's full name |
+| `customer_name` | string | **YES** | Customer's full name |
 | `customer_phone` | string | **YES** | 10-digit mobile number |
-| `customer_email` | string | No | User's email |
-| `delivery_address` | string | No | Delivery address string |
-| `user_id` | string | No | Your app's user identifier |
+| `customer_email` | string | No | Customer's email address |
+| `delivery_address` | string | No | Flat/society delivery address |
+| `user_id` | string | No | Your frontend user ID (e.g. `usr_...`) |
 
 #### Response `200 OK`
-
 ```json
 {
   "success": true,
@@ -105,13 +132,13 @@ Content-Type: application/json
 }
 ```
 
-> **Save `order_id`** — it's needed in all next steps.
+> 💾 **Save `order_id`**: You will pass this to the next steps.
 
 ---
 
 ### API 2 — Create Cashfree Payment Session
 
-Contacts Cashfree servers and returns a `payment_session_id` to launch the payment popup.
+Requests a secure payment session directly from Cashfree PG servers.
 
 ```http
 POST /api/payments/create-order
@@ -121,7 +148,6 @@ Content-Type: application/json
 *Aliases: `POST /api/payments/create-order-session`, `POST /api/payments/cashfree/create-order-session`*
 
 #### Request Body
-
 ```json
 {
   "order_id": "ORD_1790592300123",
@@ -129,25 +155,24 @@ Content-Type: application/json
   "customer_name": "Aarushi Verma",
   "customer_phone": "9876543210",
   "customer_email": "aarushi@gmail.com",
-  "return_url": "https://yourwebsite.com/order-status?order_id=ORD_1790592300123"
+  "return_url": "https://yourwebsite.com/payment/status?order_id=ORD_1790592300123"
 }
 ```
 
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `order_id` | string | **YES** | The `order_id` from API 1 |
-| `amount` | number | **YES** | Must match the order total (INR) |
-| `customer_name` | string | **YES** | User's name |
+| `amount` | number | **YES** | Must match the order amount |
+| `customer_name` | string | **YES** | Resident's name |
 | `customer_phone` | string | **YES** | 10-digit mobile number |
-| `customer_email` | string | No | User's email |
-| `return_url` | string | No | Page to redirect after payment (non-modal / redirect flows) |
+| `customer_email` | string | No | Resident's email address |
+| `return_url` | string | No | Fallback redirect URL if user is redirected |
 
 #### Response `200 OK`
-
 ```json
 {
   "success": true,
-  "payment_session_id": "session_g73h_f89h4_23098f_LiveSessionId",
+  "payment_session_id": "session_A72xK9L2_live_session_token",
   "order_id": "ORD_1790592300123",
   "cf_order_id": "CF_ORD_1790592300123",
   "order_amount": 200.00,
@@ -158,55 +183,55 @@ Content-Type: application/json
 }
 ```
 
-> **Save `payment_session_id`** — pass it to the Cashfree JS SDK to open the modal.
+> 💾 **Save `payment_session_id`**: Pass this to the Cashfree JS SDK in Step 3.
 
 ---
 
-### API 3 — Launch Cashfree Payment Modal (Frontend SDK Call)
+### API 3 — Launch Cashfree Modal (Frontend SDK)
 
-This is not an HTTP call to our backend — it's a call to the Cashfree JS SDK.
+Launch the official Cashfree payment modal right on your website:
 
 ```javascript
 import { load } from '@cashfreepayments/cashfree-js';
 
 let cashfreeInstance = null;
 
-// Call this on PAGE LOAD, not on button click — avoids popup blockers
-async function initCashfree() {
+// Initialize on page mount to prevent popup blocking
+export async function getCashfree() {
   if (!cashfreeInstance) {
-    cashfreeInstance = await load({ mode: 'production' }); // 'production' for real payments
+    cashfreeInstance = await load({ mode: 'production' });
   }
   return cashfreeInstance;
 }
 
-async function openPaymentModal(paymentSessionId, orderId) {
-  const cashfree = await initCashfree();
+export async function openCashfreeModal(paymentSessionId, onPaid, onCancelled) {
+  const cashfree = await getCashfree();
 
   const result = await cashfree.checkout({
     paymentSessionId: paymentSessionId,
-    redirectTarget: '_modal' // Opens as popup — user stays on your page
+    redirectTarget: '_modal' // Keeps user on your website
   });
 
   if (result.error) {
-    // User closed the modal or payment cancelled
-    showError('Payment was cancelled. Please try again.');
+    // User closed popup or cancelled
+    console.warn('Payment closed by user:', result.error.message);
+    if (onCancelled) onCancelled(result.error);
     return;
   }
 
   if (result.paymentDetails) {
-    // Payment completed in modal — call API 4 to verify
-    await verifyPayment(orderId);
+    // Payment approved! Proceed to verify on backend
+    console.log('Payment completed in modal:', result.paymentDetails);
+    if (onPaid) onPaid(result.paymentDetails);
   }
 }
 ```
-
-> **Important:** Initialize Cashfree SDK on page load with `initCashfree()`, not inside the button click handler. This prevents browser popup blockers from blocking the modal.
 
 ---
 
 ### API 4 — Verify Payment on Backend
 
-After the Cashfree modal returns `paymentDetails`, call this endpoint to confirm with Cashfree servers and mark the order PAID.
+Once the modal closes with payment completion, call this endpoint to verify with Cashfree and confirm the order:
 
 ```http
 POST /api/payments/verify
@@ -216,19 +241,13 @@ Content-Type: application/json
 *Alias: `POST /api/payments/cashfree/verify`*
 
 #### Request Body
-
 ```json
 {
   "order_id": "ORD_1790592300123"
 }
 ```
 
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `order_id` | string | **YES** | The `order_id` from API 1 |
-
 #### Response `200 OK` — Verified Successfully
-
 ```json
 {
   "success": true,
@@ -238,7 +257,7 @@ Content-Type: application/json
   "payment_status": "PAID",
   "payment_method": "CASHFREE",
   "cashfree_payment_id": "CF_PAY_928172901",
-  "paid_at": "2026-09-29T07:12:44.000Z",
+  "paid_at": "2026-09-29T10:12:44.000Z",
   "order": {
     "order_id": "ORD_1790592300123",
     "vendor_id": 1296,
@@ -249,91 +268,120 @@ Content-Type: application/json
 }
 ```
 
-#### Response `400` — Not Verified / Payment Failed
-
+#### Response `400 Bad Request` — Payment Not Completed
 ```json
 {
   "success": false,
   "verified": false,
   "payment_status": "FAILED",
-  "error": "Payment has not been completed or was declined"
+  "error": "Payment status is USER_DROPPED"
 }
 ```
 
-> Show "Order Confirmed!" **only** when `verified === true` AND `payment_status === 'PAID'`.
+---
+
+## ⚡ Direct Resident-to-Vendor Payment (Scan & Pay)
+
+For counter payments or paying a vendor directly (not from a cart):
+
+### Step 1: Create Direct Session
+```http
+POST /api/payments/pay-vendor-direct
+Content-Type: application/json
+```
+
+#### Request Body
+```json
+{
+  "vendor_id": 1296,
+  "amount": 150.00,
+  "customer_name": "Aarushi Verma",
+  "customer_phone": "9876543210",
+  "notes": "Direct counter payment"
+}
+```
+
+#### Response
+```json
+{
+  "success": true,
+  "order_id": "CF_DIR_1790592399123",
+  "payment_session_id": "session_DIR_...",
+  "payment_url": "https://payments.cashfree.com/order/#CF_DIR_..."
+}
+```
+
+### Step 2: Verify Direct Payment
+```http
+POST /api/payments/verify-direct
+Content-Type: application/json
+
+{
+  "order_id": "CF_DIR_1790592399123"
+}
+```
 
 ---
 
-## 💻 Complete React / Next.js Component (Copy-Paste Ready)
+## 💻 Full React / Next.js Implementation
 
-```jsx
+```tsx
 import React, { useState, useEffect } from 'react';
 import { load } from '@cashfreepayments/cashfree-js';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'https://digi-local-backend.onrender.com';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://digi-local-backend.onrender.com';
 
-let cashfreeInstance = null;
-async function getCashfree() {
-  if (!cashfreeInstance) {
-    cashfreeInstance = await load({ mode: 'production' });
-  }
-  return cashfreeInstance;
-}
-
-/**
- * PayNowButton — drop this into your checkout page
- * Props:
- *   vendorId: number
- *   cartItems: [{ item_id, item_name, quantity, price }]
- *   totalAmount: number (INR)
- *   user: { name, phone, email, id }
- *   onSuccess: (data) => void
- *   onFailure: (err) => void
- */
-export default function PayNowButton({ vendorId, cartItems, totalAmount, user, onSuccess, onFailure }) {
+export default function CheckoutPaymentButton({ cart, vendorId, user, onSuccess }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [cashfree, setCashfree] = useState(null);
 
+  // Pre-load SDK on component mount
   useEffect(() => {
-    getCashfree().catch(console.warn); // Pre-init on mount
+    load({ mode: 'production' }).then(cf => setCashfree(cf));
   }, []);
 
   const handlePay = async () => {
+    if (!cashfree) {
+      alert('Payment system initializing, please try again in a second.');
+      return;
+    }
+
     try {
       setLoading(true);
-      setError('');
+      setStatusMessage('Creating order...');
 
-      // API 1: Create Order
-      const orderRes = await fetch(`${BACKEND_URL}/api/orders`, {
+      // 1. Create Order
+      const orderRes = await fetch(`${API_BASE}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           vendor_id: vendorId,
+          total_amount: cart.total,
+          payment_method: 'CASHFREE',
           customer_name: user.name,
           customer_phone: user.phone,
-          customer_email: user.email || '',
-          user_id: user.id || `usr_${user.phone}`,
-          payment_method: 'CASHFREE',
-          total_amount: totalAmount,
-          items: cartItems
+          customer_email: user.email,
+          delivery_address: user.address,
+          items: cart.items
         })
       });
       const orderData = await orderRes.json();
-      if (!orderData.success || !orderData.order_id) {
-        throw new Error(orderData.error || 'Failed to create order');
-      }
-      const orderId = orderData.order_id;
+      if (!orderData.success) throw new Error(orderData.error || 'Failed to create order');
 
-      // API 2: Create Payment Session
-      const sessionRes = await fetch(`${BACKEND_URL}/api/payments/create-order`, {
+      const orderId = orderData.order_id;
+      setStatusMessage('Preparing payment session...');
+
+      // 2. Create Cashfree Session
+      const sessionRes = await fetch(`${API_BASE}/api/payments/create-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           order_id: orderId,
-          amount: totalAmount,
+          amount: cart.total,
           customer_name: user.name,
           customer_phone: user.phone,
-          customer_email: user.email || ''
+          customer_email: user.email
         })
       });
       const sessionData = await sessionRes.json();
@@ -341,282 +389,98 @@ export default function PayNowButton({ vendorId, cartItems, totalAmount, user, o
         throw new Error(sessionData.error || 'Failed to create payment session');
       }
 
-      // API 3: Launch Cashfree Modal
-      const cashfree = await getCashfree();
+      setStatusMessage('Opening payment popup...');
+
+      // 3. Launch Cashfree Modal
       const result = await cashfree.checkout({
         paymentSessionId: sessionData.payment_session_id,
         redirectTarget: '_modal'
       });
 
       if (result.error) {
-        setError(result.error.message || 'Payment was cancelled.');
-        if (onFailure) onFailure(result.error);
+        setLoading(false);
+        setStatusMessage('Payment cancelled.');
         return;
       }
 
-      // API 4: Verify Payment
-      if (result.paymentDetails) {
-        const verifyRes = await fetch(`${BACKEND_URL}/api/payments/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ order_id: orderId })
-        });
-        const verifyData = await verifyRes.json();
+      // 4. Verify Payment with Backend
+      setStatusMessage('Verifying payment status...');
+      const verifyRes = await fetch(`${API_BASE}/api/payments/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId })
+      });
+      const verifyData = await verifyRes.json();
 
-        if (verifyData.verified && verifyData.payment_status === 'PAID') {
-          if (onSuccess) onSuccess(verifyData);
-          else window.location.href = `/order-confirmation?order_id=${orderId}`;
-        } else {
-          throw new Error(verifyData.error || 'Payment verification failed');
-        }
+      if (verifyData.verified && verifyData.payment_status === 'PAID') {
+        setStatusMessage('Payment successful! Order confirmed.');
+        if (onSuccess) onSuccess(verifyData);
+      } else {
+        throw new Error(verifyData.error || 'Payment could not be verified');
       }
     } catch (err) {
-      const msg = err.message || 'Payment failed. Please try again.';
-      setError(msg);
-      if (onFailure) onFailure(msg);
+      console.error('Payment error:', err);
+      alert(`Payment Error: ${err.message}`);
+      setStatusMessage('');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="pay-now-wrapper">
-      {error && (
-        <p className="pay-error" style={{ color: '#e53935', fontSize: 14, marginBottom: 8 }}>
-          ⚠️ {error}
-        </p>
-      )}
-      <button
-        onClick={handlePay}
+    <div>
+      <button 
+        onClick={handlePay} 
         disabled={loading}
         style={{
-          padding: '12px 24px', fontSize: 16, fontWeight: 600,
-          background: loading ? '#ccc' : '#1a73e8', color: '#fff',
-          border: 'none', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer'
+          background: '#059669',
+          color: '#ffffff',
+          padding: '14px 28px',
+          borderRadius: '8px',
+          fontWeight: 'bold',
+          cursor: loading ? 'not-allowed' : 'pointer'
         }}
       >
-        {loading ? 'Securing payment...' : `Pay ₹${Number(totalAmount).toFixed(2)}`}
+        {loading ? statusMessage || 'Processing...' : `Pay ₹${cart.total} via Cashfree`}
       </button>
+      {statusMessage && <p style={{ fontSize: '13px', marginTop: '6px', color: '#6b7280' }}>{statusMessage}</p>}
     </div>
   );
 }
 ```
 
-#### Usage in your checkout page:
+---
 
-```jsx
-<PayNowButton
-  vendorId={1296}
-  cartItems={[
-    { item_id: 101, item_name: 'White Lily', quantity: 2, price: 40 },
-    { item_id: 105, item_name: 'Mango Juice', quantity: 1, price: 120 }
-  ]}
-  totalAmount={200}
-  user={{ name: 'Aarushi Verma', phone: '9876543210', email: 'aarushi@gmail.com', id: 'usr_9876543210' }}
-  onSuccess={(data) => {
-    console.log('Payment success!', data);
-    router.push(`/order-confirmation?id=${data.order_id}`);
-  }}
-  onFailure={(err) => {
-    console.error('Payment failed:', err);
-  }}
-/>
-```
+## ⚠️ Important Production Details & Developer Gotchas
+
+1. **Preload the SDK:**  
+   Always call `load({ mode: 'production' })` when the component or checkout page mounts. Do **not** call `load()` inside the click handler; browser security restrictions may block the modal popup if initialized asynchronously during a user click.
+
+2. **Mobile Device Behavior & UPI Intent:**  
+   On mobile browsers (Chrome / Safari on Android & iOS), Cashfree automatically shows UPI apps (Google Pay, PhonePe, Paytm). When the resident taps an app, the browser hands over to the UPI app and returns upon completion.
+
+3. **Fallback Return URL (`return_url`):**  
+   If a mobile browser forcibly reloads or the modal redirects instead of staying inline, provide a `return_url` in `POST /api/payments/create-order`:
+   ```
+   https://yourwebsite.com/checkout/status?order_id={order_id}
+   ```
+   When that page mounts, simply read `order_id` from the URL query and call `POST /api/payments/verify`.
+
+4. **Webhooks Ensure Reliability:**  
+   The backend is configured with Cashfree Webhooks (`POST /api/payments/webhook`). Even if the resident loses internet or closes their browser tab immediately after UPI PIN entry, Cashfree notifies our backend, and the order is automatically marked as `PAID`.
+
+5. **Double Verification Safety:**  
+   Calling `POST /api/payments/verify` multiple times is completely idempotent. If already paid, it simply returns the verified status without duplicating any ledger records.
+
+6. **Order Query Endpoints:**  
+   - Resident order status: `GET /api/orders/{order_id}`  
+   - Resident order history: `GET /api/orders/user/{user_id}`  
 
 ---
 
-## ⚡ Direct Vendor Payment — Scan & Pay (Optional)
+## ✅ Production Readiness Checklist
 
-Use this when a user scans the vendor's QR code and pays a custom amount directly (no cart order needed).
-
-### Step A — Create Direct Payment Session
-
-```http
-POST /api/payments/pay-vendor-direct
-Content-Type: application/json
-
-{
-  "vendor_id": 1296,
-  "amount": 350.00,
-  "customer_name": "Aarushi Verma",
-  "customer_phone": "9876543210",
-  "notes": "Weekly groceries clearance"
-}
-```
-
-| Field | Type | Required |
-|---|---|---|
-| `vendor_id` | number | **YES** |
-| `amount` | number | **YES** |
-| `customer_name` | string | No |
-| `customer_phone` | string | No |
-| `notes` | string | No |
-
-#### Response `200 OK`
-
-```json
-{
-  "success": true,
-  "payment_session_id": "session_direct_982348_live",
-  "order_id": "CF_DIR_1790592300999",
-  "order_amount": 350.00,
-  "vendor": { "vendor_id": 1296, "store_name": "Fresh Mart" }
-}
-```
-
-### Step B — Launch Cashfree modal with the `payment_session_id` (same SDK call as API 3)
-
-### Step C — Verify Direct Payment
-
-```http
-POST /api/payments/verify-direct
-Content-Type: application/json
-
-{ "order_id": "CF_DIR_1790592300999" }
-```
-
-Response is same format as API 4.
-
----
-
-## 🔔 Webhooks — Automatic, No Frontend Action Needed
-
-If a user closes the browser mid-payment (e.g., UPI Intent), Cashfree auto-notifies our backend:
-
-**Webhook URL:** `https://digi-local-backend.onrender.com/api/payments/webhook`
-
-The backend automatically:
-- Verifies the Cashfree HMAC signature
-- Updates order to `PAID` + `CONFIRMED`
-- Notifies the vendor in real-time via Socket.IO
-
-You don't need to handle this — it's all done server-side.
-
----
-
-## ❌ Error Handling Reference
-
-| HTTP Status | `verified` | Scenario | User Message |
-|---|---|---|---|
-| `200` | `true` | Payment successful | "Order confirmed! ✅" |
-| `400` | `false` | Payment declined / cancelled | "Payment declined. Try another method." |
-| `400` | — | Missing fields / bad amount | Show the `error` field from response |
-| `401` | — | Auth token expired | Redirect to login |
-| `404` | — | `order_id` not found | "Order not found. Please refresh your cart." |
-| `500` | — | Backend or gateway error | "Payment gateway busy. Please try again in a moment." |
-
----
-
-## 🧪 Testing Without Real Money (Active — Remove When Told)
-
-### Option A — 1-Click Dummy Transaction (Fastest)
-
-Browser URL:
-```
-https://digi-local-backend.onrender.com/api/payments/cashfree/dummy-transaction?amount=100&auto_complete=true
-```
-
-Or Postman/cURL:
-```json
-POST /api/payments/cashfree/dummy-transaction
-
-{
-  "amount": 100.00,
-  "customer_name": "Test User",
-  "customer_phone": "9876543210",
-  "auto_complete": true
-}
-```
-
-Creates a fully completed PAID order with a ledger entry — no real money charged.
-
-### Option B — mock: true Flag on Any Endpoint
-
-Add `"mock": true` to your order or session request. Returns simulated session. Then verify with `"mock": true`.
-
-```json
-POST /api/orders
-{
-  "vendor_id": 1296, "payment_method": "CASHFREE",
-  "total_amount": 150, "mock": true, "items": [...]
-}
-```
-
-```json
-POST /api/payments/verify
-{ "order_id": "ORD_...", "mock": true }
-```
-
-### Option C — Simulate Existing Order Paid
-
-```json
-POST /api/payments/cashfree/simulate-payment
-
-{ "order_id": "ORD_1790592300123" }
-```
-
-Marks the existing order as PAID, CONFIRMED without any real payment.
-
-### Option D — Interactive Test Bench (Browser UI)
-
-Open: `http://localhost:5000/cashfree-test`
-
-Full UI with SDK modal test, dummy transactions, credential check, and payments ledger viewer.
-
----
-
-## 📊 Order Status Query APIs
-
-```http
-GET /api/orders/{order_id}
-```
-Returns order details including `payment_status`, `status`, `paid_at`.
-
-```http
-GET /api/orders/user/{user_id}
-```
-Returns all orders for a specific user.
-
-```http
-GET /api/orders/vendor/{vendor_id}
-```
-Returns all orders placed with a specific vendor.
-
----
-
-## ❓ FAQ
-
-**Q: What Cashfree SDK mode should I use for real payments?**  
-A: Use `'production'` in `load({ mode: 'production' })`. Use `'sandbox'` only for testing with Cashfree test credentials.
-
-**Q: Do I need to send the Cashfree App ID or Secret Key from frontend?**  
-A: **Absolutely not.** Never put Cashfree credentials in frontend code. They're in the backend `.env`. Just call our backend APIs.
-
-**Q: What payment methods will users see in the Cashfree modal?**  
-A: All methods — UPI (GPay, PhonePe, Paytm), Credit Card, Debit Card, Netbanking, Wallets, EMI, Pay Later. Cashfree shows them automatically based on what's active on your merchant account.
-
-**Q: What happens if the user closes the Cashfree modal mid-payment?**  
-A: `result.error` will be truthy. **Do NOT call** `/api/payments/verify`. Just show "Payment Cancelled" and let the user retry.
-
-**Q: What if the user pays via UPI Intent and their browser closes before returning?**  
-A: Our backend webhook handles this automatically. The order will be updated to PAID even if the user never came back to your page.
-
-**Q: How do I know for sure that money was received before showing the success screen?**  
-A: Always call `POST /api/payments/verify`. **Only** show success if the response has both `verified: true` AND `payment_status: 'PAID'`. This is the source of truth.
-
-**Q: Is there a redirect flow (non-modal) option?**  
-A: Yes. Set `redirectTarget` to `'_self'` instead of `'_modal'` in the Cashfree SDK call, and set `return_url` when creating the session. The user will be redirected back to your `return_url` after payment. Then call `/api/payments/verify` when your return page loads.
-
----
-
-## 🚀 Quick Start Checklist
-
-- [ ] `npm install @cashfreepayments/cashfree-js`
-- [ ] Set env var `NEXT_PUBLIC_API_URL=https://digi-local-backend.onrender.com`
-- [ ] Initialize Cashfree SDK (`load({ mode: 'production' })`) on **page load**
-- [ ] On checkout button click → `POST /api/orders` → save `order_id`
-- [ ] `POST /api/payments/create-order` → save `payment_session_id`
-- [ ] Call `cashfree.checkout({ paymentSessionId, redirectTarget: '_modal' })`
-- [ ] Wait for `result.paymentDetails` (not `result.error`)
-- [ ] `POST /api/payments/verify` with `order_id`
-- [ ] Show success screen **only** if `verified: true` AND `payment_status === 'PAID'`
+- [x] Test / Simulation endpoints removed from backend router.
+- [x] Production Cashfree PG v3 credentials active on Render backend.
+- [x] Real-time vendor notification triggered upon verified payment.
+- [x] `orders` and `payments` ledger synchronized on verification and webhook.

@@ -20,6 +20,7 @@ const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
 const otpController = require('../controllers/otpController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
+const serviceController = require('../controllers/Vendor/serviceController');
 const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
@@ -42,6 +43,16 @@ router.get('/api/users/:userId/enquiries', enquiryController.getUserEnquiries);
 router.patch('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 router.put('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
+
+// ── Service Vendor Services Direct & Global Routes ───────────
+router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], upload.any(), handleMulterError, serviceController.addService);
+router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], serviceController.getVendorServices);
+router.get(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.getServiceById);
+router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
+router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
+router.patch(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
+router.put(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
+router.delete(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.deleteService);
 
 // ── Core Business API Routes ────────────────────────────────
 router.use('/api/otp', otpRoutes);                 // Message Central Mobile/Web OTP Service
@@ -170,29 +181,7 @@ router.get([
   '/api/payments/ledger'
 ], cashfreePaymentController.getAdminCashfreeLedger);
 
-router.all([
-  '/api/payments/check-credentials',
-  '/api/payments/test-credentials',
-  '/api/payments/cashfree/check-credentials',
-  '/api/payments/cashfree/test-credentials'
-], cashfreePaymentController.checkCredentials);
 
-router.get([
-  '/api/payments/routes',
-  '/api/payments/cashfree/routes'
-], cashfreePaymentController.getPaymentRoutesCatalog);
-
-// ── Testing / Simulation Endpoints (keep until explicitly removed) ──────
-router.all([
-  '/api/payments/dummy-transaction',
-  '/api/payments/cashfree/dummy-transaction',
-  '/api/payments/cashfree/create-dummy-transaction'
-], cashfreePaymentController.createDummyTransaction);
-
-router.post([
-  '/api/payments/simulate-payment',
-  '/api/payments/cashfree/simulate-payment'
-], cashfreePaymentController.simulatePaymentCompletion);
 
 router.get('/api/payments/transactions', adminPanelController.getPaymentTransactions);
 router.get('/api/payments/revenue-dashboard', adminPanelController.getRevenueDashboard);

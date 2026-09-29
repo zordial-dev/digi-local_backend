@@ -13,6 +13,20 @@ const addItemSchema = {
   })
 };
 
+const addServiceSchema = {
+  body: z.object({
+    service_name: z.string().trim().min(1, 'Service name is required'),
+    category: z.string().trim().optional(),
+    price: z.coerce.number().min(0, 'Price must be non-negative').optional(),
+    visiting_charge: z.coerce.number().min(0, 'Visiting charge must be non-negative').optional(),
+    estimated_duration: z.string().trim().optional(),
+    service_location: z.string().trim().optional(),
+    description: z.string().trim().optional(),
+    is_available: z.coerce.boolean().optional(),
+    image_url: z.string().trim().optional()
+  })
+};
+
 const updateSettingsSchema = {
   body: z.object({
     store_name: z.string().trim().min(1, 'Store name is required').optional(),
@@ -112,6 +126,7 @@ const serviceEnquirySchema = {
 
 module.exports = {
   addItemSchema,
+  addServiceSchema,
   updateSettingsSchema,
   updateCoverageSchema,
   checkCoverageSchema,

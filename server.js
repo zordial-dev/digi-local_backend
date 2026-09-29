@@ -73,13 +73,6 @@ app.get(['/firebase-test', '/firebase-test.html'], (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'firebase-test.html'));
 });
 
-app.get(['/cashfree-test', '/cashfree-test.html', '/cashfree'], (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'cashfree-test.html'));
-});
-
-app.get(['/checkout', '/checkout.html', '/pay', '/pay.html', '/test-payment'], (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'checkout.html'));
-});
 
 app.get('/openapi.json', (req, res) => {
     if (fs.existsSync(openApiSpecPath)) {
