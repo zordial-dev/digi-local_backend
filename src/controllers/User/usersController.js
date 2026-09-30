@@ -12,7 +12,7 @@ const { checkCooldown, recordOtpSent, resetCooldown, getCooldownStatus } = requi
  */
 async function sendOtp(req, res) {
   try {
-    const { identifier, phone, mobile, phone_number, email, purpose, type, country_code, countryCode } = req.body;
+    const { identifier, phone, mobile, phone_number, email, purpose, type, mode: reqMode, country_code, countryCode } = req.body;
     const target = identifier || phone || mobile || phone_number || email;
 
     if (!target) {
@@ -22,7 +22,7 @@ async function sendOtp(req, res) {
     const cleanTarget = String(target).trim();
     const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
     const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
-    const mode = (purpose || type || '').toLowerCase();
+    const mode = (purpose || type || reqMode || '').toLowerCase();
 
     // 0. Progressive Exponential Cooldown Check (10s, 20s, 40s, 80s...)
     const cooldownCheck = checkCooldown(cleanTarget);
