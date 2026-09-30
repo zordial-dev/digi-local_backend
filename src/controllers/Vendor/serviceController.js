@@ -1,7 +1,7 @@
 const path = require('path');
 const fs = require('fs');
 const { query } = require('../../models/db');
-const { resolveImageUrl, normalizeImageUrl } = require('../../utils/imageUtils');
+const { resolveImageUrl, normalizeImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../../utils/imageUtils');
 const { formatISTISO, formatISTReadable } = require('../../utils/time');
 
 /**
@@ -104,8 +104,8 @@ function formatServiceRow(row) {
         estimated_duration: row.estimated_duration || '1 hour',
         service_location: row.service_location || "At Customer's Doorstep",
         description: row.description || '',
-        image_url: row.image_url ? normalizeImageUrl(row.image_url) : null,
-        photo_url: row.image_url ? normalizeImageUrl(row.image_url) : null,
+        image_url: normalizeImageUrl(row.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE),
+        photo_url: normalizeImageUrl(row.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE),
         is_available: row.is_available === true || row.is_available === 1 || row.is_available === '1',
         created_at: row.created_at,
         created_at_ist: row.created_at ? formatISTISO(row.created_at) : null,
@@ -175,7 +175,7 @@ async function addService(req, res) {
             }
         }
 
-        const finalImage = uploadedUrl ? await resolveImageUrl(uploadedUrl) : null;
+        const finalImage = uploadedUrl ? await resolveImageUrl(uploadedUrl, DEFAULT_PRODUCT_SERVICE_IMAGE) : DEFAULT_PRODUCT_SERVICE_IMAGE;
 
         const insertRes = await query(
             `INSERT INTO services (
@@ -385,7 +385,7 @@ async function updateService(req, res) {
                 newImageUrl = b64.image_url;
             } else if (body.image_url !== undefined || body.photo !== undefined || body.service_photo !== undefined) {
                 const candidate = String(body.image_url || body.photo || body.service_photo || '').trim();
-                newImageUrl = candidate ? await resolveImageUrl(candidate) : null;
+                newImageUrl = candidate ? await resolveImageUrl(candidate, DEFAULT_PRODUCT_SERVICE_IMAGE) : DEFAULT_PRODUCT_SERVICE_IMAGE;
             }
         }
 

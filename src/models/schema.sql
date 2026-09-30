@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS items (
     price DECIMAL(10,2) NOT NULL,
     category VARCHAR(100),
     description TEXT,
-    image_url TEXT,
+    image_url TEXT DEFAULT 'https://i.imghos.co/NwtAJsPG.jpg',
     in_stock BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -196,6 +196,10 @@ CREATE TABLE IF NOT EXISTS orders (
     cashfree_order_id VARCHAR(100),
     cashfree_payment_id VARCHAR(100),
     paid_at TIMESTAMP,
+    refund_id VARCHAR(100),
+    refund_amount DECIMAL(10,2),
+    refund_status VARCHAR(50),
+    refunded_at TIMESTAMP,
     delivery_address TEXT,
     customer_name VARCHAR(255),
     customer_phone VARCHAR(50),
@@ -241,7 +245,7 @@ CREATE TABLE IF NOT EXISTS services (
     estimated_duration VARCHAR(100) DEFAULT '1 hour',
     service_location VARCHAR(100) DEFAULT 'At Customer''s Doorstep',
     description TEXT,
-    image_url TEXT,
+    image_url TEXT DEFAULT 'https://i.imghos.co/NwtAJsPG.jpg',
     is_available BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

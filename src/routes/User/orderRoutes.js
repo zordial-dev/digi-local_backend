@@ -32,4 +32,11 @@ router.get('/:orderId', ordersController.getOrderById);
 router.post('/:id/notify', ordersController.notifyOrderVendor);
 router.post('/:id/confirm-whatsapp', ordersController.notifyOrderVendor); // backward-compatible alias
 
+// D5. Cancel Order & Automatic Refund to User's Original Payment Account
+router.post('/:id/cancel', ordersController.cancelOrder);
+router.put('/:id/cancel', ordersController.cancelOrder);
+router.patch('/:id/cancel', ordersController.cancelOrder);
+router.post('/user/:userId/orders/:id/cancel', ordersController.cancelOrder);
+router.put('/user/:userId/orders/:id/cancel', ordersController.cancelOrder);
+
 module.exports = router;

@@ -1,6 +1,6 @@
 const { query } = require('../../models/db');
 const { performance } = require('perf_hooks');
-const { normalizeImageUrl } = require('../../utils/imageUtils');
+const { normalizeImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../../utils/imageUtils');
 
 /**
  * GET /api/societies/:societyId/vendors - List ACTIVE vendors in a society
@@ -129,7 +129,7 @@ async function getVendorStorefront(req, res) {
         ).catch(() => ({ rows: [] }));
 
         const itemsList = (itemsResult.rows || []).map(i => {
-            const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url) : (i.image_url || '');
+            const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (i.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
             return {
                 ...i,
                 item_id: Number(i.item_id),
@@ -154,7 +154,7 @@ async function getVendorStorefront(req, res) {
                 [vendor.vendor_id]
             );
             servicesList = (servicesResult.rows || []).map(s => {
-                const finalSImg = s.image_url ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(s.image_url) : s.image_url) : null;
+                const finalSImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(s.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (s.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
                 return {
                     service_id: Number(s.service_id),
                     id: Number(s.service_id),

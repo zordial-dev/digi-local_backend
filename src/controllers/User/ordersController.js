@@ -1,5 +1,7 @@
 const { query } = require('../../models/db');
 const { formatISTISO, formatISTReadable, formatISTTimeOnly } = require('../../utils/time');
+const cashfreeService = require('../../services/cashfreeService');
+const notificationService = require('../../services/notificationService');
 
 /**
  * D1. Fetch Resident User Orders (Strictly Filtered by User ID)
@@ -24,6 +26,7 @@ async function getUserOrders(req, res) {
     const placeholders = matchedUserIds.map(() => '?').join(',');
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
+              o.payment_status, o.refund_id, o.refund_amount, o.refund_status, o.refunded_at,
               COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address
        FROM orders o
        LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
@@ -60,9 +63,9 @@ async function getUserOrders(req, res) {
       let flatNumber = ord.delivery_address || 'Unknown';
       let buildingNumber = '-';
       if (flatNumber.includes(',')) {
-          const parts = flatNumber.split(',');
-          flatNumber = parts[0].trim();
-          buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
+        const parts = flatNumber.split(',');
+        flatNumber = parts[0].trim();
+        buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
       }
 
       const statusUpper = String(ord.status || 'PLACED').toUpperCase();
@@ -75,7 +78,13 @@ async function getUserOrders(req, res) {
       } else if (statusUpper === 'IN_PROGRESS' || statusUpper === 'OUT_FOR_DELIVERY') {
         statusLabel = 'Out for Delivery';
       } else if (statusUpper === 'CANCELLED') {
-        statusLabel = 'Order Cancelled';
+        if (ord.payment_status === 'REFUND_IN_PROGRESS' || (ord.refund_status && ord.refund_status !== 'SUCCESS')) {
+          statusLabel = 'Order Cancelled (Refund in Progress)';
+        } else if (ord.payment_status === 'REFUNDED' || ord.refund_status === 'SUCCESS') {
+          statusLabel = 'Order Cancelled (Refunded)';
+        } else {
+          statusLabel = 'Order Cancelled';
+        }
       } else if (ord.payment_status === 'PAID') {
         statusLabel = 'Order Placed (Paid)';
       } else {
@@ -105,6 +114,17 @@ async function getUserOrders(req, res) {
         status: statusUpper,
         status_label: statusLabel,
         payment_status: ord.payment_status || 'PAID',
+        refund_status: ord.refund_status || null,
+        refund_status_label: ord.refund_status
+          ? (ord.refund_status === 'SUCCESS' ? 'Refund Completed' : 'Refund in Progress (Crediting back to original payment source)')
+          : (ord.payment_status === 'REFUND_IN_PROGRESS' ? 'Refund in Progress (Crediting back to original payment source)' : (ord.payment_status === 'REFUNDED' ? 'Refund Completed' : null)),
+        is_refund_in_progress: Boolean(
+          ord.payment_status === 'REFUND_IN_PROGRESS' ||
+          (ord.refund_status && ord.refund_status !== 'SUCCESS')
+        ),
+        refund_id: ord.refund_id || null,
+        refund_amount: ord.refund_amount ? Number(ord.refund_amount) : null,
+        refunded_at: ord.refunded_at || null,
         date: formatISTISO(ord.created_at),
         timestamp: formatISTTimeOnly(ord.created_at),
         createdAt: formatISTISO(ord.created_at),
@@ -174,9 +194,9 @@ async function getVendorOrders(req, res) {
       let flatNumber = ord.delivery_address || 'Unknown';
       let buildingNumber = '-';
       if (flatNumber.includes(',')) {
-          const parts = flatNumber.split(',');
-          flatNumber = parts[0].trim();
-          buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
+        const parts = flatNumber.split(',');
+        flatNumber = parts[0].trim();
+        buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
       }
 
       orders.push({
@@ -235,7 +255,7 @@ async function createOrder(req, res) {
     for (const item of items) {
       let itemName = item.item_name || item.itemName || item.name;
       let itemPrice = Number(item.price || item.unit_price || item.unitPrice);
-      
+
       if (!itemName || !itemPrice) {
         const dbItemRes = await query(`SELECT item_name, price FROM items WHERE item_id = ?`, [item.item_id]);
         if (dbItemRes.rows.length > 0) {
@@ -243,7 +263,7 @@ async function createOrder(req, res) {
           itemPrice = itemPrice ? itemPrice : Number(dbItemRes.rows[0].price);
         }
       }
-      
+
       const itemQty = Number(item.quantity || item.qty || 1);
       if (isNaN(itemPrice) || itemPrice === 0) {
         const itemTotalAlias = item.item_total || item.itemTotal || item.total;
@@ -251,7 +271,7 @@ async function createOrder(req, res) {
           itemPrice = Number(itemTotalAlias) / itemQty;
         }
       }
-      
+
       itemName = itemName || 'Item';
       itemPrice = itemPrice || 0;
 
@@ -270,7 +290,7 @@ async function createOrder(req, res) {
     // Resolve customer name properly without defaulting to Rahul Sharma
     const rawCustomerName = req.body.customer_name || req.body.customerName || req.body.name || req.body.user_name || req.body.userName;
     const rawPhone = req.body.phone || req.body.mobile || req.body.phone_number || req.body.user_phone;
-    
+
     let resolvedUserId = user_id || null;
     let resolvedCustomerName = rawCustomerName || null;
 
@@ -279,7 +299,7 @@ async function createOrder(req, res) {
         `SELECT user_id, name FROM users WHERE user_id = ? OR phone = ? OR phone = ? LIMIT 1`,
         [resolvedUserId || '', rawPhone || '', (rawPhone || '').replace(/\D/g, '')]
       ).catch(() => ({ rows: [] }));
-      
+
       if (uLookup.rows.length > 0) {
         resolvedUserId = uLookup.rows[0].user_id;
         if (!resolvedCustomerName && uLookup.rows[0].name && uLookup.rows[0].name !== 'Rahul Sharma') {
@@ -370,7 +390,7 @@ async function createOrder(req, res) {
           SET flat = COALESCE(NULLIF(?, ''), flat),
               society_name = COALESCE(NULLIF(?, ''), society_name)
           WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?
-        `, [orderFlat, orderArea, String(targetIdentifier), String(targetIdentifier), String(targetIdentifier)]).catch(() => {});
+        `, [orderFlat, orderArea, String(targetIdentifier), String(targetIdentifier), String(targetIdentifier)]).catch(() => { });
       });
     }
 
@@ -402,7 +422,7 @@ async function createOrder(req, res) {
     // Fetch vendor & society details for app order context
     const vendorRes = await query(`SELECT store_name, phone_number FROM vendors WHERE vendor_id = ?`, [vendor_id]);
     const societyRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [society_id || 1]);
-    
+
     const storeName = vendorRes.rows[0]?.store_name || 'Vendor Store';
     const societyName = societyRes.rows[0]?.society_name || 'Society Name';
 
@@ -435,7 +455,7 @@ async function createOrder(req, res) {
         await query(
           `UPDATE orders SET cashfree_order_id = ?, payment_method = 'CASHFREE' WHERE order_id = ?`,
           [cashfreeSession.order_id, orderId]
-        ).catch(() => {});
+        ).catch(() => { });
       }
     }
 
@@ -536,36 +556,279 @@ async function updateOrderStatus(req, res) {
     }
 
     const allowedStatuses = [
-      'PLACED', 'PENDING', 'CONFIRMED', 'ACCEPTED', 'IN_PROGRESS', 
-      'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 
-      'COMPLETED', 'COMPLETE', 'FULFILLED', 'DONE', 
+      'PLACED', 'PENDING', 'CONFIRMED', 'ACCEPTED', 'IN_PROGRESS',
+      'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED',
+      'COMPLETED', 'COMPLETE', 'FULFILLED', 'DONE',
       'CANCELLED', 'CANCELED', 'REJECTED', 'DECLINED'
     ];
 
     if (!allowedStatuses.includes(norm)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: `Invalid order status '${rawStatus}'. Allowed statuses: PLACED, PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, CANCELLED`,
         allowedStatuses
       });
     }
 
-    const orderCheck = await query(`SELECT order_id FROM orders WHERE order_id = ?`, [id]);
+    const orderCheck = await query(`SELECT * FROM orders WHERE order_id = ?`, [id]);
     if (orderCheck.rows.length === 0) {
       return res.status(404).json({ error: `Order ID '${id}' not found` });
     }
 
-    await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
+    const order = orderCheck.rows[0];
+    let refundInfo = null;
+
+    if (targetStatus === 'CANCELLED') {
+      const isOnlinePaid = (order.payment_status === 'PAID' || order.payment_status === 'SUCCESS' || order.payment_method === 'CASHFREE') &&
+        (order.paid_at || order.cashfree_order_id || order.cashfree_payment_id || order.payment_status === 'PAID');
+      const alreadyRefunded = order.payment_status === 'REFUNDED' || order.refund_status === 'SUCCESS';
+
+      if (isOnlinePaid && !alreadyRefunded) {
+        const refundAmount = Number(order.total_amount || 0);
+        const cfOrderId = order.cashfree_order_id || order.order_id;
+        const refundId = `REF_${order.order_id}_${Date.now()}`;
+        const refundReason = req.body?.reason || req.body?.refund_note || req.body?.cancel_reason || 'Order cancelled';
+
+        console.log(`[AUTO-REFUND ON STATUS UPDATE] Order #${id} cancelled. Initiating refund of ₹${refundAmount} to user original payment account...`);
+        const refundResult = await cashfreeService.createRefund(cfOrderId, refundAmount, refundId, refundReason);
+
+        const rawRefundStatus = String(refundResult.refund_status || '').toUpperCase();
+        const isSuccess = rawRefundStatus === 'SUCCESS' || rawRefundStatus === 'COMPLETED';
+        const finalRefundStatus = isSuccess ? 'COMPLETED' : 'IN_PROGRESS';
+        const finalPaymentStatus = isSuccess ? 'REFUND_COMPLETED' : 'REFUND_IN_PROGRESS';
+        const refundStatusLabel = isSuccess
+          ? 'Refund Completed'
+          : 'Refund in Progress (Crediting back to original payment source)';
+
+        if (refundResult.success) {
+          refundInfo = {
+            ...refundResult,
+            refund_status: finalRefundStatus,
+            refund_status_label: refundStatusLabel,
+            is_refund_in_progress: !isSuccess
+          };
+
+          await query(
+            `UPDATE orders 
+             SET status = 'CANCELLED',
+                 payment_status = ?,
+                 refund_id = ?,
+                 refund_amount = ?,
+                 refund_status = ?,
+                 refunded_at = CURRENT_TIMESTAMP
+             WHERE order_id = ?`,
+            [finalPaymentStatus, refundResult.refund_id, refundAmount, finalRefundStatus, id]
+          );
+
+          await query(
+            `UPDATE payments 
+             SET payment_status = ?,
+                 refund_id = ?,
+                 refund_amount = ?,
+                 refunded_at = CURRENT_TIMESTAMP
+             WHERE order_id = ? OR cashfree_order_id = ?`,
+            [finalPaymentStatus, refundResult.refund_id, refundAmount, id, cfOrderId]
+          ).catch(() => { });
+        } else {
+          await query(
+            `UPDATE orders 
+             SET status = 'CANCELLED',
+                 refund_status = 'FAILED'
+             WHERE order_id = ?`,
+            [id]
+          );
+        }
+      } else {
+        await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
+      }
+    } else {
+      await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
+    }
 
     res.status(200).json({
       success: true,
-      message: 'Order status updated successfully',
+      message: refundInfo
+        ? (refundInfo.is_refund_in_progress
+          ? `Order status updated to CANCELLED. Refund of ₹${refundInfo.refund_amount} is in progress to customer original account.`
+          : `Order status updated to CANCELLED. Refund of ₹${refundInfo.refund_amount} initiated to customer original account.`)
+        : 'Order status updated successfully',
       order_id: String(id),
       status: targetStatus,
-      raw_status: rawStatus
+      payment_status: refundInfo ? (refundInfo.is_refund_in_progress ? 'REFUND_IN_PROGRESS' : 'REFUND_COMPLETED') : order.payment_status,
+      refund_status: refundInfo ? refundInfo.refund_status : (order.refund_status || null),
+      refund_status_label: refundInfo ? refundInfo.refund_status_label : null,
+      is_refund_in_progress: refundInfo ? refundInfo.is_refund_in_progress : false,
+      raw_status: rawStatus,
+      refund: refundInfo
     });
   } catch (err) {
     console.error('Error updating order status:', err);
     res.status(500).json({ error: 'Failed to update order status' });
+  }
+}
+
+/**
+ * D5. Cancel Order & Automatic Online Refund
+ * POST /api/orders/:id/cancel
+ * When an online-paid order is cancelled by the user, initiates a refund back
+ * to the original payment source (bank account / UPI / card).
+ */
+async function cancelOrder(req, res) {
+  try {
+    const id = req.params.id || req.params.orderId || req.body?.order_id || req.body?.orderId;
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Order ID is required' });
+    }
+
+    const orderRes = await query(`SELECT * FROM orders WHERE order_id = ?`, [id]);
+    if (!orderRes.rows || orderRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Order ID '${id}' not found` });
+    }
+
+    const order = orderRes.rows[0];
+
+    // Check if order is already cancelled
+    if (order.status === 'CANCELLED' || order.status === 'CANCELED' || order.status === 'REJECTED') {
+      return res.status(400).json({
+        success: false,
+        error: 'Order is already cancelled',
+        order_id: String(id),
+        status: order.status,
+        payment_status: order.payment_status
+      });
+    }
+
+    // Check if order is completed / delivered
+    if (['COMPLETED', 'COMPLETE', 'DELIVERED', 'FULFILLED', 'DONE'].includes(String(order.status).toUpperCase())) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot cancel an order that has already been delivered or completed',
+        order_id: String(id),
+        status: order.status
+      });
+    }
+
+    const reason = String(req.body?.reason || req.body?.cancel_reason || req.body?.note || 'Cancelled by customer').trim();
+    const isOnlinePaid = (order.payment_status === 'PAID' || order.payment_status === 'SUCCESS' || order.payment_method === 'CASHFREE') &&
+      (order.paid_at || order.cashfree_order_id || order.cashfree_payment_id || order.payment_status === 'PAID');
+    const alreadyRefunded = order.payment_status === 'REFUNDED' || order.refund_status === 'SUCCESS';
+
+    let refundData = null;
+
+    if (isOnlinePaid && !alreadyRefunded) {
+      const refundAmount = Number(order.total_amount || 0);
+      const cfOrderId = order.cashfree_order_id || order.order_id;
+      const refundId = `REF_${order.order_id}_${Date.now()}`;
+
+      console.log(`[AUTO-REFUND ON CANCEL] Order #${id} was paid online (₹${refundAmount}). Processing refund to user original payment account...`);
+      const refundResult = await cashfreeService.createRefund(cfOrderId, refundAmount, refundId, reason);
+
+      if (refundResult.success) {
+        const rawRefundStatus = String(refundResult.refund_status || '').toUpperCase();
+        const isSuccess = rawRefundStatus === 'SUCCESS' || rawRefundStatus === 'COMPLETED';
+        const finalRefundStatus = isSuccess ? 'COMPLETED' : 'IN_PROGRESS';
+        const finalPaymentStatus = isSuccess ? 'REFUND_COMPLETED' : 'REFUND_IN_PROGRESS';
+        const refundStatusLabel = isSuccess
+          ? 'Refund Completed'
+          : 'Refund in Progress (Crediting back to original payment source)';
+
+        refundData = {
+          refund_initiated: true,
+          refund_id: refundResult.refund_id,
+          cf_refund_id: refundResult.cf_refund_id,
+          refund_amount: refundAmount,
+          refund_currency: 'INR',
+          refund_status: finalRefundStatus,
+          refund_status_label: refundStatusLabel,
+          is_refund_in_progress: !isSuccess,
+          destination: 'Original Payment Source (Bank Account / UPI / Card)',
+          note: reason
+        };
+
+        await query(
+          `UPDATE orders 
+           SET status = 'CANCELLED',
+               payment_status = ?,
+               refund_id = ?,
+               refund_amount = ?,
+               refund_status = ?,
+               refunded_at = CURRENT_TIMESTAMP
+           WHERE order_id = ?`,
+          [finalPaymentStatus, refundResult.refund_id, refundAmount, finalRefundStatus, id]
+        );
+
+        await query(
+          `UPDATE payments 
+           SET payment_status = ?,
+               refund_id = ?,
+               refund_amount = ?,
+               refunded_at = CURRENT_TIMESTAMP
+           WHERE order_id = ? OR cashfree_order_id = ?`,
+          [finalPaymentStatus, refundResult.refund_id, refundAmount, id, cfOrderId]
+        ).catch(() => { });
+      } else {
+        console.error(`[REFUND PENDING] Cashfree refund could not be completed immediately:`, refundResult.error);
+        await query(
+          `UPDATE orders 
+           SET status = 'CANCELLED',
+               payment_status = 'REFUND_IN_PROGRESS',
+               refund_status = 'PENDING_MANUAL_REVIEW'
+           WHERE order_id = ?`,
+          [id]
+        );
+
+        return res.status(200).json({
+          success: true,
+          message: 'Order cancelled. Refund initiation is in progress.',
+          order_id: String(id),
+          status: 'CANCELLED',
+          payment_status: 'REFUND_IN_PROGRESS',
+          refund_status: 'IN_PROGRESS',
+          refund_status_label: 'Refund in Progress (Pending Verification)',
+          is_refund_in_progress: true,
+          refund_error: refundResult.error
+        });
+      }
+    } else {
+      // Cash On Delivery (COD) or unpaid order
+      await query(
+        `UPDATE orders 
+         SET status = 'CANCELLED',
+             payment_status = CASE WHEN payment_status = 'PENDING' THEN 'CANCELLED' ELSE payment_status END
+         WHERE order_id = ?`,
+        [id]
+      );
+    }
+
+    // Notify vendor
+    try {
+      if (order.vendor_id) {
+        notificationService.sendVendorFcmNotification(order.vendor_id, {
+          title: `Order Cancelled: #${id}`,
+          body: `Order #${id} was cancelled by customer. ${refundData ? `Refund of ₹${refundData.refund_amount} initiated.` : ''}`,
+          data: { orderId: String(id), status: 'CANCELLED' }
+        }).catch(() => { });
+      }
+    } catch (_) { }
+
+    return res.status(200).json({
+      success: true,
+      message: refundData
+        ? (refundData.is_refund_in_progress
+          ? `Order cancelled successfully. A refund of ₹${refundData.refund_amount} is in progress back to your original payment account.`
+          : `Order cancelled successfully. A full refund of ₹${refundData.refund_amount} has been initiated back to your original payment account.`)
+        : 'Order cancelled successfully.',
+      order_id: String(id),
+      status: 'CANCELLED',
+      payment_status: refundData ? (refundData.is_refund_in_progress ? 'REFUND_IN_PROGRESS' : 'REFUND_COMPLETED') : (order.payment_status === 'PENDING' ? 'CANCELLED' : (order.payment_status || 'CANCELLED')),
+      refund_status: refundData ? refundData.refund_status : (order.refund_status || null),
+      refund_status_label: refundData ? refundData.refund_status_label : null,
+      is_refund_in_progress: refundData ? refundData.is_refund_in_progress : false,
+      is_online_paid: Boolean(isOnlinePaid),
+      refund: refundData
+    });
+  } catch (err) {
+    console.error('Error cancelling order:', err);
+    res.status(500).json({ success: false, error: 'Failed to cancel order: ' + err.message });
   }
 }
 
@@ -582,8 +845,21 @@ async function getOrderById(req, res) {
 
     const itemsRes = await query(`SELECT * FROM order_details WHERE order_id = ?`, [orderId]);
 
+    const rawOrder = orderRes.rows[0];
+    const isSuccess = rawOrder.refund_status === 'SUCCESS' || rawOrder.refund_status === 'COMPLETED' || rawOrder.payment_status === 'REFUND_COMPLETED' || rawOrder.payment_status === 'REFUNDED';
+    const isProgress = rawOrder.payment_status === 'REFUND_IN_PROGRESS' || (rawOrder.refund_status && !isSuccess);
+    const refundStatusLabel = isSuccess
+      ? 'Refund Completed'
+      : (isProgress ? 'Refund in Progress (Crediting back to original payment source)' : null);
+
+    const enrichedOrder = {
+      ...rawOrder,
+      refund_status_label: refundStatusLabel,
+      is_refund_in_progress: Boolean(isProgress)
+    };
+
     res.status(200).json({
-      order: orderRes.rows[0],
+      order: enrichedOrder,
       items: itemsRes.rows
     });
   } catch (err) {
@@ -660,6 +936,7 @@ module.exports = {
   getOrdersByQuery,
   createOrder,
   updateOrderStatus,
+  cancelOrder,
   getOrderById,
   notifyOrderVendor
 };

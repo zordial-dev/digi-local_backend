@@ -1063,6 +1063,11 @@ async function getBankDetailsByIfsc(req, res) {
   }
 }
 
+async function verifyVendorOtp(req, res) {
+  const otpController = require('../otpController');
+  return otpController.verifyOtp(req, res);
+}
+
 module.exports = {
   registerVendor,
   getVendorStatus,
@@ -1077,7 +1082,7 @@ module.exports = {
   refreshToken,
   logoutVendor,
   forgotPassword,
-  verifyVendorOtp: loginVendorWithOtp,
+  verifyVendorOtp,
   resetPassword,
   updateVendorPassword,
   checkCoverage,

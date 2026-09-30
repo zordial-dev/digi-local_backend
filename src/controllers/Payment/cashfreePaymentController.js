@@ -646,11 +646,46 @@ async function cashfreeWebhook(req, res) {
           }).catch(() => {});
         }
       }
+    } else if (eventType.includes('REFUND') || event.data?.refund || event.refund) {
+      const refundData = event.data?.refund || event.refund || {};
+      const refundId = refundData.refund_id || event.refund_id;
+      const refundStatus = refundData.refund_status || event.refund_status || 'SUCCESS';
+      const refundOrderId = refundData.order_id || orderId;
+      const refundAmount = Number(refundData.refund_amount || 0);
+
+      console.log(`[CASHFREE WEBHOOK REFUND] Order: ${refundOrderId} | Status: ${refundStatus} | ID: ${refundId}`);
+
+      if (refundOrderId) {
+        const isSuccess = String(refundStatus).toUpperCase() === 'SUCCESS';
+        const finalPaymentStatus = isSuccess ? 'REFUND_COMPLETED' : 'REFUND_IN_PROGRESS';
+        const finalRefundStatus = isSuccess ? 'COMPLETED' : 'IN_PROGRESS';
+
+        await query(
+          `UPDATE orders 
+           SET payment_status = ?,
+               refund_status = ?,
+               refund_id = COALESCE(refund_id, ?),
+               refund_amount = CASE WHEN COALESCE(refund_amount, 0) = 0 THEN ? ELSE refund_amount END,
+               refunded_at = COALESCE(refunded_at, CURRENT_TIMESTAMP)
+           WHERE order_id = ? OR cashfree_order_id = ?`,
+          [finalPaymentStatus, finalRefundStatus, refundId, refundAmount, refundOrderId, refundOrderId]
+        ).catch(() => {});
+
+        await query(
+          `UPDATE payments 
+           SET payment_status = ?,
+               refund_id = COALESCE(refund_id, ?),
+               refund_amount = CASE WHEN COALESCE(refund_amount, 0) = 0 THEN ? ELSE refund_amount END,
+               refunded_at = COALESCE(refunded_at, CURRENT_TIMESTAMP)
+           WHERE order_id = ? OR cashfree_order_id = ?`,
+          [finalPaymentStatus, refundId, refundAmount, refundOrderId, refundOrderId]
+        ).catch(() => {});
+      }
     }
 
     return res.status(200).json({ status: 'OK' });
   } catch (err) {
-    console.error('❌ [CASHFREE WEBHOOK ERROR]:', err);
+    console.error('[CASHFREE WEBHOOK ERROR]:', err);
     return res.status(200).json({ status: 'ERROR_RECORDED', message: err.message });
   }
 }
@@ -837,6 +872,79 @@ async function getAdminCashfreeLedger(req, res) {
   }
 }
 
+/**
+ * 9. Process Refund for a Cashfree Online Order
+ * POST /api/payments/cashfree/refund
+ */
+async function processOrderRefund(req, res) {
+  try {
+    const { order_id, orderId, refund_amount, amount, reason, refund_note } = req.body;
+    const targetOrderId = order_id || orderId;
+    if (!targetOrderId) {
+      return res.status(400).json({ success: false, error: 'order_id is required' });
+    }
+
+    const orderRes = await query(`SELECT * FROM orders WHERE order_id = ?`, [targetOrderId]);
+    if (!orderRes.rows || orderRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Order #${targetOrderId} not found` });
+    }
+
+    const order = orderRes.rows[0];
+    const refundAmount = Number(refund_amount || amount || order.total_amount || 0);
+    const cfOrderId = order.cashfree_order_id || order.order_id;
+    const refundNote = reason || refund_note || 'Order refund processed';
+    const refundId = `REF_${targetOrderId}_${Date.now()}`;
+
+    console.log(`[CASHFREE CONTROLLER REFUND] Processing refund for Order #${targetOrderId} (₹${refundAmount})...`);
+    const result = await cashfreeService.createRefund(cfOrderId, refundAmount, refundId, refundNote);
+
+    if (result.success) {
+      const isSuccess = String(result.refund_status || '').toUpperCase() === 'SUCCESS';
+      const finalPaymentStatus = isSuccess ? 'REFUND_COMPLETED' : 'REFUND_IN_PROGRESS';
+      const finalRefundStatus = isSuccess ? 'COMPLETED' : 'IN_PROGRESS';
+
+      await query(
+        `UPDATE orders 
+         SET payment_status = ?,
+             refund_id = ?,
+             refund_amount = ?,
+             refund_status = ?,
+             refunded_at = CURRENT_TIMESTAMP
+         WHERE order_id = ?`,
+        [finalPaymentStatus, result.refund_id, refundAmount, finalRefundStatus, targetOrderId]
+      );
+
+      await query(
+        `UPDATE payments 
+         SET payment_status = ?,
+             refund_id = ?,
+             refund_amount = ?,
+             refunded_at = CURRENT_TIMESTAMP
+         WHERE order_id = ? OR cashfree_order_id = ?`,
+        [finalPaymentStatus, result.refund_id, refundAmount, targetOrderId, cfOrderId]
+      ).catch(() => {});
+
+      return res.status(200).json({
+        success: true,
+        message: `Refund of ₹${refundAmount} initiated successfully to customer original payment account.`,
+        order_id: targetOrderId,
+        payment_status: finalPaymentStatus,
+        refund_status: finalRefundStatus,
+        refund: result
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      error: result.error || 'Failed to process refund with Cashfree',
+      details: result
+    });
+  } catch (err) {
+    console.error('[CASHFREE REFUND ERROR]:', err);
+    res.status(500).json({ success: false, error: 'Refund processing failed: ' + err.message });
+  }
+}
+
 module.exports = {
   createOrderPaymentSession,
   verifyOrderPayment,
@@ -845,5 +953,6 @@ module.exports = {
   confirmDirectUpiPayment,
   cashfreeWebhook,
   getVendorCashfreePayments,
-  getAdminCashfreeLedger
+  getAdminCashfreeLedger,
+  processOrderRefund
 };

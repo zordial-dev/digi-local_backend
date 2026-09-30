@@ -434,3 +434,14 @@ await advanceOrderStatus("ORD-5481", "ACCEPTED");
 await advanceOrderStatus("ORD-5481", "OUT_FOR_DELIVERY");
 await advanceOrderStatus("ORD-5481", "DELIVERED");
 ```
+
+---
+
+## 💳 7. Order Cancellation & Automated Source Refunds
+
+For full details on customer/vendor cancellation, Cashfree source refunds, and dashboard balance requirements, see:
+👉 **[ORDER_CANCELLATION_AND_REFUND_API_DOCS.md](./ORDER_CANCELLATION_AND_REFUND_API_DOCS.md)**
+
+- **Customer Cancel**: `POST /api/orders/:id/cancel`
+- **Vendor Reject / Cancel**: `PUT /api/orders/:id/status` with `{"status": "CANCELLED"}`
+- When paid online, a full refund is immediately sent back to the customer's original payment instrument (UPI / Card / NetBanking).

@@ -1,6 +1,6 @@
 const vendorService = require('../../services/vendorService');
 const { query } = require('../../models/db');
-const { normalizeImageUrl, resolveImageUrl } = require('../../utils/imageUtils');
+const { normalizeImageUrl, resolveImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../../utils/imageUtils');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
 
 const fs = require('fs');
@@ -266,8 +266,8 @@ async function addItem(req, res) {
         const avail = (is_available === false || is_available === 0 || is_available === 'false' || is_available === '0') ? 0 : 1;
         const candidateImg = uploadedUrl || rawImg;
 
-        // Use async resolveImageUrl so share.google, photos.app.goo.gl, etc. work correctly
-        const normalizedImg = candidateImg ? await resolveImageUrl(candidateImg) : (await resolveImageUrl(null));
+        // Use async resolveImageUrl with DEFAULT_PRODUCT_SERVICE_IMAGE fallback
+        const normalizedImg = await resolveImageUrl(candidateImg, DEFAULT_PRODUCT_SERVICE_IMAGE);
 
         const result = await query(
             `INSERT INTO items (vendor_id, item_name, description, price, stock, category, unit, is_available, image_url) 
@@ -313,7 +313,7 @@ async function updateItem(req, res) {
         }
 
         const candidateImg = uploadedUrl || rawImg;
-        const normalizedImg = candidateImg !== undefined ? await resolveImageUrl(candidateImg) : undefined;
+        const normalizedImg = candidateImg !== undefined ? await resolveImageUrl(candidateImg, DEFAULT_PRODUCT_SERVICE_IMAGE) : undefined;
 
         // Dynamic SQL builder to update ONLY provided fields
         const fields = [];
@@ -410,7 +410,7 @@ async function updateItemImage(req, res) {
             });
         }
 
-        const normalizedImg = await resolveImageUrl(imageUrl);
+        const normalizedImg = await resolveImageUrl(imageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE);
 
         const updateRes = await query(
             `UPDATE items SET image_url = ? WHERE item_id = ? AND (vendor_id = ? OR CAST(vendor_id AS TEXT) = ?) RETURNING *`,

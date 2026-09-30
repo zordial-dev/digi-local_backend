@@ -18,6 +18,7 @@ const cmsRoutes = require('./Cms/cmsRoutes');
 const ratingRoutes = require('./Rating/ratingRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
+const ordersController = require('../controllers/User/ordersController');
 const usersController = require('../controllers/User/usersController');
 const otpController = require('../controllers/otpController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
@@ -177,6 +178,20 @@ router.post([
   '/api/payments/webhook',
   '/api/payments/cashfree/webhook'
 ], cashfreePaymentController.cashfreeWebhook);
+
+router.post([
+  '/api/payments/cashfree/refund',
+  '/api/payments/cashfree/process-refund'
+], cashfreePaymentController.processOrderRefund);
+
+router.post([
+  '/api/orders/:id/cancel',
+  '/api/orders/:id/user-cancel'
+], ordersController.cancelOrder);
+router.put([
+  '/api/orders/:id/cancel',
+  '/api/orders/:id/user-cancel'
+], ordersController.cancelOrder);
 
 router.get([
   '/api/vendors/:vendorId/cashfree-payments',

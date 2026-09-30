@@ -1,6 +1,6 @@
 const { query, withTransaction } = require('../models/db');
 const paymentService = require('./paymentService');
-const { normalizeImageUrl } = require('../utils/imageUtils');
+const { normalizeImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../utils/imageUtils');
 const { recordVendorFieldChanges } = require('./vendorDiffService');
 
 /**
@@ -146,7 +146,7 @@ class VendorService {
     ).catch(() => ({ rows: [] }));
 
     const normalizedItems = (itemsRes.rows || []).map(item => {
-      const finalImg = normalizeImageUrl(item.image_url);
+      const finalImg = normalizeImageUrl(item.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE);
       return {
         ...item,
         image_url: finalImg,

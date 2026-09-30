@@ -193,4 +193,10 @@ async function resolveImageUrl(rawUrl, defaultFallback = null) {
     }
 }
 
-module.exports = { normalizeImageUrl, resolveImageUrl };
+const DEFAULT_PRODUCT_SERVICE_IMAGE = 'https://i.imghos.co/NwtAJsPG.jpg';
+
+module.exports = {
+    normalizeImageUrl,
+    resolveImageUrl,
+    DEFAULT_PRODUCT_SERVICE_IMAGE
+};

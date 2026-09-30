@@ -113,7 +113,7 @@ router.post('/user-register', vendorAuthController.handleUserRegisterCheck);
 router.post('/refresh', vendorAuthController.refreshToken);
 router.post('/logout', vendorAuthController.logoutVendor);
 router.post('/forgot-password', validateRequest(forgotPasswordSchema), vendorAuthController.forgotPassword);
-router.post('/verify-otp', vendorAuthController.loginVendorWithOtp);
+router.post(['/verify-otp', '/otp-verify'], otpController.verifyOtp);
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);
 
 // FCM / Push Token Static Endpoints
