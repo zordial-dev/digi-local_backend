@@ -18,6 +18,7 @@ const cmsRoutes = require('./Cms/cmsRoutes');
 const ratingRoutes = require('./Rating/ratingRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
+const usersController = require('../controllers/User/usersController');
 const otpController = require('../controllers/otpController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
 const serviceController = require('../controllers/Vendor/serviceController');
@@ -54,6 +55,9 @@ router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serv
 router.patch(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
 router.put(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
 router.delete(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.deleteService);
+
+// ── Account Pre-Check Route (User / Vendor Existence Check) ────
+router.post(['/api/auth/check-account', '/api/auth/check-user', '/api/auth/check-exists', '/api/check-phone'], usersController.checkAccountExists);
 
 // ── Core Business API Routes ────────────────────────────────
 router.use('/api/otp', otpRoutes);                 // Message Central Mobile/Web OTP Service

@@ -73,17 +73,39 @@ class NotificationService {
    */
   async notifyVendorNewOrder({ vendor_id, order_id, total_amount, customer_name, items_count = 1, items = [] }) {
     try {
-      // 1. Deduplication Guard: Prevent double-notifying for the same order_id
-      if (order_id && this.processedOrders.has(String(order_id))) {
-        console.log(`ℹ️ [PUSH DEDUP] Notification already sent for order #${order_id}. Bypassing duplicate.`);
+      // 1. Deduplication Guard: Check in-memory deduplication set
+      const cleanOrderId = order_id ? String(order_id).trim() : null;
+      if (cleanOrderId && this.processedOrders.has(cleanOrderId)) {
+        console.log(`ℹ️ [PUSH DEDUP] Notification already sent for order #${cleanOrderId}. Bypassing duplicate.`);
         return { success: true, bypassed: true, message: 'Notification already sent for this order_id' };
       }
-      if (order_id) {
-        this.processedOrders.add(String(order_id));
+
+      // Check database to see if vendor was already notified for this order
+      if (cleanOrderId) {
+        const dbCheck = await query(
+          `SELECT vendor_notified, cashfree_order_id FROM orders WHERE order_id = ? OR cashfree_order_id = ?`,
+          [cleanOrderId, cleanOrderId]
+        ).catch(() => ({ rows: [] }));
+
+        if (dbCheck.rows && dbCheck.rows[0]?.vendor_notified === true) {
+          console.log(`ℹ️ [PUSH DEDUP] Database indicates notification already sent for order #${cleanOrderId}. Bypassing duplicate.`);
+          this.processedOrders.add(cleanOrderId);
+          return { success: true, bypassed: true, message: 'Notification already sent for this order_id' };
+        }
+
+        this.processedOrders.add(cleanOrderId);
+        if (dbCheck.rows?.[0]?.cashfree_order_id) {
+          this.processedOrders.add(String(dbCheck.rows[0].cashfree_order_id));
+        }
         if (this.processedOrders.size > 1000) {
           const firstKey = this.processedOrders.values().next().value;
           this.processedOrders.delete(firstKey);
         }
+
+        await query(
+          `UPDATE orders SET vendor_notified = TRUE, vendor_notified_at = CURRENT_TIMESTAMP WHERE order_id = ? OR cashfree_order_id = ?`,
+          [cleanOrderId, cleanOrderId]
+        ).catch(() => {});
       }
 
       // 2. Fetch vendor's registered FCM / Expo device token safely
@@ -229,10 +251,9 @@ class NotificationService {
             sound: 'new_order_alert_sound'
           };
 
-          io.to(`vendor_${vendor_id}`).to(String(vendor_id)).emit('NEW_ORDER_ALERT', socketPayload);
-          io.to(`vendor_${vendor_id}`).to(String(vendor_id)).emit('new_order_alert', socketPayload);
-          io.to(`vendor_${vendor_id}`).to(String(vendor_id)).emit('new_order', socketPayload);
-          console.log(`🔌 [SOCKET.IO BROADCAST] Sent NEW_ORDER_ALERT / new_order_alert to room vendor_${vendor_id}`);
+          // Emit exactly ONE canonical Socket.IO alert event
+          io.to(`vendor_${vendor_id}`).emit('NEW_ORDER_ALERT', socketPayload);
+          console.log(`🔌 [SOCKET.IO BROADCAST] Sent single NEW_ORDER_ALERT to room vendor_${vendor_id}`);
         }
       } catch (wsErr) {
         // Socket.IO optional fallback

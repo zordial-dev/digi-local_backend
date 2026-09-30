@@ -2,6 +2,7 @@ const path = require('path');
 const fs = require('fs');
 const { query } = require('../../models/db');
 const { resolveImageUrl, normalizeImageUrl } = require('../../utils/imageUtils');
+const { formatISTISO, formatISTReadable } = require('../../utils/time');
 
 /**
  * Helper: Resolve Base URL from Request
@@ -107,7 +108,11 @@ function formatServiceRow(row) {
         photo_url: row.image_url ? normalizeImageUrl(row.image_url) : null,
         is_available: row.is_available === true || row.is_available === 1 || row.is_available === '1',
         created_at: row.created_at,
-        updated_at: row.updated_at
+        created_at_ist: row.created_at ? formatISTISO(row.created_at) : null,
+        created_at_readable: row.created_at ? formatISTReadable(row.created_at) : null,
+        updated_at: row.updated_at,
+        updated_at_ist: row.updated_at ? formatISTISO(row.updated_at) : null,
+        updated_at_readable: row.updated_at ? formatISTReadable(row.updated_at) : null
     };
 }
 

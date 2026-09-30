@@ -1,4 +1,5 @@
 const { query } = require('../../models/db');
+const { formatISTISO, formatISTReadable } = require('../../utils/time');
 
 /**
  * POST /api/enquiries
@@ -8,8 +9,8 @@ async function createEnquiry(req, res) {
     try {
         const body = req.body || {};
         const vendor_id = body.vendor_id || body.vendorId;
-        const user_name = String(body.user_name || body.userName || body.name || '').trim();
-        const user_phone = String(body.user_phone || body.userPhone || body.phone || body.mobile || '').trim();
+        const user_name = String(body.name || body.user_name || body.userName || body.username || '').trim();
+        const user_phone = String(body.phone || body.user_phone || body.userPhone || body.mobile || '').trim();
         const user_id = body.user_id || body.userId || null;
         const society_id = body.society_id || body.societyId || null;
         const society_name = String(body.society_name || body.societyName || '').trim();
@@ -28,7 +29,7 @@ async function createEnquiry(req, res) {
         }
 
         if (!user_name || !user_phone) {
-            return res.status(400).json({ error: 'user_name and user_phone are required fields for service enquiry' });
+            return res.status(400).json({ error: 'name and phone are required fields for service enquiry' });
         }
 
         // Verify vendor exists
@@ -66,7 +67,9 @@ async function createEnquiry(req, res) {
                 vendor_id: targetVendorId,
                 vendor_name: vendor.vendor_name,
                 store_name: vendor.store_name,
+                name: user_name,
                 user_name,
+                phone: user_phone,
                 user_phone,
                 user_id,
                 society_id,
@@ -78,6 +81,8 @@ async function createEnquiry(req, res) {
                 issue_photos,
                 status: 'NEW',
                 created_at: newEnquiry.created_at || new Date().toISOString(),
+                created_at_ist: formatISTISO(newEnquiry.created_at),
+                created_at_readable: formatISTReadable(newEnquiry.created_at),
                 direct_actions: {
                     whatsapp_link,
                     call_link
@@ -130,7 +135,9 @@ async function getVendorEnquiries(req, res) {
             enquiry_id: Number(row.enquiry_id),
             vendor_id: Number(row.vendor_id),
             user_id: row.user_id,
+            name: row.user_name,
             user_name: row.user_name,
+            phone: row.user_phone,
             user_phone: row.user_phone,
             society_id: row.society_id ? Number(row.society_id) : null,
             society_name: row.society_name,
@@ -141,7 +148,11 @@ async function getVendorEnquiries(req, res) {
             issue_photos: row.issue_photos || [],
             status: row.status || 'NEW',
             created_at: row.created_at,
-            updated_at: row.updated_at
+            created_at_ist: row.created_at ? formatISTISO(row.created_at) : null,
+            created_at_readable: row.created_at ? formatISTReadable(row.created_at) : null,
+            updated_at: row.updated_at,
+            updated_at_ist: row.updated_at ? formatISTISO(row.updated_at) : null,
+            updated_at_readable: row.updated_at ? formatISTReadable(row.updated_at) : null
         }));
 
         res.status(200).json({
@@ -192,11 +203,15 @@ async function updateEnquiryStatus(req, res) {
             [newStatusNorm, enquiryCheck.rows[0].enquiry_id]
         );
 
+        const now = new Date();
         res.status(200).json({
             success: true,
             message: `Enquiry status updated to ${newStatusNorm}`,
             enquiry_id: Number(enquiryCheck.rows[0].enquiry_id),
-            status: newStatusNorm
+            status: newStatusNorm,
+            updated_at: now.toISOString(),
+            updated_at_ist: formatISTISO(now),
+            updated_at_readable: formatISTReadable(now)
         });
     } catch (err) {
         console.error('Error updating service enquiry status:', err);
@@ -251,7 +266,9 @@ async function getUserEnquiries(req, res) {
                 store_name: row.store_name || 'Service Vendor',
                 vendor_name: row.vendor_name || 'Service Provider',
                 user_id: row.user_id,
+                name: row.user_name,
                 user_name: row.user_name,
+                phone: row.user_phone,
                 user_phone: row.user_phone,
                 society_id: row.society_id ? Number(row.society_id) : null,
                 society_name: row.society_name,
@@ -262,7 +279,11 @@ async function getUserEnquiries(req, res) {
                 issue_photos: row.issue_photos || [],
                 status: row.status || 'NEW',
                 created_at: row.created_at,
+                created_at_ist: row.created_at ? formatISTISO(row.created_at) : null,
+                created_at_readable: row.created_at ? formatISTReadable(row.created_at) : null,
                 updated_at: row.updated_at,
+                updated_at_ist: row.updated_at ? formatISTISO(row.updated_at) : null,
+                updated_at_readable: row.updated_at ? formatISTReadable(row.updated_at) : null,
                 direct_actions: {
                     whatsapp_link,
                     call_link

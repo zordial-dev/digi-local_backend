@@ -439,8 +439,9 @@ async function createOrder(req, res) {
       }
     }
 
-    // Trigger instant Expo Push Notification & Socket alert to vendor app
-    if (req.body.skip_notification !== true) {
+    // Trigger instant Expo Push Notification & Socket alert to vendor app (for confirmed COD orders)
+    // For online payments (Cashfree), notification is triggered upon successful payment verification
+    if (req.body.skip_notification !== true && !isCashfree) {
       const notificationService = require('../../services/notificationService');
       notificationService.notifyVendorNewOrder({
         vendor_id,

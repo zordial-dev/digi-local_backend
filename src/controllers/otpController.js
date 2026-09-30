@@ -4,6 +4,7 @@ const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResp
 const { generateOTP, verifyOTP, generateTokens } = require('../utils/auth');
 const { sendEmail } = require('../services/emailService');
 const { otpTemplate } = require('../templates/emailTemplates');
+const { checkCooldown, recordOtpSent, resetCooldown, getCooldownStatus } = require('../utils/otpCooldown');
 
 /**
  * Helper: Searches database for account by phone number.
@@ -106,6 +107,20 @@ const sendMobileOtpController = async (req, res) => {
     }
 
     const cleanTarget = String(phone).trim();
+
+    // Progressive Exponential Cooldown Check (10s, 20s, 40s, 80s...)
+    const cooldownCheck = checkCooldown(cleanTarget);
+    if (!cooldownCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: `Please wait ${cooldownCheck.retryAfter} seconds before requesting a new OTP.`,
+        message: `Please wait ${cooldownCheck.retryAfter} seconds before requesting a new OTP.`,
+        retry_after: cooldownCheck.retryAfter,
+        cooldown_seconds: cooldownCheck.cooldownSeconds,
+        attempt: cooldownCheck.attempt
+      });
+    }
+
     const mode = (purpose || '').toLowerCase();
     const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
@@ -147,6 +162,9 @@ const sendMobileOtpController = async (req, res) => {
     const otpLength = Number(req.body.otp_length || req.body.otpLength || 6);
     const result = await sendCentralOTP(phone, countryCode, 'SMS', otpLength);
 
+    // Record progressive cooldown entry upon successful dispatch
+    const cooldownInfo = recordOtpSent(cleanTarget);
+
     return res.status(200).json({
       success: true,
       channel: 'mobile_sms',
@@ -155,6 +173,10 @@ const sendMobileOtpController = async (req, res) => {
       phone: cleanTarget,
       verification_id: result.verificationId,
       verificationId: result.verificationId,
+      retry_after: cooldownInfo.retryAfter,
+      cooldown_seconds: cooldownInfo.cooldownSeconds,
+      resend_available_in_seconds: cooldownInfo.retryAfter,
+      attempt: cooldownInfo.attempt,
       data: result
     });
   } catch (error) {
@@ -202,6 +224,7 @@ const verifyMobileOtpController = async (req, res) => {
     }
 
     if (isRegistrationIntent) {
+      resetCooldown(cleanPhone);
       return res.status(200).json({
         success: true,
         verified: true,
@@ -226,6 +249,8 @@ const verifyMobileOtpController = async (req, res) => {
         message: `No ${portalLabel}account found with this mobile number. Please register your account first.`
       });
     }
+
+    resetCooldown(cleanPhone);
 
     const responsePayload = {
       success: true,

@@ -24,8 +24,8 @@ router.post(['/email/verify-otp', '/email/verify'], injectUserRole, otpControlle
 router.post('/send-otp', usersController.sendOtp);
 router.post('/verify-otp', usersController.verifyOtp);
 
-// B0.2 Check Resident User Phone Registration
-router.post('/check-phone', usersController.checkPhone);
+// B0.2 Check if User or Vendor Account Exists
+router.post(['/check-account', '/check-exists', '/check-user', '/check-phone'], usersController.checkAccountExists);
 
 // B1. Resident User Login
 router.post('/login', usersController.loginUser);

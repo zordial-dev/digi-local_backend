@@ -451,6 +451,8 @@ async function setupTablesPg() {
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS cashfree_payment_id VARCHAR(100)`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vendor_notified BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vendor_notified_at TIMESTAMP`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS order_id VARCHAR(100)`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS vendor_id BIGINT`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,

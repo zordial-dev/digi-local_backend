@@ -9,6 +9,7 @@ const { startSubscriptionCron } = require('./src/cron');
 const { loggerMiddleware } = require('./src/middleware/loggerMiddleware');
 const { compressionMiddleware } = require('./src/middleware/compression');
 const { owaspSecurityHeaders } = require('./src/middleware/security');
+const { istTimeMiddleware } = require('./src/middleware/istTimeMiddleware');
 const logger = require('./src/utils/logger');
 
 // ── Startup Environment Check ────────────────────────────────
@@ -44,6 +45,7 @@ app.use(express.json({ limit: '10mb' }));
 // ── Attach Performance Compression & Logging Middlewares ──────
 app.use(compressionMiddleware);
 app.use(loggerMiddleware);
+app.use(istTimeMiddleware);
 
 // ── Explicitly Mount Uploads & Static Directories ─────────────
 const publicUploadsDir = path.join(__dirname, 'public', 'uploads');

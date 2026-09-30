@@ -111,8 +111,10 @@ const checkCoverageSchema = {
 const serviceEnquirySchema = {
   body: z.object({
     vendor_id: z.union([z.string(), z.number()]),
-    user_name: z.string().trim().min(1, 'User name is required'),
-    user_phone: z.string().trim().min(10, 'Valid phone number is required'),
+    name: z.string().trim().min(1, 'Name is required').optional(),
+    user_name: z.string().trim().min(1, 'User name is required').optional(),
+    phone: z.string().trim().min(10, 'Valid phone number is required').optional(),
+    user_phone: z.string().trim().min(10, 'Valid phone number is required').optional(),
     user_id: z.string().trim().optional(),
     society_id: z.union([z.string(), z.number()]).optional(),
     society_name: z.string().trim().optional(),

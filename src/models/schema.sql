@@ -199,6 +199,8 @@ CREATE TABLE IF NOT EXISTS orders (
     delivery_address TEXT,
     customer_name VARCHAR(255),
     customer_phone VARCHAR(50),
+    vendor_notified BOOLEAN DEFAULT FALSE,
+    vendor_notified_at TIMESTAMP,
     order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -4,6 +4,7 @@ const { formatISTISO } = require('../../utils/time');
 const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResponse } = require('../../services/messageCentralService');
 const logger = require('../../utils/logger');
 const { generateUniquePublicId } = require('../../utils/idGenerator');
+const { checkCooldown, recordOtpSent, resetCooldown, getCooldownStatus } = require('../../utils/otpCooldown');
 
 /**
  * B0. Send OTP to Resident User Phone via Message Central
@@ -22,6 +23,19 @@ async function sendOtp(req, res) {
     const cleanPhoneDigits = cleanTarget.replace(/[^0-9]/g, '');
     const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
     const mode = (purpose || type || '').toLowerCase();
+
+    // 0. Progressive Exponential Cooldown Check (10s, 20s, 40s, 80s...)
+    const cooldownCheck = checkCooldown(cleanTarget);
+    if (!cooldownCheck.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: `Please wait ${cooldownCheck.retryAfter} seconds before requesting a new OTP.`,
+        message: `Please wait ${cooldownCheck.retryAfter} seconds before requesting a new OTP.`,
+        retry_after: cooldownCheck.retryAfter,
+        cooldown_seconds: cooldownCheck.cooldownSeconds,
+        attempt: cooldownCheck.attempt
+      });
+    }
 
     const isRegistrationIntent = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
@@ -46,10 +60,10 @@ async function sendOtp(req, res) {
           error: 'An account with this mobile number already exists. Please log in instead.'
         });
       }
-    } else {
-      // Default / Login intent: Must verify account exists in DB before sending OTP
+    } else if (mode === 'login') {
+      // Explicit Login intent: Must verify account exists in DB before sending login OTP
       if (!userExists) {
-        console.log(`⚠️ [SEND OTP BLOCKED] Account "${cleanTarget}" not found in database. Disallowing OTP send.`);
+        console.log(`⚠️ [SEND OTP BLOCKED] Account "${cleanTarget}" not found in database. Disallowing login OTP.`);
         return res.status(404).json({
           success: false,
           exists: false,
@@ -61,6 +75,9 @@ async function sendOtp(req, res) {
     const otpLength = Number(req.body.otp_length || req.body.otpLength || 6);
     const centralResult = await sendCentralOTP(cleanTarget, country_code || countryCode, 'SMS', otpLength);
 
+    // Record progressive cooldown entry upon successful dispatch
+    const cooldownInfo = recordOtpSent(cleanTarget);
+
     res.status(200).json({
       success: true,
       message: 'OTP sent successfully via Message Central',
@@ -68,6 +85,10 @@ async function sendOtp(req, res) {
       provider: 'message_central',
       verification_id: centralResult.verificationId,
       verificationId: centralResult.verificationId,
+      retry_after: cooldownInfo.retryAfter,
+      cooldown_seconds: cooldownInfo.cooldownSeconds,
+      resend_available_in_seconds: cooldownInfo.retryAfter,
+      attempt: cooldownInfo.attempt,
       data: centralResult
     });
   } catch (err) {
@@ -79,44 +100,119 @@ async function sendOtp(req, res) {
 }
 
 /**
- * B0.2 Check if Resident User Phone is Registered
+ * B0.2 Check if User or Vendor Account Exists by Phone or Email
+ * POST /api/auth/check-account
+ * POST /api/users/check-account
  * POST /api/users/check-phone
  */
-async function checkPhone(req, res) {
+async function checkAccountExists(req, res) {
   try {
-    const { phone, identifier, mobile, phone_number, number } = req.body || {};
-    const rawTarget = String(phone || identifier || mobile || phone_number || number || req.query?.phone || req.query?.number || '').trim();
+    const rawTarget = String(
+      req.body?.phone || req.body?.identifier || req.body?.mobile || req.body?.phone_number || req.body?.email ||
+      req.query?.phone || req.query?.identifier || req.query?.number || ''
+    ).trim();
+
+    const targetRole = String(req.body?.role || req.body?.account_type || req.query?.role || '').trim().toLowerCase();
 
     if (!rawTarget) {
-      return res.status(400).json({ error: 'Phone number is required' });
+      return res.status(400).json({ success: false, error: 'Phone number or email is required' });
     }
 
-    const cleanPhone = rawTarget.replace(/[^0-9+]/g, '');
-    const cleanPhoneDigits = rawTarget.replace(/[^0-9]/g, '');
-    const last10 = cleanPhoneDigits.length >= 10 ? cleanPhoneDigits.slice(-10) : cleanPhoneDigits;
+    const isEmail = rawTarget.includes('@');
+    const cleanDigits = rawTarget.replace(/[^0-9]/g, '');
+    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
 
-    const userRes = await query(
-      `SELECT user_id, name, phone FROM users WHERE phone = ? OR phone = ? OR phone = ? OR (LENGTH(?) >= 10 AND phone LIKE ?)`,
-      [rawTarget, cleanPhone, last10, last10, `%${last10}`]
-    ).catch(() => ({ rows: [] }));
+    let user = null;
+    let vendor = null;
 
-    const vendorRes = await query(
-      `SELECT vendor_id, store_name, phone_number FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`,
-      [rawTarget, cleanPhone, last10, last10, `%${last10}`]
-    ).catch(() => ({ rows: [] }));
+    if (!targetRole || targetRole === 'user' || targetRole === 'resident') {
+      let userQuery;
+      let userParams;
+      if (isEmail) {
+        userQuery = `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE LOWER(email) = LOWER(?)`;
+        userParams = [rawTarget];
+      } else {
+        userQuery = `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE phone = ? OR phone = ? OR phone = ? OR (LENGTH(?) >= 10 AND phone LIKE ?)`;
+        userParams = [rawTarget, cleanDigits, last10, last10, `%${last10}`];
+      }
+      const userRes = await query(userQuery, userParams).catch(() => ({ rows: [] }));
+      if (userRes.rows && userRes.rows.length > 0) {
+        user = userRes.rows[0];
+      }
+    }
 
-    const exists = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
+    if (!targetRole || targetRole === 'vendor' || targetRole === 'merchant') {
+      let vendorQuery;
+      let vendorParams;
+      if (isEmail) {
+        vendorQuery = `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE LOWER(email) = LOWER(?)`;
+        vendorParams = [rawTarget];
+      } else {
+        vendorQuery = `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`;
+        vendorParams = [rawTarget, cleanDigits, last10, last10, `%${last10}`];
+      }
+      const vendorRes = await query(vendorQuery, vendorParams).catch(() => ({ rows: [] }));
+      if (vendorRes.rows && vendorRes.rows.length > 0) {
+        vendor = vendorRes.rows[0];
+      }
+    }
 
-    res.status(200).json({
+    const userExists = !!user;
+    const vendorExists = !!vendor;
+    const exists = userExists || vendorExists;
+
+    let accountType = 'none';
+    if (userExists && vendorExists) accountType = 'both';
+    else if (userExists) accountType = 'user';
+    else if (vendorExists) accountType = 'vendor';
+
+    const nextAction = exists ? 'LOGIN' : 'REGISTER';
+    const cooldownInfo = getCooldownStatus(rawTarget);
+
+    return res.status(200).json({
+      success: true,
       exists,
-      phone: cleanPhone,
-      message: exists ? 'Account found' : 'No account found with this mobile number'
+      account_type: accountType,
+      next_action: nextAction,
+      identifier: rawTarget,
+      phone: !isEmail ? (cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits) : null,
+      email: isEmail ? rawTarget.toLowerCase() : (user?.email || vendor?.email || null),
+      message: exists 
+        ? `Account found as ${accountType}. Proceed to login.` 
+        : 'No account found with this identifier. Proceed to registration.',
+      cooldown: {
+        active: cooldownInfo.active,
+        retry_after: cooldownInfo.retryAfter,
+        cooldown_seconds: cooldownInfo.currentCooldownSeconds || 10,
+        next_cooldown_seconds: cooldownInfo.nextCooldownSeconds,
+        attempt: cooldownInfo.currentAttempt
+      },
+      user: user ? {
+        user_id: user.user_id,
+        public_id: user.public_id,
+        name: user.name,
+        phone: user.phone,
+        email: user.email,
+        status: user.status || 'ACTIVE'
+      } : null,
+      vendor: vendor ? {
+        vendor_id: vendor.vendor_id,
+        public_id: vendor.public_id,
+        store_name: vendor.store_name,
+        vendor_name: vendor.vendor_name,
+        phone: vendor.phone_number,
+        status: vendor.status || 'ACTIVE',
+        vendor_type: vendor.vendor_type || 'product'
+      } : null
     });
   } catch (err) {
-    console.error('Error checking user phone:', err);
-    res.status(500).json({ error: 'Failed to check phone registration' });
+    console.error('Error in checkAccountExists:', err);
+    res.status(500).json({ success: false, error: 'Failed to check account existence' });
   }
 }
+
+// Backward-compatible alias for existing tests and routes
+const checkPhone = checkAccountExists;
 
 /**
  * B0.1 Verify Message Central SMS OTP
@@ -137,6 +233,9 @@ async function verifyOtp(req, res) {
     }
 
     const centralResult = await verifyCentralOTP(target, cleanOtp, country_code || countryCode, verId);
+
+    // Reset progressive cooldown upon successful verification
+    resetCooldown(target);
 
     return res.status(200).json({
       success: true,
@@ -1057,6 +1156,7 @@ module.exports = {
   sendOtp,
   verifyOtp,
   checkPhone,
+  checkAccountExists,
   loginUser,
   registerUser,
   getUserOrders,
