@@ -91,6 +91,27 @@ router.get('/api/plans', subscriptionController.getPlans.bind(subscriptionContro
 router.get('/api/coupons', subscriptionController.getCoupons.bind(subscriptionController));
 router.post('/api/coupons/apply', subscriptionController.applyCoupon.bind(subscriptionController));
 
+// ── Vendor Subscription Status & Action Direct Aliases ─────
+router.get([
+  '/api/vendorPanel/:vendorId/subscription-status',
+  '/api/vendors/:vendorId/subscription-status',
+  '/api/vendor/:vendorId/subscription-status',
+  '/api/subscriptions/status/:vendorId',
+  '/api/subscriptions/:vendorId/status'
+], subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+
+router.post([
+  '/api/vendorPanel/:vendorId/subscribe',
+  '/api/vendorPanel/:vendorId/renew',
+  '/api/vendors/:vendorId/subscribe',
+  '/api/vendors/:vendorId/renew',
+  '/api/vendor/:vendorId/subscribe',
+  '/api/vendor/:vendorId/renew',
+  '/api/subscriptions/subscribe',
+  '/api/subscriptions/:vendorId/subscribe',
+  '/api/subscriptions/:vendorId/renew'
+], subscriptionController.subscribe.bind(subscriptionController));
+
 // ── Categories & Platform Config Direct Endpoints ──────────
 router.get('/api/categories', storefrontController.getCategories);
 router.get('/api/vendors/categories', storefrontController.getCategories);

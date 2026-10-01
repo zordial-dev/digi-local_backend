@@ -19,7 +19,23 @@ function initSocket(server) {
       }
     });
 
-    socket.on('disconnect', () => {});
+    socket.on('join_user_room', (userId) => {
+      if (userId) {
+        socket.join(`user_${userId}`);
+        socket.join(String(userId));
+        console.log(`🔌 [SOCKET.IO] User #${userId} joined real-time channel (rooms: user_${userId}, ${userId})`);
+      }
+    });
+
+    socket.on('join_order_room', (orderId) => {
+      if (orderId) {
+        socket.join(`order_${orderId}`);
+        socket.join(String(orderId));
+        console.log(`🔌 [SOCKET.IO] Joined order tracking room (rooms: order_${orderId}, ${orderId})`);
+      }
+    });
+
+    socket.on('disconnect', () => { });
   });
 
   return io;

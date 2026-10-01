@@ -662,6 +662,48 @@ async function updateOrderStatus(req, res) {
       await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
     }
 
+    // Real-Time Socket.IO broadcast to order room, user room, and vendor room
+    try {
+      const { getIO } = require('../../socket');
+      const io = getIO();
+      if (io) {
+        const socketPayload = {
+          order_id: String(id),
+          status: targetStatus,
+          previous_status: order.status,
+          payment_status: refundInfo ? (refundInfo.is_refund_in_progress ? 'REFUND_IN_PROGRESS' : 'REFUND_COMPLETED') : order.payment_status,
+          refund_status: refundInfo ? refundInfo.refund_status : (order.refund_status || null),
+          refund_status_label: refundInfo ? refundInfo.refund_status_label : null,
+          is_refund_in_progress: refundInfo ? refundInfo.is_refund_in_progress : false,
+          refund_amount: refundInfo ? refundInfo.refund_amount : (order.refund_amount || null),
+          reason: req.body?.reason || req.body?.cancel_reason || null,
+          cancelled_by: targetStatus === 'CANCELLED' ? 'VENDOR' : null,
+          timestamp: new Date().toISOString()
+        };
+
+        io.to(`order_${id}`).emit('ORDER_STATUS_UPDATED', socketPayload);
+        io.to(String(id)).emit('ORDER_STATUS_UPDATED', socketPayload);
+
+        if (targetStatus === 'CANCELLED') {
+          io.to(`order_${id}`).emit('ORDER_CANCELLED', socketPayload);
+          io.to(String(id)).emit('ORDER_CANCELLED', socketPayload);
+        }
+
+        if (order.user_id) {
+          io.to(`user_${order.user_id}`).emit('ORDER_STATUS_UPDATED', socketPayload);
+          io.to(String(order.user_id)).emit('ORDER_STATUS_UPDATED', socketPayload);
+          if (targetStatus === 'CANCELLED') {
+            io.to(`user_${order.user_id}`).emit('ORDER_CANCELLED', socketPayload);
+            io.to(String(order.user_id)).emit('ORDER_CANCELLED', socketPayload);
+          }
+        }
+
+        if (order.vendor_id) {
+          io.to(`vendor_${order.vendor_id}`).emit('ORDER_STATUS_UPDATED', socketPayload);
+        }
+      }
+    } catch (_) { }
+
     res.status(200).json({
       success: true,
       message: refundInfo
@@ -825,6 +867,37 @@ async function cancelOrder(req, res) {
           body: `Order #${id} was cancelled by customer. ${refundData ? `Refund of ₹${refundData.refund_amount} initiated.` : ''}`,
           data: { orderId: String(id), status: 'CANCELLED' }
         }).catch(() => { });
+      }
+    } catch (_) { }
+
+    // Real-Time Socket.IO broadcast on customer cancellation
+    try {
+      const { getIO } = require('../../socket');
+      const io = getIO();
+      if (io) {
+        const socketPayload = {
+          order_id: String(id),
+          status: 'CANCELLED',
+          previous_status: order.status,
+          payment_status: refundData ? (refundData.is_refund_in_progress ? 'REFUND_IN_PROGRESS' : 'REFUND_COMPLETED') : (order.payment_status === 'PENDING' ? 'CANCELLED' : (order.payment_status || 'CANCELLED')),
+          refund_status: refundData ? refundData.refund_status : (order.refund_status || null),
+          refund_status_label: refundData ? refundData.refund_status_label : null,
+          is_refund_in_progress: refundData ? refundData.is_refund_in_progress : false,
+          refund_amount: refundData ? refundData.refund_amount : null,
+          reason,
+          cancelled_by: 'CUSTOMER',
+          timestamp: new Date().toISOString()
+        };
+        io.to(`order_${id}`).emit('ORDER_STATUS_UPDATED', socketPayload);
+        io.to(`order_${id}`).emit('ORDER_CANCELLED', socketPayload);
+        if (order.user_id) {
+          io.to(`user_${order.user_id}`).emit('ORDER_STATUS_UPDATED', socketPayload);
+          io.to(`user_${order.user_id}`).emit('ORDER_CANCELLED', socketPayload);
+        }
+        if (order.vendor_id) {
+          io.to(`vendor_${order.vendor_id}`).emit('ORDER_STATUS_UPDATED', socketPayload);
+          io.to(`vendor_${order.vendor_id}`).emit('ORDER_CANCELLED', socketPayload);
+        }
       }
     } catch (_) { }
 
