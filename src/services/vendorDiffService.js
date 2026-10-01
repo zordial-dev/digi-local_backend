@@ -62,19 +62,27 @@ async function recordVendorFieldChanges(vendorId, oldData = {}, newData = {}, ba
             if (key === 'vendor_name') newVal = newData.owner_name || newData.ownerName || newData.vendorName || newData.name;
             else if (key === 'store_name') newVal = newData.shop_name || newData.business_name || newData.storeName || newData.shopName;
             else if (key === 'phone_number') newVal = newData.mobile_number || newData.mobile || newData.phone || newData.phoneNumber;
-            else if (key === 'gstin') newVal = newData.gst_number || newData.gstNumber || newData.gst;
-            else if (key === 'pan_number') newVal = newData.pan || newData.panNumber;
+            else if (key === 'gstin') newVal = newData.gst_number || newData.gstNumber || newData.gst || newData.tax_details?.gstin || newData.business_details?.gstin;
+            else if (key === 'pan_number') {
+                newVal = newData.pan || newData.panNumber || newData.tax_details?.pan_number || newData.tax_details?.pan;
+                if (newVal === undefined) {
+                    const rawGst = String(newData.gstin || newData.gst_number || newData.gstNumber || newData.gst || '').trim();
+                    if (rawGst.length === 15) {
+                        newVal = rawGst.substring(2, 12).toUpperCase();
+                    }
+                }
+            }
             else if (key === 'area') newVal = newData.society_name || newData.location_name || newData.society;
             else if (key === 'shop_number') newVal = newData.shopNumber || newData.shop_no;
-            else if (key === 'shop_image') newVal = newData.logo || newData.shopImage;
+            else if (key === 'shop_image') newVal = newData.logo || newData.shopImage || newData.logo_url;
             else if (key === 'pincode') newVal = newData.pin_code || newData.pinCode;
             else if (key === 'whatsapp_number') newVal = newData.whatsapp || newData.merchant_whatsapp;
-            else if (key === 'account_number') newVal = newData.bank_account_number || newData.accountNumber;
-            else if (key === 'ifsc_code') newVal = newData.ifsc || newData.ifscCode;
-            else if (key === 'bank_name') newVal = newData.bankName || newData.bank;
-            else if (key === 'account_holder_name') newVal = newData.accountHolderName;
-            else if (key === 'upi_id') newVal = newData.upiId || newData.upi;
-            else if (key === 'qr_code') newVal = newData.qr_code || newData.upi_qr_code || newData.qrCodeUrl || newData.qr_code_url;
+            else if (key === 'account_number') newVal = newData.bank_account_number || newData.accountNumber || newData.payment_details?.account_number || newData.payment_details?.bank_account_number;
+            else if (key === 'ifsc_code') newVal = newData.ifsc || newData.ifscCode || newData.payment_details?.ifsc_code || newData.payment_details?.ifsc;
+            else if (key === 'bank_name') newVal = newData.bankName || newData.bank || newData.payment_details?.bank_name || newData.payment_details?.bank;
+            else if (key === 'account_holder_name') newVal = newData.accountHolderName || newData.payment_details?.account_holder_name;
+            else if (key === 'upi_id') newVal = newData.upiId || newData.upi || newData.payment_details?.upi_id || newData.payment_details?.upi;
+            else if (key === 'qr_code') newVal = newData.qr_code || newData.upi_qr_code || newData.qrCodeUrl || newData.qr_code_url || newData.payment_details?.qr_code || newData.payment_details?.qr_code_url;
         }
 
         // If field was not provided in update payload, skip comparing it

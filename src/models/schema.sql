@@ -326,13 +326,49 @@ CREATE TABLE IF NOT EXISTS support_tags (
 );
 
 
+CREATE TABLE IF NOT EXISTS plans (
+    plan_id BIGSERIAL PRIMARY KEY,
+    plan_code VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price DECIMAL(10,2) NOT NULL DEFAULT 5999.00,
+    duration_days INT NOT NULL DEFAULT 365,
+    billing_cycle VARCHAR(20) DEFAULT 'YEARLY',
+    features JSONB DEFAULT '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coupons (
+    id BIGSERIAL PRIMARY KEY,
+    coupon_code VARCHAR(8) UNIQUE NOT NULL,
+    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+    discount DECIMAL(10,2) NOT NULL,
+    type VARCHAR(20) NOT NULL CHECK (type IN ('percentage', 'flat')),
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    usage_limit INT DEFAULT 1,
+    status VARCHAR(20) DEFAULT 'unused' CHECK (status IN ('unused', 'used')),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS subscriptions (
     subscription_id BIGSERIAL PRIMARY KEY,
     vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+    plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL,
+    plan_name VARCHAR(100) DEFAULT 'Annual Merchant Plan',
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
+    original_price DECIMAL(10,2) DEFAULT 5999.00,
+    discount_amount DECIMAL(10,2) DEFAULT 0.00,
+    final_price DECIMAL(10,2) DEFAULT 5999.00,
+    coupon_code VARCHAR(8),
+    payment_method VARCHAR(50) DEFAULT 'ONLINE',
+    transaction_id VARCHAR(100),
     status VARCHAR(20) DEFAULT 'ACTIVE',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    reminders_sent JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS cms_pages (

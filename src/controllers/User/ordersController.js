@@ -247,6 +247,24 @@ async function createOrder(req, res) {
       return res.status(400).json({ error: 'Missing required order fields or items array' });
     }
 
+    // Enforce active vendor subscription: users cannot buy from an expired store
+    const subCheck = await query(
+      `SELECT subscription_id, status, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date 
+       FROM subscriptions 
+       WHERE vendor_id = ? 
+       ORDER BY subscription_id DESC LIMIT 1`,
+      [vendor_id]
+    );
+    const sub = subCheck.rows && subCheck.rows[0];
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+    if (sub && (String(sub.status).toUpperCase() === 'EXPIRED' || sub.end_date < todayStr)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot place order: This store is currently unavailable due to an expired subscription. Please order from another active merchant.',
+        subscription_expired: true
+      });
+    }
+
     const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
     const createdAt = formatISTISO();
     const populatedItems = [];

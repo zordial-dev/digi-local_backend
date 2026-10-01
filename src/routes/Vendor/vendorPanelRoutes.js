@@ -141,6 +141,22 @@ router.get('/:vendorId/services', serviceController.getVendorServices);
 router.get('/:vendorId/services/:serviceId', serviceController.getServiceById);
 router.put('/:vendorId/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
 router.patch('/:vendorId/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
+router.post(['/:vendorId/services/:serviceId', '/:vendorId/services/:serviceId/edit', '/:vendorId/services/:serviceId/update'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
+
+// Dedicated Photo / Image endpoints for services
+router.post(['/:vendorId/services/:serviceId/image', '/:vendorId/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
+router.put(['/:vendorId/services/:serviceId/image', '/:vendorId/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
+router.patch(['/:vendorId/services/:serviceId/image', '/:vendorId/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
+
+// Direct / vendor-agnostic service endpoints
+router.put('/services/:serviceId', upload.any(), handleMulterError, authenticateToken, serviceController.updateService);
+router.patch('/services/:serviceId', upload.any(), handleMulterError, authenticateToken, serviceController.updateService);
+router.post(['/services/:serviceId', '/services/:serviceId/edit', '/services/:serviceId/update'], upload.any(), handleMulterError, authenticateToken, serviceController.updateService);
+router.post(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, serviceController.updateServiceImage);
+router.put(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, serviceController.updateServiceImage);
+router.patch(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, serviceController.updateServiceImage);
+
+// Service availability and deletion
 router.patch('/:vendorId/services/:serviceId/availability', authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
 router.put('/:vendorId/services/:serviceId/availability', authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
 router.delete('/:vendorId/services/:serviceId', authenticateToken, requireVendorOwner, serviceController.deleteService);
@@ -167,8 +183,12 @@ router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload
 // PUT /api/vendorPanel/:vendorId/coverage
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);
 
-// POST /api/vendorPanel/:vendorId/renew
-router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, vendorPanelController.renewSubscription);
+// Subscription & Coupons Endpoints
+const subscriptionController = require('../../controllers/Subscription/subscriptionController');
+router.get('/:vendorId/subscription-status', subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+router.get('/:vendorId/coupons', subscriptionController.getCoupons.bind(subscriptionController));
+router.post('/:vendorId/subscribe', subscriptionController.subscribe.bind(subscriptionController));
+router.post('/:vendorId/renew', subscriptionController.subscribe.bind(subscriptionController));
 
 // FCM / Expo Push Device Token Endpoints
 router.post('/fcm-token', vendorPanelController.registerFcmToken);

@@ -64,45 +64,67 @@ function welcomeTemplate({ vendor_name, store_name }) {
 }
 
 /**
- * 3. Subscription Expiry Warning Template
+ * 3. Subscription Expiry Warning Template (7d, 3d, 1d, 0d, Expired)
  */
 function subscriptionExpiryTemplate({ vendor_name, store_name, end_date, daysLeft }) {
-  const isExpired = daysLeft <= 0;
-  const headerColor = isExpired ? '#B91C1C' : '#B78103';
+  const isExpired = daysLeft < 0;
+  const isToday = daysLeft === 0;
+  const headerColor = isExpired ? '#B91C1C' : (daysLeft <= 1 ? '#DC2626' : '#B78103');
+
+  let milestoneMessage = '';
+  let badgeTitle = '';
+
+  if (isExpired) {
+    badgeTitle = '⚠️ Subscription Expired';
+    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> has <span style="color: #B91C1C; font-weight: bold;">expired</span>. Your shop is currently hidden from local residents on the user portal, and you cannot receive new orders.`;
+  } else if (isToday) {
+    badgeTitle = '🚨 Subscription Expires Today!';
+    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> <span style="color: #DC2626; font-weight: bold;">expires TODAY</span>. Please renew immediately to keep your shop visible to customers without any interruption.`;
+  } else if (daysLeft === 1) {
+    badgeTitle = '🔔 Subscription Expiring Tomorrow';
+    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #DC2626;">1 day</strong> (tomorrow) on <strong>${end_date}</strong>.`;
+  } else {
+    badgeTitle = `🔔 Subscription Expiring in ${daysLeft} Days`;
+    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #B78103;">${daysLeft} days</strong> on <strong>${end_date}</strong>.`;
+  }
+
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #444;">Dear <strong>${vendor_name}</strong>,</p>
     <p style="font-size: 14px; line-height: 1.6; color: #444;">
-      ${isExpired
-        ? `Your DigiLocal annual subscription for <strong>${store_name}</strong> has <span style="color: #B91C1C; font-weight: bold;">expired</span>. Your store is currently hidden from local residents.`
-        : `Your DigiLocal annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #B78103;">${daysLeft} day${daysLeft === 1 ? '' : 's'}</strong> on <strong>${end_date}</strong>.`
-      }
+      ${milestoneMessage}
     </p>
     <div style="background-color: #FAF9F6; border-radius: 10px; border: 1px solid #E0D5C3; padding: 16px 20px; margin: 20px 0; font-size: 13px;">
       <table width="100%" cellpadding="6" style="border-collapse: collapse;">
         <tr><td style="color: #787F8C;">Store Name:</td><td style="font-weight: bold;">${store_name}</td></tr>
+        <tr><td style="color: #787F8C;">Plan:</td><td style="font-weight: bold;">Annual Merchant Subscription (1 Year)</td></tr>
         <tr><td style="color: #787F8C;">Expiry Date:</td><td style="font-weight: bold; color: ${headerColor};">${end_date || 'N/A'}</td></tr>
-        <tr><td style="color: #787F8C;">Renewal Cost:</td><td style="font-weight: bold;">₹2,999 / year</td></tr>
+        <tr><td style="color: #787F8C;">Renewal Cost:</td><td style="font-weight: bold; color: #166534;">₹5,999 / year</td></tr>
       </table>
     </div>
+    <p style="font-size: 13px; color: #666; line-height: 1.5;">
+      💡 <em>Tip: You can apply any active vendor discount coupon in your vendor panel before paying online to get an instant discount!</em>
+    </p>
     <div style="text-align: center; margin: 28px 0;">
       <a href="http://localhost:3000" style="background-color: #0A1428; color: #C5A880; font-weight: bold; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-size: 14px; display: inline-block;">RENEW SUBSCRIPTION NOW</a>
     </div>
   `;
-  return baseContainer(isExpired ? '⚠️ Subscription Expired' : `🔔 Subscription Expiring in ${daysLeft} Day(s)`, headerColor, content);
+  return baseContainer(badgeTitle, headerColor, content);
 }
 
 /**
  * 4. Subscription Renewal Success Template
  */
-function renewalSuccessTemplate({ vendor_name, store_name, end_date, amount = 2999.00, transaction_id }) {
+function renewalSuccessTemplate({ vendor_name, store_name, end_date, amount = 5999.00, transaction_id }) {
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #444;">Dear <strong>${vendor_name}</strong>,</p>
-    <p style="font-size: 14px; line-height: 1.6; color: #444;">Your subscription for <strong>${store_name}</strong> has been successfully renewed for 1 full year!</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #444;">Your subscription for <strong>${store_name}</strong> has been successfully renewed for 1 full year! Your shop is live and visible to all local resident customers on the DigiLocal user portal.</p>
     <div style="background-color: #FAF9F6; border-radius: 10px; border: 1px solid #E0D5C3; padding: 18px 20px; margin: 20px 0; font-size: 13px;">
       <table width="100%" cellpadding="6" style="border-collapse: collapse;">
         <tr><td style="color: #787F8C;">Store Name:</td><td style="font-weight: bold;">${store_name}</td></tr>
+        <tr><td style="color: #787F8C;">Plan:</td><td style="font-weight: bold;">Annual Merchant Subscription</td></tr>
         <tr><td style="color: #787F8C;">Active Until:</td><td style="font-weight: bold; color: #166534;">${end_date}</td></tr>
-        <tr><td style="color: #787F8C;">Amount Paid:</td><td style="font-weight: bold;">₹${amount.toFixed(2)}</td></tr>
+        <tr><td style="color: #787F8C;">Amount Paid:</td><td style="font-weight: bold;">₹${parseFloat(amount || 5999).toFixed(2)}</td></tr>
+        <tr><td style="color: #787F8C;">Payment Method:</td><td style="font-weight: bold;">Online Payment</td></tr>
         <tr><td style="color: #787F8C;">Transaction Reference:</td><td style="font-family: monospace; font-size: 12px;">${transaction_id}</td></tr>
       </table>
     </div>

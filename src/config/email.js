@@ -41,10 +41,16 @@ const queueEmailDispatch = (to, subject, html, taskName) => {
  * 1. Subscription Expiry Warning Email (Maintains 100% Backward Compatibility for cron.js)
  */
 const sendSubscriptionExpiryEmail = async (vendor, daysLeft) => {
-  const isExpired = daysLeft <= 0;
-  const subject = isExpired
-    ? `⚠️ DigiLocal Subscription Expired – ${vendor.store_name}`
-    : `🔔 DigiLocal Subscription Expiring in ${daysLeft} Day${daysLeft === 1 ? '' : 's'} – ${vendor.store_name}`;
+  let subject = '';
+  if (daysLeft < 0) {
+    subject = `⚠️ DigiLocal Subscription Expired – ${vendor.store_name}`;
+  } else if (daysLeft === 0) {
+    subject = `🚨 DigiLocal Subscription Expires TODAY – ${vendor.store_name}`;
+  } else if (daysLeft === 1) {
+    subject = `🔔 DigiLocal Subscription Expiring Tomorrow (1 Day) – ${vendor.store_name}`;
+  } else {
+    subject = `🔔 DigiLocal Subscription Expiring in ${daysLeft} Days – ${vendor.store_name}`;
+  }
 
   const html = templates.subscriptionExpiryTemplate({
     vendor_name: vendor.vendor_name,
@@ -53,7 +59,7 @@ const sendSubscriptionExpiryEmail = async (vendor, daysLeft) => {
     daysLeft
   });
 
-  queueEmailDispatch(vendor.email, subject, html, `subscription_expiry_${vendor.vendor_id}`);
+  queueEmailDispatch(vendor.email, subject, html, `subscription_expiry_${vendor.vendor_id}_${daysLeft}`);
 };
 
 /**

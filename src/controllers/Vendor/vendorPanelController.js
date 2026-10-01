@@ -503,23 +503,27 @@ async function updateSettings(req, res) {
 }
 
 /**
- * POST /api/vendorPanel/:vendorId/renew - Renew vendor subscription
+ * POST /api/vendorPanel/:vendorId/renew - Renew vendor subscription (₹5,999/yr, online payment only, coupons)
  */
 async function renewSubscription(req, res) {
     try {
         const { vendorId } = req.params;
         const { payment_method, transaction_id } = req.body;
 
-        const result = await vendorService.renewSubscription(vendorId, payment_method, transaction_id);
+        const result = await vendorService.renewSubscription(vendorId, payment_method, transaction_id, req.body);
 
         res.status(200).json({
+            success: true,
             message: 'Subscription renewed successfully for 1 year!',
             start_date: result.startDateStr,
-            end_date: result.endDateStr
+            end_date: result.endDateStr,
+            final_price: result.final_price,
+            discount_amount: result.discount_amount,
+            coupon_applied: result.coupon_applied
         });
     } catch (err) {
         console.error('Error renewing subscription:', err);
-        res.status(500).json({ error: err.message || 'Failed to renew subscription' });
+        res.status(400).json({ success: false, error: err.message || 'Failed to renew subscription' });
     }
 }
 
@@ -711,6 +715,7 @@ async function updatePaymentDetails(req, res) {
     const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
     const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
     const account_holder_name = String(body.account_holder_name || body.accountHolderName || '').trim();
+    const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
     const qr_code = String(body.qr_code || body.qr_code_url || body.qrCodeUrl || body.upi_qr_code || '').trim();
 
     if (!vendorId) {
@@ -748,7 +753,8 @@ async function updatePaymentDetails(req, res) {
         bank_name,
         account_holder_name,
         upi_id,
-        qr_code_url
+        qr_code,
+        qr_code_url: qr_code
       }
     });
   } catch (err) {

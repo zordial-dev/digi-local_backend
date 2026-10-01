@@ -9,7 +9,7 @@ class PaymentService {
   async verifyAndProcessPayment({
     vendor_id,
     subscription_id,
-    amount = 2999.00,
+    amount = 5999.00,
     payment_method = 'Razorpay (UPI)',
     transaction_id,
     razorpay_order_id,
@@ -167,7 +167,7 @@ class PaymentService {
             vendor_id,
             transaction_id: txnId,
             payment_method: entity.method || 'Razorpay (UPI)',
-            amount: (entity.amount || 299900) / 100
+            amount: (entity.amount || 599900) / 100
           });
         }
       }

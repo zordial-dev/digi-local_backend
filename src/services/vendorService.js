@@ -212,14 +212,14 @@ class VendorService {
 
     const {
       store_name, logo, logo_url, store_logo, shop_image, image_url, image, photo, avatar, avatar_url, description, phone_number, phone,
-      gst_number, gstin, gst, gstNumber, pan_number,
+      gst_number, gstin, gst, gstNumber, pan_number, pan, panNumber,
       opening_time, closing_time, working_days, business_type,
       min_order_value, max_quantity_limit, delivery_charge, gst_percentage, service_charge_percentage,
       vendor_name, contact_person, merchant_name, owner_name, email,
       address, location_address, area, city, state, pincode, location,
-      bank_name, account_number, bank_account_number, ifsc_code, account_holder_name,
+      bank_name, account_number, bank_account_number, ifsc_code, ifsc, ifscCode, account_holder_name,
       whatsapp_number, shop_number, shop_no, category, vendor_type, location_type,
-      is_global_coverage, delivery_radius_km, selected_zones, upi_id
+      is_global_coverage, delivery_radius_km, selected_zones, upi_id, qr_code, qr_code_url
     } = settings;
 
     const finalVendorName = String(vendor_name || contact_person || merchant_name || owner_name || '').trim();
@@ -234,15 +234,25 @@ class VendorService {
     const finalShopNumber = String(shop_number || shop_no || '').trim();
     const finalCategory = String(category || '').trim();
     const pd = (typeof settings.payment_details === 'object' && settings.payment_details !== null) ? settings.payment_details : {};
-    const finalBankName = String(bank_name || pd.bank_name || '').trim();
-    const finalAccountNumber = String(account_number || bank_account_number || pd.account_number || pd.bank_account_number || '').trim();
-    const finalIfscCode = String(ifsc_code || ifsc || pd.ifsc_code || pd.ifsc || '').trim().toUpperCase();
-    const finalAccountHolderName = String(account_holder_name || pd.account_holder_name || '').trim();
-    const finalUpiId = String(upi_id || pd.upi_id || '').trim();
+    const td = (typeof settings.tax_details === 'object' && settings.tax_details !== null) ? settings.tax_details : {};
+    const bd = (typeof settings.business_details === 'object' && settings.business_details !== null) ? settings.business_details : {};
+
+    const finalBankName = String(bank_name || pd.bank_name || pd.bankName || pd.bank || '').trim();
+    const finalAccountNumber = String(account_number || bank_account_number || pd.account_number || pd.bank_account_number || pd.accountNumber || '').trim();
+    const finalIfscCode = String(ifsc_code || ifsc || ifscCode || pd.ifsc_code || pd.ifsc || pd.ifscCode || '').trim().toUpperCase();
+    const finalAccountHolderName = String(account_holder_name || pd.account_holder_name || pd.accountHolderName || '').trim();
+    const finalUpiId = String(upi_id || pd.upi_id || pd.upiId || pd.upi || '').trim();
+    const finalQrCode = String(qr_code || qr_code_url || pd.qr_code || pd.qr_code_url || pd.qrCodeUrl || pd.upi_qr_code || '').trim();
     const finalWhatsappNumber = String(whatsapp_number || '').trim();
 
-    const finalGst = String(gst_number || gstin || gst || gstNumber || '').trim().toUpperCase();
-    const finalPan = String(pan_number || '').trim().toUpperCase();
+    let finalGst = String(gst_number || gstin || gst || gstNumber || td.gstin || td.gst_number || td.gst || bd.gstin || bd.gst_number || '').trim().toUpperCase();
+    let finalPan = String(pan_number || pan || panNumber || td.pan_number || td.pan || bd.pan_number || bd.pan || '').trim().toUpperCase();
+
+    // Auto-extract 10-digit PAN from 15-character GSTIN if PAN is omitted
+    if (!finalPan && finalGst.length === 15) {
+      finalPan = finalGst.substring(2, 12);
+    }
+
     const finalOpening = opening_time || '';
     const finalClosing = closing_time || '';
     const finalWorkingDays = working_days || '';
@@ -355,6 +365,7 @@ class VendorService {
            ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
            account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
            upi_id = COALESCE(NULLIF(?, ''), upi_id),
+           qr_code = COALESCE(NULLIF(?, ''), qr_code),
            opening_time = COALESCE(NULLIF(?, ''), opening_time),
            closing_time = COALESCE(NULLIF(?, ''), closing_time), 
            working_days = COALESCE(NULLIF(?, ''), working_days),
@@ -395,6 +406,7 @@ class VendorService {
         finalIfscCode,
         finalAccountHolderName,
         finalUpiId,
+        finalQrCode,
         finalOpening,
         finalClosing,
         finalWorkingDays,
@@ -415,6 +427,9 @@ class VendorService {
     delete updatedVendor.password;
     delete updatedVendor.password_hash;
     updatedVendor.updated_at = new Date().toISOString();
+    updatedVendor.gstin = String(updatedVendor.gstin || updatedVendor.gst_number || '').trim().toUpperCase();
+    updatedVendor.gst_number = updatedVendor.gstin;
+    updatedVendor.pan_number = String(updatedVendor.pan_number || '').trim().toUpperCase();
     if (updatedVendor.logo) updatedVendor.logo = normalizeImageUrl(updatedVendor.logo);
     if (updatedVendor.shop_image) updatedVendor.shop_image = normalizeImageUrl(updatedVendor.shop_image);
     const finalLogo = updatedVendor.logo || (logoUrl ? normalizeImageUrl(logoUrl) : null);
@@ -423,22 +438,23 @@ class VendorService {
   }
 
   /**
-   * Processes subscription renewal safely via PaymentService signature verification.
+   * Processes subscription renewal safely via SubscriptionService (₹5,999/yr, online payment only, coupons).
    */
   async renewSubscription(vendorId, paymentMethod, transactionId, extraPaymentDetails = {}) {
-    const paymentResult = await paymentService.verifyAndProcessPayment({
-      vendor_id: vendorId,
-      amount: 2999.00,
-      payment_method: paymentMethod || 'Razorpay (UPI)',
-      transaction_id: transactionId,
-      razorpay_order_id: extraPaymentDetails.razorpay_order_id,
-      razorpay_payment_id: extraPaymentDetails.razorpay_payment_id || transactionId,
-      razorpay_signature: extraPaymentDetails.razorpay_signature
+    const subscriptionService = require('./subscriptionService');
+    const result = await subscriptionService.subscribe({
+      vendorId,
+      couponCode: extraPaymentDetails.coupon_code || extraPaymentDetails.couponCode,
+      paymentMethod: paymentMethod || 'ONLINE',
+      transactionId: transactionId || extraPaymentDetails.razorpay_payment_id || extraPaymentDetails.transaction_id
     });
 
     return {
-      startDateStr: paymentResult.start_date,
-      endDateStr: paymentResult.end_date
+      startDateStr: result.start_date,
+      endDateStr: result.end_date,
+      final_price: result.final_price,
+      discount_amount: result.discount_amount,
+      coupon_applied: result.coupon_applied
     };
   }
 

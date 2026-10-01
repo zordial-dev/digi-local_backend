@@ -51,8 +51,15 @@ router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.up
 router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], upload.any(), handleMulterError, serviceController.addService);
 router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], serviceController.getVendorServices);
 router.get(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.getServiceById);
-router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
-router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
+router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
+router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
+router.post(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId', '/api/services/:serviceId/edit', '/api/services/:serviceId/update'], upload.any(), handleMulterError, serviceController.updateService);
+
+// Dedicated Service Photo / Image Update Endpoints
+router.post(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, serviceController.updateServiceImage);
+router.put(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, serviceController.updateServiceImage);
+router.patch(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, serviceController.updateServiceImage);
+
 router.patch(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
 router.put(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
 router.delete(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.deleteService);
@@ -76,6 +83,13 @@ router.use('/api/subscriptions', subscriptionsRoutes); // Financial Analytics & 
 router.use('/api/config', configRoutes);               // Platform Branding & Security Config
 router.use(ratingRoutes);                                  // Vendor Ratings & Reviews
 const storefrontController = require('../controllers/Storefront/storefrontController');
+
+const subscriptionController = require('../controllers/Subscription/subscriptionController');
+
+// ── Plans & Coupons Direct Aliases ─────────────────────────
+router.get('/api/plans', subscriptionController.getPlans.bind(subscriptionController));
+router.get('/api/coupons', subscriptionController.getCoupons.bind(subscriptionController));
+router.post('/api/coupons/apply', subscriptionController.applyCoupon.bind(subscriptionController));
 
 // ── Categories & Platform Config Direct Endpoints ──────────
 router.get('/api/categories', storefrontController.getCategories);
@@ -302,7 +316,8 @@ router.post(['/api/email/verify-otp', '/api/email/otp/verify'], otpController.ve
 router.post(['/api/mobile/send-otp', '/api/mobile/otp/send'], otpController.sendMobileOtp);
 router.post(['/api/mobile/verify-otp', '/api/mobile/otp/verify'], otpController.verifyMobileOtp);
 router.put('/api/settings/tax', adminPanelController.updateSettingsSection);
-router.put('/api/settings/subscription-plans', adminPanelController.updateSettingsSection);
+router.get(['/api/settings/subscription-plans', '/api/subscription-plans'], adminPanelController.getSubscriptionPlansAdmin);
+router.put(['/api/settings/subscription-plans', '/api/subscription-plans'], adminPanelController.updateSettingsSection);
 router.put('/api/settings/system', adminPanelController.updateSettingsSection);
 router.put('/api/settings/notifications', adminPanelController.updateSettingsSection);
 router.put('/api/settings/branding', adminPanelController.updateSettingsSection);

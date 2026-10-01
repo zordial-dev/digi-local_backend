@@ -253,7 +253,14 @@ async function createIndexes() {
     'CREATE INDEX IF NOT EXISTS idx_payments_vendor_id ON payments (vendor_id)',
     'CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments (order_id)',
     'CREATE INDEX IF NOT EXISTS idx_payments_cf_order_id ON payments (cashfree_order_id)',
-    'CREATE INDEX IF NOT EXISTS idx_orders_cf_order_id ON orders (cashfree_order_id)'
+    'CREATE INDEX IF NOT EXISTS idx_orders_cf_order_id ON orders (cashfree_order_id)',
+
+    // Indexes for Subscriptions, Plans & Coupons
+    'CREATE INDEX IF NOT EXISTS idx_subscriptions_vendor_id ON subscriptions (vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_subscriptions_status_end_date ON subscriptions (status, end_date)',
+    'CREATE INDEX IF NOT EXISTS idx_coupons_code ON coupons (LOWER(coupon_code))',
+    'CREATE INDEX IF NOT EXISTS idx_coupons_vendor_id ON coupons (vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_coupons_status ON coupons (status)'
   ];
 
   for (const sql of indexesToCreate) {
@@ -632,6 +639,61 @@ async function setupTablesPg() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
+
+  // Ensure plans table (scalable architecture; 1-year 5999 plan default)
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS plans (
+      plan_id BIGSERIAL PRIMARY KEY,
+      plan_code VARCHAR(50) UNIQUE NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      description TEXT,
+      price DECIMAL(10,2) NOT NULL DEFAULT 5999.00,
+      duration_days INT NOT NULL DEFAULT 365,
+      billing_cycle VARCHAR(20) DEFAULT 'YEARLY',
+      features JSONB DEFAULT '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `).catch(() => { });
+
+  // Ensure coupons table (Simple schema: id, coupon_code, vendor_id, discount, type, start_date, end_date, usage_limit, status)
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS coupons (
+      id BIGSERIAL PRIMARY KEY,
+      coupon_code VARCHAR(8) UNIQUE NOT NULL,
+      vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+      discount DECIMAL(10,2) NOT NULL,
+      type VARCHAR(20) NOT NULL CHECK (type IN ('percentage', 'flat')),
+      start_date DATE NOT NULL,
+      end_date DATE NOT NULL,
+      usage_limit INT DEFAULT 1,
+      status VARCHAR(20) DEFAULT 'unused' CHECK (status IN ('unused', 'used')),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `).catch(() => { });
+
+  // Ensure subscriptions table columns
+  const subscriptionColumns = [
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_name VARCHAR(100) DEFAULT 'Annual Merchant Plan'`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS original_price DECIMAL(10,2) DEFAULT 5999.00`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) DEFAULT 0.00`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS final_price DECIMAL(10,2) DEFAULT 5999.00`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS coupon_code VARCHAR(8)`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50) DEFAULT 'ONLINE'`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS transaction_id VARCHAR(100)`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS reminders_sent JSONB DEFAULT '[]'::jsonb`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+  ];
+  await Promise.all(subscriptionColumns.map(colSql => pgPool.query(colSql).catch(() => { })));
+
+  // Seed default 1-year ₹5999 plan if not already present
+  await pgPool.query(`
+    INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, features, is_active)
+    VALUES ('ANNUAL_5999', 'Annual Merchant Plan', '1 Year DigiLocal Storefront Visibility & Resident Ordering', 5999.00, 365, 'YEARLY', '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]', TRUE)
+    ON CONFLICT (plan_code) DO UPDATE SET price = 5999.00, name = 'Annual Merchant Plan', duration_days = 365;
+  `).catch(() => { });
+
 
   
   // Auto-migrate societies into locations (area, city, state, pincode, created_at)

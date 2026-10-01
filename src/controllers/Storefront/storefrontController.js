@@ -26,7 +26,16 @@ async function getSocietyVendorsStorefront(req, res) {
                           v.area, s.society_name 
                     FROM vendors v
                     LEFT JOIN societies s ON v.society_id = s.society_id
-                    WHERE UPPER(v.status) = 'ACTIVE'`;
+                    WHERE UPPER(v.status) = 'ACTIVE'
+                      AND (
+                        NOT EXISTS (SELECT 1 FROM subscriptions sub WHERE sub.vendor_id = v.vendor_id)
+                        OR EXISTS (
+                          SELECT 1 FROM subscriptions sub 
+                          WHERE sub.vendor_id = v.vendor_id 
+                            AND UPPER(sub.status) = 'ACTIVE' 
+                            AND sub.end_date >= CURRENT_DATE
+                        )
+                      )`;
         const params = [];
 
         if (!isAll) {
@@ -122,6 +131,25 @@ async function getVendorStorefront(req, res) {
         delete vendor.password;
         delete vendor.password_hash;
 
+        // Verify active subscription (hide expired shops from user portal)
+        const subCheck = await query(
+            `SELECT subscription_id, status, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date 
+             FROM subscriptions 
+             WHERE vendor_id = ? 
+             ORDER BY subscription_id DESC LIMIT 1`,
+            [vendor.vendor_id]
+        );
+        const sub = subCheck.rows && subCheck.rows[0];
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+        if (sub && (String(sub.status).toUpperCase() === 'EXPIRED' || sub.end_date < todayStr)) {
+            return res.status(403).json({
+                success: false,
+                error: `Store "${vendor.store_name}" is currently unavailable as its annual subscription has expired.`,
+                message: `Store "${vendor.store_name}" is currently unavailable as its annual subscription has expired.`,
+                subscription_expired: true
+            });
+        }
+
         const itemsResult = await query(
             `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, created_at
              FROM items WHERE vendor_id = ? AND in_stock = TRUE ORDER BY created_at DESC`,
@@ -155,21 +183,33 @@ async function getVendorStorefront(req, res) {
             );
             servicesList = (servicesResult.rows || []).map(s => {
                 const finalSImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(s.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (s.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
+                const isAvail = s.is_available === true || s.is_available === 1 || s.is_available === '1';
                 return {
                     service_id: Number(s.service_id),
                     id: Number(s.service_id),
                     vendor_id: Number(s.vendor_id),
                     service_name: s.service_name,
                     name: s.service_name,
+                    title: s.service_name,
                     category: s.category || 'General Services',
                     price: parseFloat(s.price || 0),
                     visiting_charge: parseFloat(s.visiting_charge || 0),
                     estimated_duration: s.estimated_duration || '1 hour',
+                    duration: s.estimated_duration || '1 hour',
                     service_location: s.service_location || "At Customer's Doorstep",
+                    location: s.service_location || "At Customer's Doorstep",
                     description: s.description || '',
                     image_url: finalSImg,
+                    imageUrl: finalSImg,
+                    image: finalSImg,
                     photo_url: finalSImg,
-                    is_available: s.is_available === true || s.is_available === 1 || s.is_available === '1',
+                    photoUrl: finalSImg,
+                    photo: finalSImg,
+                    service_image: finalSImg,
+                    service_photo: finalSImg,
+                    images: finalSImg ? [finalSImg] : [],
+                    is_available: isAvail,
+                    isAvailable: isAvail,
                     created_at: s.created_at,
                     updated_at: s.updated_at
                 };
@@ -319,7 +359,16 @@ async function searchVendorsLocationAware(req, res) {
                           s.society_name, s.location as society_location
                    FROM vendors v
                    LEFT JOIN societies s ON v.society_id = s.society_id
-                   WHERE UPPER(v.status) = 'ACTIVE'`;
+                   WHERE UPPER(v.status) = 'ACTIVE'
+                     AND (
+                       NOT EXISTS (SELECT 1 FROM subscriptions sub WHERE sub.vendor_id = v.vendor_id)
+                       OR EXISTS (
+                         SELECT 1 FROM subscriptions sub 
+                         WHERE sub.vendor_id = v.vendor_id 
+                           AND UPPER(sub.status) = 'ACTIVE' 
+                           AND sub.end_date >= CURRENT_DATE
+                       )
+                     )`;
         const params = [];
 
         if (targetType === 'product' || targetType === 'service') {

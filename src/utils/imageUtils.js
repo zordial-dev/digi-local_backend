@@ -71,9 +71,23 @@ function normalizeImageUrl(rawUrl, defaultFallback = null) {
 
     let url = rawUrl.trim();
     url = url.replace(/^["']|["']$/g, '').trim();
-    if (!url || url.length < 5) return defaultFallback;
+    if (!url || url.length < 5 || url === 'null' || url === 'undefined') return defaultFallback;
 
     try {
+        // Fix malformed URLs like https:///uploads/ or http:///uploads/
+        if (url.startsWith('https:///')) {
+            url = url.replace('https:///', 'https://');
+        } else if (url.startsWith('http:///')) {
+            url = url.replace('http:///', 'http://');
+        }
+
+        // Handle relative upload paths (e.g. /uploads/... or uploads/...)
+        if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
+            const cleanPath = url.startsWith('/') ? url : `/${url}`;
+            const base = (process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace(/\/$/, '');
+            url = `${base}${cleanPath}`;
+        }
+
         // 1. Handle Google Search Redirect & Google Image Search Result URLs
         // e.g. https://www.google.com/url?sa=i&url=https%3A%2F%2Fsite.com%2Fimage.jpg...
         // e.g. https://www.google.com/imgres?imgurl=https%3A%2F%2Fsite.com%2Fimage.jpg...

@@ -12,7 +12,8 @@ function getBaseUrl(req) {
         return process.env.PUBLIC_API_URL.replace(/\/$/, '');
     }
     const host = req.get('host') || 'localhost:5000';
-    const proto = req.get('x-forwarded-proto') || (req.secure ? 'https' : 'http');
+    const isHttps = req.secure || req.get('x-forwarded-proto') === 'https' || host.includes('onrender.com');
+    const proto = isHttps ? 'https' : (req.protocol || 'http');
     return `${proto}://${host}`;
 }
 
@@ -24,7 +25,7 @@ function processBase64Upload(req) {
     let rawBase64 = body.base64 || body.image_base64 || body.file_base64 || body.photo_base64 || body.data;
 
     if (!rawBase64) {
-        const candidate = body.image || body.photo || body.service_photo || body.image_url;
+        const candidate = body.image || body.photo || body.service_photo || body.image_url || body.imageUrl || body.service_image;
         if (typeof candidate === 'string' && candidate.length > 100 && !candidate.startsWith('http://') && !candidate.startsWith('https://')) {
             rawBase64 = candidate;
         }
@@ -76,6 +77,39 @@ function processBase64Upload(req) {
 }
 
 /**
+ * Helper: Extract candidate image from request (multipart file, base64, or direct URL string)
+ */
+function extractCandidateImage(req) {
+    // 1. Multipart uploaded file via multer (req.file or first file in req.files)
+    const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+    if (file) {
+        const baseUrl = getBaseUrl(req);
+        return `${baseUrl}/uploads/${file.filename}`;
+    }
+
+    // 2. Base64 payload in req.body
+    const b64 = processBase64Upload(req);
+    if (b64 && b64.image_url) {
+        return b64.image_url;
+    }
+
+    // 3. String URL or array in req.body
+    const body = req.body || {};
+    const raw = body.image_url ?? body.imageUrl ?? body.image ?? body.photo ?? body.photo_url ?? body.photoUrl ??
+                body.service_image ?? body.serviceImage ?? body.service_photo ?? body.servicePhoto ??
+                body.picture ?? body.img ?? (Array.isArray(body.images) && body.images.length > 0 ? body.images[0] : null);
+
+    if (raw && typeof raw === 'string') {
+        const trimmed = raw.trim();
+        if (trimmed && trimmed.length > 4 && trimmed !== 'null' && trimmed !== 'undefined') {
+            return trimmed;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Helper: Map and normalize location option
  */
 function normalizeServiceLocation(input) {
@@ -88,25 +122,39 @@ function normalizeServiceLocation(input) {
 }
 
 /**
- * Helper: Format service record for response
+ * Helper: Format service record for response with complete alias keys for frontend app & web
  */
 function formatServiceRow(row) {
     if (!row) return null;
+    const finalImage = normalizeImageUrl(row.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE);
+    const isAvail = row.is_available === true || row.is_available === 1 || row.is_available === '1';
+
     return {
         service_id: Number(row.service_id),
         id: Number(row.service_id),
         vendor_id: Number(row.vendor_id),
         service_name: row.service_name,
         name: row.service_name,
+        title: row.service_name,
         category: row.category || 'General Services',
         price: parseFloat(row.price || 0),
         visiting_charge: parseFloat(row.visiting_charge || 0),
         estimated_duration: row.estimated_duration || '1 hour',
+        duration: row.estimated_duration || '1 hour',
         service_location: row.service_location || "At Customer's Doorstep",
+        location: row.service_location || "At Customer's Doorstep",
         description: row.description || '',
-        image_url: normalizeImageUrl(row.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE),
-        photo_url: normalizeImageUrl(row.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE),
-        is_available: row.is_available === true || row.is_available === 1 || row.is_available === '1',
+        image_url: finalImage,
+        imageUrl: finalImage,
+        image: finalImage,
+        photo_url: finalImage,
+        photoUrl: finalImage,
+        photo: finalImage,
+        service_image: finalImage,
+        service_photo: finalImage,
+        images: finalImage ? [finalImage] : [],
+        is_available: isAvail,
+        isAvailable: isAvail,
         created_at: row.created_at,
         created_at_ist: row.created_at ? formatISTISO(row.created_at) : null,
         created_at_readable: row.created_at ? formatISTReadable(row.created_at) : null,
@@ -160,22 +208,9 @@ async function addService(req, res) {
             ? (body.is_available === true || body.is_available === 'true' || body.is_available === 1 || body.is_available === '1')
             : true;
 
-        // Process Image: file upload (multer), base64, or direct URL
-        let uploadedUrl = null;
-        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
-        if (file) {
-            const baseUrl = getBaseUrl(req);
-            uploadedUrl = `${baseUrl}/uploads/${file.filename}`;
-        } else {
-            const b64 = processBase64Upload(req);
-            if (b64) {
-                uploadedUrl = b64.image_url;
-            } else if (body.image_url || body.photo || body.service_photo || body.photo_url) {
-                uploadedUrl = String(body.image_url || body.photo || body.service_photo || body.photo_url).trim();
-            }
-        }
-
-        const finalImage = uploadedUrl ? await resolveImageUrl(uploadedUrl, DEFAULT_PRODUCT_SERVICE_IMAGE) : DEFAULT_PRODUCT_SERVICE_IMAGE;
+        // Process Image: file upload (multer), base64, or direct URL string (all aliases supported)
+        const candidateImg = extractCandidateImage(req);
+        const finalImage = candidateImg ? await resolveImageUrl(candidateImg, DEFAULT_PRODUCT_SERVICE_IMAGE) : DEFAULT_PRODUCT_SERVICE_IMAGE;
 
         const insertRes = await query(
             `INSERT INTO services (
@@ -320,11 +355,16 @@ async function getServiceById(req, res) {
  * 4. Update Existing Service
  * PUT & PATCH /api/vendors/:vendorId/services/:serviceId
  * PUT & PATCH /api/services/:serviceId
+ * POST /api/vendorPanel/:vendorId/services/:serviceId
  */
 async function updateService(req, res) {
     try {
-        const serviceId = req.params.serviceId;
-        const vendorId = req.params.vendorId;
+        const serviceId = req.params.serviceId || req.body?.service_id || req.body?.serviceId;
+        const vendorId = req.params.vendorId || req.body?.vendor_id || req.body?.vendorId || req.user?.vendor_id;
+
+        if (!serviceId) {
+            return res.status(400).json({ success: false, error: 'serviceId is required' });
+        }
 
         // Check if service exists
         let checkSql = `SELECT * FROM services WHERE service_id = ?`;
@@ -342,51 +382,43 @@ async function updateService(req, res) {
         const existing = existingRes.rows[0];
         const body = req.body || {};
 
-        const serviceName = (body.service_name || body.serviceName || body.name || body.title) !== undefined
-            ? String(body.service_name || body.serviceName || body.name || body.title).trim()
+        const serviceName = (body.service_name ?? body.serviceName ?? body.name ?? body.title) !== undefined
+            ? String(body.service_name ?? body.serviceName ?? body.name ?? body.title).trim()
             : existing.service_name;
 
         const category = body.category !== undefined ? String(body.category).trim() : existing.category;
 
-        const price = (body.price !== undefined || body.service_price !== undefined)
-            ? Math.max(0, parseFloat(body.price ?? body.service_price ?? 0) || 0)
+        const price = (body.price !== undefined || body.service_price !== undefined || body.servicePrice !== undefined)
+            ? Math.max(0, parseFloat(body.price ?? body.service_price ?? body.servicePrice ?? 0) || 0)
             : parseFloat(existing.price || 0);
 
-        const visitingCharge = (body.visiting_charge !== undefined || body.visitingCharge !== undefined || body.visiting_fee !== undefined)
-            ? Math.max(0, parseFloat(body.visiting_charge ?? body.visitingCharge ?? body.visiting_fee ?? 0) || 0)
+        const visitingCharge = (body.visiting_charge !== undefined || body.visitingCharge !== undefined || body.visiting_fee !== undefined || body.visitingFee !== undefined || body.inspection_charge !== undefined)
+            ? Math.max(0, parseFloat(body.visiting_charge ?? body.visitingCharge ?? body.visiting_fee ?? body.visitingFee ?? body.inspection_charge ?? 0) || 0)
             : parseFloat(existing.visiting_charge || 0);
 
-        const estimatedDuration = (body.estimated_duration || body.estimatedDuration || body.duration) !== undefined
-            ? String(body.estimated_duration || body.estimatedDuration || body.duration).trim()
+        const estimatedDuration = (body.estimated_duration ?? body.estimatedDuration ?? body.duration) !== undefined
+            ? String(body.estimated_duration ?? body.estimatedDuration ?? body.duration).trim()
             : existing.estimated_duration;
 
-        const serviceLocation = (body.service_location || body.serviceLocation || body.location) !== undefined
-            ? normalizeServiceLocation(body.service_location || body.serviceLocation || body.location)
+        const serviceLocation = (body.service_location ?? body.serviceLocation ?? body.location) !== undefined
+            ? normalizeServiceLocation(body.service_location ?? body.serviceLocation ?? body.location)
             : existing.service_location;
 
-        const description = (body.description || body.service_description || body.serviceDescription) !== undefined
-            ? String(body.description || body.service_description || body.serviceDescription).trim()
+        const description = (body.description ?? body.service_description ?? body.serviceDescription) !== undefined
+            ? String(body.description ?? body.service_description ?? body.serviceDescription).trim()
             : existing.description;
 
         let isAvailable = existing.is_available;
-        if (body.is_available !== undefined) {
-            isAvailable = body.is_available === true || body.is_available === 'true' || body.is_available === 1 || body.is_available === '1';
+        if (body.is_available !== undefined || body.isAvailable !== undefined || body.available !== undefined) {
+            const rawAvail = body.is_available ?? body.isAvailable ?? body.available;
+            isAvailable = rawAvail === true || rawAvail === 'true' || rawAvail === 1 || rawAvail === '1';
         }
 
-        // Process image update if new file or URL provided
+        // Process image update if new file, base64, or direct URL provided
         let newImageUrl = existing.image_url;
-        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
-        if (file) {
-            const baseUrl = getBaseUrl(req);
-            newImageUrl = `${baseUrl}/uploads/${file.filename}`;
-        } else {
-            const b64 = processBase64Upload(req);
-            if (b64) {
-                newImageUrl = b64.image_url;
-            } else if (body.image_url !== undefined || body.photo !== undefined || body.service_photo !== undefined) {
-                const candidate = String(body.image_url || body.photo || body.service_photo || '').trim();
-                newImageUrl = candidate ? await resolveImageUrl(candidate, DEFAULT_PRODUCT_SERVICE_IMAGE) : DEFAULT_PRODUCT_SERVICE_IMAGE;
-            }
+        const candidateImg = extractCandidateImage(req);
+        if (candidateImg) {
+            newImageUrl = await resolveImageUrl(candidateImg, DEFAULT_PRODUCT_SERVICE_IMAGE);
         }
 
         const updateRes = await query(
@@ -430,6 +462,73 @@ async function updateService(req, res) {
         return res.status(500).json({
             success: false,
             error: 'Failed to update service',
+            details: err.message
+        });
+    }
+}
+
+/**
+ * 4b. Dedicated Update Service Photo / Image Only
+ * POST, PUT, PATCH /api/vendorPanel/:vendorId/services/:serviceId/image
+ * POST, PUT, PATCH /api/services/:serviceId/image
+ */
+async function updateServiceImage(req, res) {
+    try {
+        const serviceId = req.params.serviceId || req.body?.service_id;
+        const vendorId = req.params.vendorId || req.body?.vendor_id;
+
+        if (!serviceId) {
+            return res.status(400).json({ success: false, error: 'serviceId is required' });
+        }
+
+        let checkSql = `SELECT * FROM services WHERE service_id = ?`;
+        const checkParams = [serviceId];
+        if (vendorId) {
+            checkSql += ` AND (vendor_id = ? OR CAST(vendor_id AS TEXT) = ?)`;
+            checkParams.push(vendorId, String(vendorId));
+        }
+
+        const existingRes = await query(checkSql, checkParams);
+        if (!existingRes.rows || existingRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Service #${serviceId} not found` });
+        }
+
+        const candidateImg = extractCandidateImage(req);
+        if (!candidateImg) {
+            return res.status(400).json({
+                success: false,
+                error: 'No image provided. Please upload an image file (multipart key "image" or "photo"), base64 string, or image_url.',
+                code: 'NO_IMAGE_PROVIDED'
+            });
+        }
+
+        const finalImage = await resolveImageUrl(candidateImg, DEFAULT_PRODUCT_SERVICE_IMAGE);
+
+        const updateRes = await query(
+            `UPDATE services SET image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE service_id = ? RETURNING *`,
+            [finalImage, serviceId]
+        );
+
+        const updatedService = formatServiceRow(updateRes.rows[0]);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Service photo updated successfully',
+            service_id: Number(serviceId),
+            image_url: finalImage,
+            imageUrl: finalImage,
+            image: finalImage,
+            photo_url: finalImage,
+            photoUrl: finalImage,
+            photo: finalImage,
+            service: updatedService,
+            data: updatedService
+        });
+    } catch (err) {
+        console.error('❌ [UPDATE SERVICE IMAGE ERROR]:', err);
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to update service image',
             details: err.message
         });
     }
@@ -515,6 +614,7 @@ module.exports = {
     getVendorServices,
     getServiceById,
     updateService,
+    updateServiceImage,
     toggleServiceAvailability,
     deleteService
 };

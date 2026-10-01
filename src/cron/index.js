@@ -1,36 +1,37 @@
 const cron = require('node-cron');
-const { query } = require('../models/db');
-const { sendSubscriptionExpiryEmail } = require('../config/email');
+const subscriptionService = require('../services/subscriptionService');
 
 /**
- * Starts the daily subscription expiry cron job.
- * Runs every day at 9:00 AM.
- * Emails all vendors whose subscription ends within 7 days (or has already expired).
+ * Starts the automated subscription expiry cron job.
+ * Runs daily at 9:00 AM (for daily milestone emails: 7 days, 3 days, 1 day, 0 days).
+ * Also runs hourly to automatically transition expired subscriptions to 'EXPIRED' status
+ * and hide their storefronts from the user portal.
  */
 const startSubscriptionCron = () => {
+    // 1. Daily morning run at 9:00 AM for milestone reminder emails (7d, 3d, 1d, 0d)
     cron.schedule('0 9 * * *', async () => {
         try {
-            const today = new Date();
-            const todayStr = today.toISOString().split('T')[0];
-
-            const result = await query(`
-                SELECT v.vendor_id, v.vendor_name, v.store_name, v.email,
-                       s.end_date, s.status as sub_status,
-                       CAST(julianday(s.end_date) - julianday(?) AS INTEGER) as days_left
-                FROM vendors v
-                JOIN subscriptions s ON s.vendor_id = v.vendor_id
-                WHERE s.status = 'ACTIVE'
-                  AND s.end_date IS NOT NULL
-                  AND CAST(julianday(s.end_date) - julianday(?) AS INTEGER) <= 7
-            `, [todayStr, todayStr]);
-
-            for (const vendor of (result.rows || [])) {
-                await sendSubscriptionExpiryEmail(vendor, vendor.days_left);
-            }
+            console.log('[Subscription Cron] Running daily 9:00 AM subscription expiry checks...');
+            const report = await subscriptionService.checkAndSendReminders();
+            console.log('[Subscription Cron] Check finished:', JSON.stringify(report));
         } catch (err) {
-            console.error('[Cron] Error during subscription check:', err.message);
+            console.error('[Subscription Cron] Error during 9:00 AM check:', err.message);
         }
     });
+
+    // 2. Hourly check to detect and process subscriptions reaching expiration time
+    cron.schedule('0 * * * *', async () => {
+        try {
+            const report = await subscriptionService.checkAndSendReminders();
+            if (report.subscriptions_expired > 0 || report.reminders_sent_0d > 0) {
+                console.log('[Subscription Cron Hourly] Processed expiries:', JSON.stringify(report));
+            }
+        } catch (err) {
+            console.error('[Subscription Cron] Error during hourly expiry sweep:', err.message);
+        }
+    });
+
+    console.log('[Subscription Cron] Scheduled: Daily at 9:00 AM & hourly expiration sweep.');
 };
 
 module.exports = { startSubscriptionCron };
