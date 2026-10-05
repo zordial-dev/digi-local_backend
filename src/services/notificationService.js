@@ -248,7 +248,7 @@ class NotificationService {
         pushResult = { success: false, mode: 'no_token', message: `No device push_token registered in DB for vendor #${vendor_id}` };
       }
 
-      // 4. Emit Real-Time Socket.IO Alert for Foreground Audio Chime (emit both uppercase and lowercase events for compatibility)
+      // 4. Emit Real-Time Socket.IO Alert to vendor panel & vendor app
       try {
         const { getIO } = require('../socket');
         const io = getIO();
@@ -264,16 +264,21 @@ class NotificationService {
             notes: String(remarks || ''),
             delivery_instructions: String(remarks || ''),
             delivery_address: String(delivery_address || ''),
+            payment_method: String(pushResult?.payment_method || ''),
             timestamp: new Date().toISOString(),
             sound: 'new_order_alert_sound'
           };
 
-          // Emit exactly ONE canonical Socket.IO alert event
+          // Emit to both named and plain ID rooms for maximum compatibility
+          // (web panel may join as vendor_${id}, mobile app may join as String(id))
           io.to(`vendor_${vendor_id}`).emit('NEW_ORDER_ALERT', socketPayload);
-          console.log(`🔌 [SOCKET.IO BROADCAST] Sent single NEW_ORDER_ALERT to room vendor_${vendor_id}`);
+          io.to(String(vendor_id)).emit('NEW_ORDER_ALERT', socketPayload);
+          console.log(`🔌 [SOCKET.IO] NEW_ORDER_ALERT → rooms: vendor_${vendor_id}, ${vendor_id}`);
+        } else {
+          console.warn(`⚠️ [SOCKET.IO] io not initialized — NEW_ORDER_ALERT NOT sent for order #${order_id}. Vendor must refresh manually.`);
         }
       } catch (wsErr) {
-        // Socket.IO optional fallback
+        console.error(`❌ [SOCKET.IO] Failed to emit NEW_ORDER_ALERT for order #${order_id}:`, wsErr.message);
       }
 
       return pushResult;
