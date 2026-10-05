@@ -1812,10 +1812,101 @@ async function blockUser(req, res) {
   return updateUserStatus(req, res);
 }
 
+/**
+ * POST /api/people/:id/unban
+ * POST /api/people/:id/unblock
+ * POST /api/v1/admin/users/:id/unban
+ * Admin unbans / unblocks a resident user:
+ *   - Sets users.status = 'ACTIVE'
+ *   - Resets users.strikes = 0
+ *   - Clears all strike history records from user_strikes
+ *   - Logs the unban action
+ */
+async function unbanUser(req, res) {
+  try {
+    const { userId, id } = req.params;
+    const targetId = userId || id || req.body?.user_id || req.body?.id;
+    const unbanReason = String(req.body?.reason || req.body?.unban_reason || 'Account unbanned by administrator.').trim();
+
+    if (!targetId) {
+      return sendStandardError(res, 400, 'User ID is required to unban.', 'MISSING_USER_ID');
+    }
+
+    const cleanPhone = String(targetId).trim().replace(/[^0-9]/g, '');
+    const last10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : cleanPhone;
+
+    const userRes = await query(
+      `SELECT u.*, s.city AS soc_city, s.state AS soc_state, s.pincode AS soc_pincode
+       FROM users u
+       LEFT JOIN societies s ON u.society_id = s.society_id
+       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ? OR u.phone LIKE ?`,
+      [targetId, String(targetId), targetId, `%${last10}`]
+    ).catch(async () =>
+      query(`SELECT * FROM users WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ? OR phone LIKE ?`,
+        [targetId, String(targetId), targetId, `%${last10}`])
+    );
+
+    if (!userRes.rows || userRes.rows.length === 0) {
+      return sendStandardError(res, 404, `Resident user "${targetId}" not found.`, 'USER_NOT_FOUND');
+    }
+
+    const u = userRes.rows[0];
+    const city    = u.city    || u.soc_city    || '';
+    const state   = u.state   || u.soc_state   || '';
+    const pincode = u.pincode || u.soc_pincode || '';
+    const previousStatus  = u.status  || 'BLOCKED';
+    const previousStrikes = Number(u.strikes || 0);
+
+    // 1. Reset status to ACTIVE and clear strikes atomically
+    await query(
+      `UPDATE users SET status = 'ACTIVE', strikes = 0, updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+      [String(u.user_id), String(u.user_id)]
+    );
+
+    // 2. Clear all strike history records
+    await query(
+      `DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`,
+      [String(u.user_id), String(u.user_id)]
+    ).catch(e => console.error('Error clearing user_strikes on unban:', e));
+
+    const adminId = req.user?.id || req.user?.admin_id || 'admin';
+
+    // 3. Log the unban action in user_strikes with strike_number 0 as an audit record
+    await query(
+      `INSERT INTO user_strikes (user_id, strike_number, reason, admin_id) VALUES (?, 0, ?, ?)`,
+      [String(u.user_id), `[UNBAN] ${unbanReason}`, adminId]
+    ).catch(e => console.error('Error logging unban audit record:', e));
+
+    return respond(res, 200, {
+      user_id:           String(u.user_id),
+      name:              u.name  || '',
+      phone:             u.phone || '',
+      phone_number:      get10DigitPhone(u.phone),
+      city,
+      state,
+      pincode,
+      pin_code:          pincode,
+      status:            'active',
+      is_blocked:        false,
+      is_banned:         false,
+      strikes:           0,
+      flags_count:       0,
+      max_strikes_allowed: 3,
+      previous_status:   previousStatus.toLowerCase(),
+      previous_strikes:  previousStrikes,
+      unban_reason:      unbanReason,
+      unbanned_by:       adminId
+    }, `User "${u.name || u.user_id}" has been successfully unbanned. Status set to ACTIVE and all ${previousStrikes} strike(s) cleared.`);
+  } catch (err) {
+    console.error('Error unbanning user:', err);
+    return sendStandardError(res, 500, 'Failed to unban user.', 'INTERNAL_SERVER_ERROR');
+  }
+}
+
 async function unblockUser(req, res) {
-  req.body = req.body || {};
-  req.body.status = 'ACTIVE';
-  return updateUserStatus(req, res);
+  // Delegate to full unban handler (resets strikes + clears history)
+  return unbanUser(req, res);
 }
 async function resetUserPassword(req, res) { return respond(res, 200, {}, 'Password reset.'); }
 async function deleteUser(req, res) { return respond(res, 200, {}, 'User deleted.'); }
@@ -2378,6 +2469,7 @@ module.exports = {
   listAllUserStrikesAdmin,
   updateUserStatus,
   blockUser,
+  unbanUser,
   unblockUser,
   resetUserPassword,
   deleteUser,

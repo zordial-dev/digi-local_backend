@@ -165,13 +165,19 @@ router.post('/api/people/:id/strike', adminPanelController.strikeUser);
 router.delete('/api/people/:id/strike', adminPanelController.unstrikeUser);
 router.post('/api/people/:id/unstrike', adminPanelController.unstrikeUser);
 router.post('/api/people/:id/block', adminPanelController.updateUserStatus);
-router.post('/api/people/:id/unblock', adminPanelController.unblockUser);
+// Unban / Unblock — resets status to ACTIVE + clears all strikes to 0
+router.post('/api/people/:id/unban', adminPanelController.unbanUser);
+router.post('/api/people/:id/unblock', adminPanelController.unbanUser);
+router.delete('/api/people/:id/ban', adminPanelController.unbanUser);
 router.put('/api/people/:id/status', adminPanelController.updateUserStatus);
 router.patch('/api/people/:id/status', adminPanelController.updateUserStatus);
 router.get(['/api/v1/admin/users/:id/strike', '/api/v1/admin/users/:id/strikes'], adminPanelController.getUserStrikesAdmin);
 router.post(['/api/v1/admin/users/:id/strike'], adminPanelController.strikeUser);
 router.delete(['/api/v1/admin/users/:id/strike'], adminPanelController.unstrikeUser);
 router.post(['/api/v1/admin/users/:id/unstrike'], adminPanelController.unstrikeUser);
+// Unban v1 routes
+router.post(['/api/v1/admin/users/:id/unban', '/api/v1/admin/users/:id/unblock', '/api/admin/users/:id/unban'], adminPanelController.unbanUser);
+router.delete(['/api/v1/admin/users/:id/ban', '/api/admin/users/:id/ban'], adminPanelController.unbanUser);
 router.all(['/api/v1/admin/users/:id', '/api/v1/users/:id'], adminPanelController.getUserById);
 router.put(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
 router.patch(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
