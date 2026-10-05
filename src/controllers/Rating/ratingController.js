@@ -374,6 +374,103 @@ async function replyToRating(req, res) {
 }
 
 /**
+ * GET /api/users/my-reviews
+ * GET /api/users/:userId/reviews
+ * Returns reviews submitted by the authenticated user, including vendor reply fields.
+ * This is the endpoint the USER PANEL should call to show reviews + vendor responses.
+ */
+async function getMyReviews(req, res) {
+  try {
+    // Prefer JWT identity; fall back to explicit userId param (for admin / internal use)
+    const userId = String(
+      req.user?.user_id ||
+      req.user?.id ||
+      req.params.userId ||
+      req.query.user_id ||
+      ''
+    ).trim();
+
+    if (!userId) {
+      return sendStandardError(res, 401, 'User authentication required to fetch reviews', 'UNAUTHORIZED');
+    }
+
+    // If a userId param was provided and the token exists, enforce it matches the token owner
+    if (req.params.userId && req.user) {
+      const tokenId = String(req.user.user_id || req.user.id || '').trim();
+      if (tokenId && tokenId !== String(req.params.userId).trim()) {
+        return sendStandardError(res, 403, 'You can only view your own reviews', 'FORBIDDEN');
+      }
+    }
+
+    const page  = Math.max(1, parseInt(req.query.page  || '1',  10));
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '20', 10)));
+    const offset = (page - 1) * limit;
+
+    // Fetch this user's reviews joined with vendor info
+    const reviewsRes = await query(
+      `SELECT
+         vr.rating_id,
+         vr.vendor_id,
+         v.store_name,
+         v.vendor_name,
+         vr.rating,
+         vr.review_text,
+         vr.order_id,
+         vr.status,
+         vr.reply_text,
+         vr.replied_at,
+         vr.created_at,
+         vr.updated_at
+       FROM vendor_ratings vr
+       LEFT JOIN vendors v ON vr.vendor_id = v.vendor_id
+       WHERE vr.user_id = ? AND vr.status = 'PUBLISHED'
+       ORDER BY vr.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [userId, limit, offset]
+    ).catch(() => ({ rows: [] }));
+
+    const countRes = await query(
+      `SELECT COUNT(*) as total FROM vendor_ratings WHERE user_id = ? AND status = 'PUBLISHED'`,
+      [userId]
+    ).catch(() => ({ rows: [{ total: 0 }] }));
+
+    const total = parseInt(countRes.rows[0]?.total || 0, 10);
+
+    return respond(res, 200, {
+      user_id: userId,
+      pagination: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit) || 1
+      },
+      reviews: reviewsRes.rows.map(r => ({
+        rating_id:   Number(r.rating_id),
+        vendor_id:   Number(r.vendor_id),
+        store_name:  r.store_name  || null,
+        vendor_name: r.vendor_name || null,
+        rating:      parseFloat(r.rating),
+        review_text: r.review_text || '',
+        order_id:    r.order_id    || null,
+        status:      r.status,
+        has_reply:   !!(r.reply_text),
+        reply: r.reply_text
+          ? {
+              text:        r.reply_text,
+              replied_at:  r.replied_at
+            }
+          : null,
+        created_at:  r.created_at,
+        updated_at:  r.updated_at
+      }))
+    }, 'User reviews fetched successfully.');
+  } catch (err) {
+    console.error('Error fetching user reviews:', err);
+    return sendStandardError(res, 500, 'Failed to fetch user reviews');
+  }
+}
+
+/**
  * GET /api/admin/vendor-ratings
  * Admin list and filter vendor ratings across platform.
  */
@@ -543,6 +640,7 @@ module.exports = {
   getVendorRatingSummary,
   getVendorSelfRatings,
   replyToRating,
+  getMyReviews,
   getAllAdminRatings,
   updateAdminRatingStatus,
   deleteAdminRating

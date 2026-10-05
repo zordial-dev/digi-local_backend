@@ -184,3 +184,108 @@ When handling request failures in the mobile UI:
   - `POST /api/vendors/register` accepts `society_name`, `society`, or `area`. If the society does not exist yet, the backend automatically creates it in the database and assigns the correct `society_id` to the new vendor.
   - All Admin endpoints (`GET /api/admin/vendors`, `/api/vendors/pending`, etc.) now explicitly return `society_name`, `societyName`, `society_id`, `societyId`, `area`, and `locationArea`.
 
+---
+
+## 🔒 Strict Role & Tenant Data Isolation (No Wrong Data Sent)
+
+### 1. Complete Removal of Mock Fallbacks
+- All synthetic dummy data fallbacks (`"Aarushi"`, `"Rahul Sharma"`, `"Raj Kumar"`, `"+919784319840"`, `"9876543210"`, `"FreshMart Grocery & Organic"`, `"Tower A-402"`, `"SOC-101"`, `"Omaxe Greenwood Residency"`) have been removed from the backend.
+- Order details, user profiles, and vendor storefronts now strictly return authentic database records. If optional fields are missing, they return empty strings/null rather than fabricated placeholder data.
+
+### 2. Panel & Account Scope Isolation
+- **User Orders & Cart:** When querying `/api/orders` or `/api/users/:userId/orders`, each user strictly retrieves their own orders. Empty query strings return `[]` instead of defaulting to a static test user.
+- **Vendor Panel Orders:** The vendor app fetching `/api/vendorPanel/:vendorId/orders` or `/api/orders/vendor/:vendorId` receives only orders placed directly with that specific vendor.
+- **Profiles & Addresses:** Updating user or vendor profile details strictly enforces the authenticated token bearer's identity.
+
+
+
+---
+
+## New Feature: Vendor Replies to User Reviews (User Panel)
+
+### What Changed
+Vendors can reply to user reviews from the vendor app. The user app now has a dedicated endpoint to fetch a user own reviews including vendor replies. Previously, reply data was stored in the database but never returned to the user-facing screen.
+
+---
+
+### Endpoint: Get Authenticated User Reviews (with Vendor Reply)
+
+| Method | URL | Auth |
+|--------|-----|------|
+| GET | /api/users/my-reviews | Bearer token (recommended) |
+| GET | /api/users/:userId/reviews | Bearer token (userId must match token) |
+| GET | /api/users/reviews | Bearer token |
+
+Query Params: page (default 1), limit (default 20, max 100)
+
+Success Response 200:
+
+  "success": true,
+  "message": "User reviews fetched successfully.",
+  "data": {
+    "user_id": "usr_abc123",
+    "pagination": { "total": 2, "page": 1, "limit": 20, "pages": 1 },
+    "reviews": [
+      {
+        "rating_id": 101,
+        "vendor_id": 1430,
+        "store_name": "Green Basket",
+        "rating": 4.5,
+        "review_text": "Great service, very prompt!",
+        "has_reply": true,
+        "reply": {
+          "text": "Thank you for your kind words!",
+          "replied_at": "2024-09-02T10:30:00.000Z"
+        },
+        "created_at": "2024-09-01T08:00:00.000Z"
+      },
+      {
+        "rating_id": 98,
+        "vendor_id": 1296,
+        "store_name": "Daily Fresh",
+        "rating": 3.0,
+        "review_text": "Average experience.",
+        "has_reply": false,
+        "reply": null,
+        "created_at": "2024-08-20T14:00:00.000Z"
+      }
+    ]
+  }
+
+Key Fields:
+- has_reply: true when vendor has replied. Use this to conditionally show a reply section.
+- reply.text: The vendor reply text.
+- reply.replied_at: ISO timestamp of reply.
+- reply: null when no reply exists.
+
+Mobile UI Recommendation: In the My Reviews tab, if has_reply is true, show a store reply card below the user review. Show replied_at as relative time.
+
+---
+
+### Vendor Reply Endpoint (Vendor App reference)
+
+POST /api/vendor/ratings/:ratingId/reply
+POST /api/vendor/reviews/:ratingId/reply
+
+Auth: Vendor Bearer token
+Body: { "reply_text": "Thank you for your feedback!" }
+
+Response 200:
+  "rating_id": 101,
+  "vendor_id": 1430,
+  "reply_text": "Thank you for your feedback!",
+  "replied_at": "2024-09-02T10:30:00.000Z"
+
+---
+
+### Submit a Review (User App)
+
+POST /api/vendors/:vendorId/ratings or POST /api/ratings
+
+Body:
+  "vendor_id": 1430,
+  "rating": 4.5,
+  "review_text": "Great service!",
+  "user_id": "usr_abc123",
+  "user_name": "Aman Verma",
+  "order_id": "ORD-20240901-001"

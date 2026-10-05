@@ -107,16 +107,6 @@ async function getVendorStorefront(req, res) {
             [String(vendorIdParam), String(vendorIdParam), String(vendorIdParam)]
         );
 
-        // Graceful fallback for mock/sample ID 1242 from frontend docs
-        if ((!vendorResult.rows || vendorResult.rows.length === 0) && String(vendorIdParam) === '1242') {
-            vendorResult = await query(
-                `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location, s.latitude as society_latitude, s.longitude as society_longitude 
-                 FROM vendors v 
-                 LEFT JOIN societies s ON v.society_id = s.society_id 
-                 WHERE (CAST(v.vendor_id AS TEXT) = '1296' OR v.public_id = 'e134a2') AND UPPER(v.status) = 'ACTIVE'`
-            );
-        }
-
         const endTime = performance.now();
 
         if (!vendorResult.rows || vendorResult.rows.length === 0) {
@@ -244,8 +234,8 @@ async function getVendorStorefront(req, res) {
             pan_number: String(vendor.pan_number || '').trim().toUpperCase(),
             category: vendor.category || 'General',
 
-            society_id: vendor.society_id ? Number(vendor.society_id) : 1,
-            society_name: vendor.society_name || 'Local Society',
+            society_id: vendor.society_id ? Number(vendor.society_id) : null,
+            society_name: vendor.society_name || vendor.area || '',
             vendor_type: vendor.vendor_type || 'product',
             can_add_items: vendor.can_add_items !== false && (vendor.vendor_type || 'product') === 'product',
             shop_number: vendor.shop_number || vendor.shop_no || '',

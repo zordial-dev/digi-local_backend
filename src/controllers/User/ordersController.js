@@ -25,17 +25,19 @@ async function getUserOrders(req, res) {
 
     const placeholders = matchedUserIds.map(() => '?').join(',');
     const ordersRes = await query(
-      `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
+      `SELECT o.order_id, o.user_id, o.vendor_id, o.customer_name, o.customer_phone,
+              v.store_name, v.logo as store_logo, o.total_amount, o.status, 
               o.payment_status, o.refund_id, o.refund_amount, o.refund_status, o.refunded_at,
               COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address,
+              u.name as user_name, u.phone as user_phone,
               u.address as user_saved_address, u.flat as user_flat, u.area as user_area, u.society_name as user_soc
        FROM orders o
        LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
        LEFT JOIN societies s ON o.society_id = s.society_id
        LEFT JOIN users u ON o.user_id = u.user_id
-       WHERE o.user_id IN (${placeholders}) OR u.phone = ? OR u.phone LIKE ?
+       WHERE o.user_id IN (${placeholders}) OR u.phone = ? OR u.phone LIKE ? OR o.customer_phone = ? OR o.customer_phone LIKE ?
        ORDER BY o.order_id DESC`,
-      [...matchedUserIds, userId, `%${last10}`]
+      [...matchedUserIds, userId, `%${last10}`, userId, `%${last10}`]
     );
 
     const orders = [];
@@ -95,14 +97,14 @@ async function getUserOrders(req, res) {
       orders.push({
         id: String(ord.order_id),
         order_id: String(ord.order_id),
-        user_id: String(ord.user_id),
-        customer_name: ord.customer_name || 'Aarushi',
-        phone: ord.phone || ord.customer_phone || '+919784319840',
-        user_phone: ord.phone || ord.customer_phone || '+919784319840',
+        user_id: ord.user_id ? String(ord.user_id) : '',
+        customer_name: ord.customer_name || ord.user_name || 'Customer',
+        phone: ord.customer_phone || ord.phone || ord.user_phone || '',
+        user_phone: ord.customer_phone || ord.phone || ord.user_phone || '',
         vendor_id: Number(ord.vendor_id),
-        store_name: ord.store_name || 'FreshMart Grocery & Organic',
-        store_logo: ord.store_logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=120&auto=format&fit=crop&q=80',
-        society_name: ord.society_name || 'Greenwood Residency',
+        store_name: ord.store_name || '',
+        store_logo: ord.store_logo || '',
+        society_name: ord.society_name || ord.user_soc || ord.user_area || '',
         delivery_address: ord.delivery_address || ord.user_saved_address || [ord.user_flat, ord.user_soc || ord.user_area].filter(Boolean).join(', ') || '',
         flatNumber: flatNumber,
         buildingNumber: buildingNumber,
@@ -158,9 +160,10 @@ async function getVendorOrders(req, res) {
 
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id,
-              COALESCE(o.customer_name, u.name, 'Resident') as customer_name,
-              COALESCE(u.phone, '') as phone, 
-              o.delivery_address, o.total_amount, o.status, o.created_at
+              COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, ''), 'Resident') as customer_name,
+              COALESCE(NULLIF(o.customer_phone, ''), NULLIF(u.phone, ''), '') as phone, 
+              COALESCE(NULLIF(o.delivery_address, ''), NULLIF(u.address, ''), '') as delivery_address,
+              o.total_amount, o.status, o.created_at
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
        WHERE o.vendor_id = ?
@@ -203,7 +206,7 @@ async function getVendorOrders(req, res) {
       orders.push({
         id: String(ord.order_id), // Expo expects 'id'
         order_id: String(ord.order_id), // Backward compat
-        user_id: ord.user_id ? String(ord.user_id) : 'usr_101',
+        user_id: ord.user_id ? String(ord.user_id) : '',
         customer_name: ord.customer_name || 'Resident',
         phone: ord.phone || '',
         delivery_address: ord.delivery_address || '',
@@ -517,9 +520,9 @@ async function createOrder(req, res) {
       order: {
         order_id: orderId,
         vendor_id: Number(vendor_id),
-        user_id: resolvedUserId || 'usr_9784319840',
+        user_id: resolvedUserId || (req.user?.id ? String(req.user.id) : ''),
         customer_name: finalCustomerName,
-        phone_number: rawPhone || '+919784319840',
+        phone_number: rawPhone || (req.user?.phone ? String(req.user.phone) : ''),
         delivery_address: finalDeliveryAddress || userDbAddress || '',
         status: orderStatus,
         payment_status: paymentStatus,
@@ -992,7 +995,7 @@ async function notifyOrderVendor(req, res) {
     const items = itemsRes.rows || [];
 
     const userRes = await query(`SELECT name FROM users WHERE user_id = ?`, [order.user_id]).catch(() => ({ rows: [] }));
-    const customerName = order.customer_name || (userRes.rows[0]?.name !== 'Rahul Sharma' ? userRes.rows[0]?.name : null) || 'Raj Kumar';
+    const customerName = order.customer_name || (userRes.rows[0]?.name && userRes.rows[0]?.name !== 'Rahul Sharma' ? userRes.rows[0]?.name : null) || 'Customer';
     const itemsCount = items.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
     const numTotal = Number(order.total_amount || 0);
 
@@ -1034,8 +1037,24 @@ async function getOrdersByQuery(req, res) {
     req.params.vendorId = vendor_id || vendorId;
     return getVendorOrders(req, res);
   }
-  req.params.userId = '9784319840';
-  return getUserOrders(req, res);
+  if (req.user) {
+    if (req.user.role === 'vendor' && (req.user.vendor_id || req.user.id)) {
+      req.params.vendorId = req.user.vendor_id || req.user.id;
+      return getVendorOrders(req, res);
+    }
+    const uid = req.user.user_id || req.user.id || req.user.phone;
+    if (uid) {
+      req.params.userId = uid;
+      return getUserOrders(req, res);
+    }
+  }
+  return res.status(200).json({
+    success: true,
+    count: 0,
+    total: 0,
+    data: [],
+    orders: []
+  });
 }
 
 module.exports = {

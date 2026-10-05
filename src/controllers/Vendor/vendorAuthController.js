@@ -294,17 +294,21 @@ async function registerVendor(req, res) {
 
 async function getVendorStatus(req, res) {
   try {
-    let vendorId = req.params.vendorId || req.params.id || req.user?.vendor_id || req.user?.id || req.query.vendorId || req.query.vendor_id;
-
-    if (!vendorId && req.headers['authorization']) {
+    let authVendorId = req.user?.vendor_id || req.user?.id;
+    if (!authVendorId && req.headers['authorization']) {
       try {
         const token = req.headers['authorization'].replace('Bearer ', '').trim();
         const { verifyJwt } = require('../../utils/auth');
         const authConfig = require('../../config/auth');
         const payload = verifyJwt(token, authConfig.jwt.secret);
-        if (payload) vendorId = payload.vendor_id || payload.id;
+        if (payload) authVendorId = payload.vendor_id || payload.id;
       } catch (_) { }
     }
+
+    const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
+    let vendorId = (authVendorId && !isAdmin)
+      ? authVendorId
+      : (req.params.vendorId || req.params.id || authVendorId || req.query.vendorId || req.query.vendor_id);
 
     if (!vendorId) return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
 

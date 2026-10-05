@@ -106,6 +106,17 @@ router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
 // GET /api/vendorPanel/:vendorId - Full vendor dashboard data
 router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
 
+const ordersController = require('../../controllers/User/ordersController');
+
+// GET /api/vendorPanel/:vendorId/orders - Vendor Store Orders
+router.get('/:vendorId/orders', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
+router.get('/orders', authenticateToken, (req, res) => {
+    const vid = req.user?.vendor_id || req.user?.id;
+    if (!vid) return res.status(401).json({ error: 'Vendor authentication required' });
+    req.params.vendorId = String(vid);
+    return ordersController.getVendorOrders(req, res);
+});
+
 // GET /api/vendorPanel/:vendorId/purchases & /my-orders - Vendor B2B / B2C orders placed by vendor buying from other vendors
 router.get('/:vendorId/purchases', vendorPanelController.getVendorPurchases);
 router.get('/:vendorId/my-orders', vendorPanelController.getVendorPurchases);

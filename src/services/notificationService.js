@@ -125,8 +125,8 @@ class NotificationService {
         calcTotal = items.reduce((acc, it) => acc + (Number(it.price || it.unit_price || 0) * Number(it.quantity || 1)), 0);
       }
       let finalName = customer_name;
-      if (!finalName || finalName === 'Rahul Sharma' || finalName === 'Resident' || finalName === 'Resident User') {
-        finalName = 'Raj Kumar';
+      if (!finalName || finalName === 'Resident' || finalName === 'Resident User') {
+        finalName = 'Customer';
       }
 
       const formattedTotal = calcTotal.toFixed(2);

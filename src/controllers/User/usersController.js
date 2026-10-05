@@ -580,16 +580,19 @@ async function getUserOrders(req, res) {
 
     const placeholders = matchedUserIds.map(() => '?').join(',');
     const ordersRes = await query(
-      `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
+      `SELECT o.order_id, o.user_id, o.vendor_id, o.customer_name, o.customer_phone,
+              v.store_name, v.logo as store_logo, o.total_amount, o.status, 
+              o.payment_status, o.payment_method,
               COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address,
+              u.name as user_name, u.phone as user_phone,
               u.address as user_saved_address, u.flat as user_flat, u.area as user_area, u.society_name as user_soc
        FROM orders o
        LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
        LEFT JOIN societies s ON o.society_id = s.society_id
        LEFT JOIN users u ON o.user_id = u.user_id
-       WHERE o.user_id IN (${placeholders}) OR u.phone = ? OR u.phone LIKE ?
+       WHERE o.user_id IN (${placeholders}) OR u.phone = ? OR u.phone LIKE ? OR o.customer_phone = ? OR o.customer_phone LIKE ?
        ORDER BY o.order_id DESC`,
-      [...matchedUserIds, userId, `%${last10}`]
+      [...matchedUserIds, userId, `%${last10}`, userId, `%${last10}`]
     );
 
     const orders = [];
@@ -616,14 +619,14 @@ async function getUserOrders(req, res) {
       orders.push({
         order_id: String(ord.order_id),
         id: String(ord.order_id),
-        user_id: String(ord.user_id),
-        customer_name: ord.customer_name || 'Aarushi',
-        phone: ord.phone || ord.customer_phone || '+919784319840',
-        user_phone: ord.phone || ord.customer_phone || '+919784319840',
+        user_id: ord.user_id ? String(ord.user_id) : '',
+        customer_name: ord.customer_name || ord.user_name || 'Customer',
+        phone: ord.customer_phone || ord.phone || ord.user_phone || '',
+        user_phone: ord.customer_phone || ord.phone || ord.user_phone || '',
         vendor_id: Number(ord.vendor_id),
-        store_name: ord.store_name || 'FreshMart Grocery & Organic',
-        store_logo: ord.store_logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=120&auto=format&fit=crop&q=80',
-        society_name: ord.society_name || 'Greenwood Residency',
+        store_name: ord.store_name || '',
+        store_logo: ord.store_logo || '',
+        society_name: ord.society_name || ord.user_soc || ord.user_area || '',
         delivery_address: ord.delivery_address || ord.user_saved_address || [ord.user_flat, ord.user_soc || ord.user_area].filter(Boolean).join(', ') || '',
         status: statusUpper,
         status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
@@ -675,8 +678,23 @@ async function fetchStrikeDetailsForUser(userId) {
  */
 async function getUserProfile(req, res) {
   try {
-    const userId = req.user?.id || req.params.userId || req.query.userId;
+    let authUserId = req.user?.id || req.user?.user_id || req.user?.phone;
+    if (!authUserId && req.headers['authorization']) {
+      try {
+        const token = req.headers['authorization'].replace('Bearer ', '').trim();
+        const { verifyJwt } = require('../../utils/auth');
+        const authConfig = require('../../config/auth');
+        const payload = verifyJwt(token, authConfig.jwt.secret);
+        if (payload) authUserId = payload.user_id || payload.id || payload.phone;
+      } catch (_) {}
+    }
+
+    const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
+    const userId = (authUserId && !isAdmin) ? authUserId : (req.user?.id || req.params.userId || req.query.userId || authUserId);
     if (!userId) return res.status(401).json({ error: 'Unauthorized user' });
+
+    const cleanDigits = String(userId).replace(/\D/g, '');
+    const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
 
     const userRes = await query(
       `SELECT u.*, 
@@ -686,8 +704,8 @@ async function getUserProfile(req, res) {
               COALESCE(NULLIF(u.pincode, ''), s.pincode, '') AS resolved_pincode
        FROM users u 
        LEFT JOIN societies s ON u.society_id = s.society_id 
-       WHERE u.user_id = ? OR CAST(u.user_id AS TEXT) = ?`,
-      [userId, String(userId)]
+       WHERE u.user_id = ? OR u.public_id = ? OR CAST(u.user_id AS TEXT) = ? OR u.phone = ? OR u.phone LIKE ?`,
+      [userId, String(userId), String(userId), userId, `%${last10}`]
     );
 
     if (userRes.rows.length === 0) {
@@ -774,17 +792,21 @@ async function getUserProfile(req, res) {
  */
 async function getUserStatus(req, res) {
   try {
-    let userId = req.params.userId || req.params.id || req.user?.id || req.user?.user_id || req.query.userId || req.query.user_id || req.query.phone;
-
-    if (!userId && req.headers['authorization']) {
+    let authUserId = req.user?.id || req.user?.user_id || req.user?.phone;
+    if (!authUserId && req.headers['authorization']) {
       try {
         const token = req.headers['authorization'].replace('Bearer ', '').trim();
         const { verifyJwt } = require('../../utils/auth');
         const authConfig = require('../../config/auth');
         const payload = verifyJwt(token, authConfig.jwt.secret);
-        if (payload) userId = payload.user_id || payload.id;
+        if (payload) authUserId = payload.user_id || payload.id || payload.phone;
       } catch (_) {}
     }
+
+    const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
+    let userId = (authUserId && !isAdmin)
+      ? authUserId
+      : (req.params.userId || req.params.id || authUserId || req.query.userId || req.query.user_id || req.query.phone);
 
     if (!userId) return res.status(400).json({ error: 'User ID or Authorization Bearer token is required to fetch status.' });
 
@@ -892,17 +914,21 @@ async function getUserStatus(req, res) {
  */
 async function getUserStrikes(req, res) {
   try {
-    let userId = req.params.userId || req.params.id || req.user?.id || req.user?.user_id || req.query.userId || req.query.user_id || req.query.phone;
-
-    if (!userId && req.headers['authorization']) {
+    let authUserId = req.user?.id || req.user?.user_id || req.user?.phone;
+    if (!authUserId && req.headers['authorization']) {
       try {
         const token = req.headers['authorization'].replace('Bearer ', '').trim();
         const { verifyJwt } = require('../../utils/auth');
         const authConfig = require('../../config/auth');
         const payload = verifyJwt(token, authConfig.jwt.secret);
-        if (payload) userId = payload.user_id || payload.id;
+        if (payload) authUserId = payload.user_id || payload.id || payload.phone;
       } catch (_) {}
     }
+
+    const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
+    let userId = (authUserId && !isAdmin)
+      ? authUserId
+      : (req.params.userId || req.params.id || authUserId || req.query.userId || req.query.user_id || req.query.phone);
 
     if (!userId) {
       return res.status(400).json({ error: 'User identifier is required to check user strikes.' });
@@ -1067,7 +1093,22 @@ const deleteUserProfile = deleteAccount;
  */
 async function updateUserProfile(req, res) {
   try {
-    const userId = req.body?.user_id || req.body?.userId || req.params?.userId || req.params?.id || req.user?.id || req.user?.user_id || req.body?.phone;
+    let authUserId = req.user?.id || req.user?.user_id || req.user?.phone;
+    if (!authUserId && req.headers['authorization']) {
+      try {
+        const token = req.headers['authorization'].replace('Bearer ', '').trim();
+        const { verifyJwt } = require('../../utils/auth');
+        const authConfig = require('../../config/auth');
+        const payload = verifyJwt(token, authConfig.jwt.secret);
+        if (payload) authUserId = payload.user_id || payload.id || payload.phone;
+      } catch (_) {}
+    }
+
+    const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
+    const userId = (authUserId && !isAdmin)
+      ? authUserId
+      : (req.body?.user_id || req.body?.userId || req.params?.userId || req.params?.id || authUserId || req.body?.phone);
+
     if (!userId) {
       return res.status(400).json({ error: 'User ID or authenticated session is required to update profile/address.' });
     }

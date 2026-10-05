@@ -4,6 +4,7 @@ const usersController = require('../../controllers/User/usersController');
 const otpController = require('../../controllers/otpController');
 
 const { authenticateToken } = require('../../middleware/auth');
+const ratingController = require('../../controllers/Rating/ratingController');
 
 // Middleware: force role='user' on user-scoped OTP routes so the guard always checks only the users table
 function injectUserRole(req, res, next) {
@@ -34,23 +35,23 @@ router.post('/login', usersController.loginUser);
 router.post('/register', usersController.registerUser);
 
 // B2.1 Fetch Logged-In Resident User Profile & Status Check
-router.get('/status', usersController.getUserStatus);
-router.get('/status/:userId', usersController.getUserStatus);
-router.get('/:userId/status', usersController.getUserStatus);
-router.get('/profile', usersController.getUserProfile);
-router.get('/me', usersController.getUserProfile);
-router.get('/strikes', usersController.getUserStrikes);
-router.get('/strikes/:userId', usersController.getUserStrikes);
-router.get('/:userId/strikes', usersController.getUserStrikes);
+router.get('/status', authenticateToken, usersController.getUserStatus);
+router.get('/status/:userId', authenticateToken, usersController.getUserStatus);
+router.get('/:userId/status', authenticateToken, usersController.getUserStatus);
+router.get('/profile', authenticateToken, usersController.getUserProfile);
+router.get('/me', authenticateToken, usersController.getUserProfile);
+router.get('/strikes', authenticateToken, usersController.getUserStrikes);
+router.get('/strikes/:userId', authenticateToken, usersController.getUserStrikes);
+router.get('/:userId/strikes', authenticateToken, usersController.getUserStrikes);
 
 // B2.1 Update Resident User Profile & Address
-router.put('/profile', usersController.updateUserProfile);
-router.patch('/profile', usersController.updateUserProfile);
-router.put('/address', usersController.updateUserProfile);
-router.post('/address', usersController.updateUserProfile);
-router.put('/me', usersController.updateUserProfile);
-router.put('/:userId', usersController.updateUserProfile);
-router.put('/:userId/address', usersController.updateUserProfile);
+router.put('/profile', authenticateToken, usersController.updateUserProfile);
+router.patch('/profile', authenticateToken, usersController.updateUserProfile);
+router.put('/address', authenticateToken, usersController.updateUserProfile);
+router.post('/address', authenticateToken, usersController.updateUserProfile);
+router.put('/me', authenticateToken, usersController.updateUserProfile);
+router.put('/:userId', authenticateToken, usersController.updateUserProfile);
+router.put('/:userId/address', authenticateToken, usersController.updateUserProfile);
 
 // B2.2 Delete Resident User Account
 router.delete('/profile', authenticateToken, usersController.deleteAccount);
@@ -66,6 +67,11 @@ const supportController = require('../../controllers/Support/supportController')
 
 // B3. Fetch Resident User Orders
 router.get('/:userId/orders', usersController.getUserOrders);
+
+// B3.1 Fetch Resident User Reviews (with vendor reply)
+router.get('/my-reviews', authenticateToken, ratingController.getMyReviews);
+router.get('/:userId/reviews', authenticateToken, ratingController.getMyReviews);
+router.get('/reviews', authenticateToken, ratingController.getMyReviews);
 
 // B4. Fetch Resident User Service Enquiries
 router.get('/:userId/enquiries', enquiryController.getUserEnquiries);

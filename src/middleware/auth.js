@@ -78,11 +78,22 @@ function requireVendorOwner(req, res, next) {
   // If an authenticated user token is present, enforce strict ownership matching
   if (req.user) {
     const targetVendorId = req.params.vendorId || req.body?.vendor_id || req.query?.vendor_id;
-    const isOwner = (req.user.vendor_id == targetVendorId || req.user.id == targetVendorId);
-    const isAdmin = req.user.role === 'admin';
+    if (targetVendorId) {
+      const uVendorId = String(req.user.vendor_id || '');
+      const uId = String(req.user.id || '');
+      const uPublicId = String(req.user.public_id || '');
+      const targetStr = String(targetVendorId).trim();
 
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ error: 'Forbidden: You do not have permission to access or modify this vendor resource (IDOR Protection)' });
+      const isOwner = (
+        (uVendorId && uVendorId === targetStr) ||
+        (uId && uId === targetStr) ||
+        (uPublicId && uPublicId === targetStr)
+      );
+      const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user.role || '').toLowerCase());
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: 'Forbidden: You do not have permission to access or modify this vendor resource (IDOR Protection)' });
+      }
     }
   }
   

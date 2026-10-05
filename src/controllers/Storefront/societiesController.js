@@ -70,14 +70,14 @@ async function getAllSocieties(req, res) {
       society_name: soc.society_name,
       location: soc.location,
       address: soc.address || soc.location,
-      city: soc.city || 'Noida',
-      state: soc.state || 'Uttar Pradesh',
+      city: soc.city || '',
+      state: soc.state || '',
       public_id: soc.public_id || `GW-${soc.society_id}`,
-      pincode: soc.pincode || '201310',
-      total_flats: Number(soc.total_flats || 500),
-      image_url: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=800',
-      secretary_name: soc.secretary_name,
-      secretary_mobile: soc.secretary_mobile,
+      pincode: soc.pincode || '',
+      total_flats: Number(soc.total_flats || 0),
+      image_url: soc.image_url || '',
+      secretary_name: soc.secretary_name || '',
+      secretary_mobile: soc.secretary_mobile || '',
       vendor_count: Number(soc.vendor_count || 0)
     }));
 
@@ -134,11 +134,11 @@ async function getSocietyById(req, res) {
       society_name: soc.society_name,
       location: soc.location,
       address: soc.address || soc.location,
-      city: soc.city || 'Noida',
-      state: soc.state || 'Uttar Pradesh',
-      pincode: soc.pincode || '201310',
-      secretary_name: soc.secretary_name || soc.rwa_name || 'Society Secretary',
-      secretary_mobile: soc.secretary_mobile || soc.rwa_phone || '9876543210'
+      city: soc.city || '',
+      state: soc.state || '',
+      pincode: soc.pincode || '',
+      secretary_name: soc.secretary_name || soc.rwa_name || '',
+      secretary_mobile: soc.secretary_mobile || soc.rwa_phone || ''
     });
   } catch (err) {
     console.error('Error fetching society details:', err);
@@ -271,19 +271,19 @@ async function getSocietyVendors(req, res) {
       vendor_id: Number(v.vendor_id),
       id: Number(v.vendor_id),
       store_name: v.store_name,
-      vendor_name: v.vendor_name || v.owner_name || 'Vendor Owner',
+      vendor_name: v.vendor_name || v.owner_name || '',
       owner_name: v.owner_name || v.vendor_name || '',
       email: v.email || '',
       phone_number: v.phone_number || '',
       phone: v.phone_number || '',
-      gst_number: v.gst_number || '07AAACR12341Z5',
-      opening_time: v.opening_time || '08:00 AM',
-      closing_time: v.closing_time || '10:00 PM',
-      logo: v.logo || v.avatar_url || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200',
-      description: v.description || 'Quality goods & daily essentials delivered within society via WhatsApp.',
-      category: v.category || 'Grocery & Daily Essentials',
-      society_id: v.society_id ? Number(v.society_id) : 'SOC-101',
-      society_name: v.society_name || 'Omaxe Greenwood Residency',
+      gst_number: v.gst_number || v.gstin || '',
+      opening_time: v.opening_time || '',
+      closing_time: v.closing_time || '',
+      logo: v.logo || v.avatar_url || '',
+      description: v.description || '',
+      category: v.category || '',
+      society_id: v.society_id ? Number(v.society_id) : null,
+      society_name: v.society_name || v.area || '',
       status: v.status || 'ACTIVE'
     }));
 

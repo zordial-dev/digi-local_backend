@@ -36,17 +36,6 @@ class VendorService {
     }
 
     if (!vendorRes.rows || vendorRes.rows.length === 0) {
-      if (rawIdStr === '1242') {
-        vendorRes = await query(
-          `SELECT v.*, s.society_name, COALESCE(NULLIF(v.location, ''), NULLIF(v.area, ''), s.location) as location 
-           FROM vendors v 
-           LEFT JOIN societies s ON v.society_id = s.society_id 
-           WHERE v.vendor_id = 1296 OR v.public_id = 'e134a2'`
-        );
-      }
-    }
-
-    if (!vendorRes.rows || vendorRes.rows.length === 0) {
       return null;
     }
 
@@ -64,9 +53,9 @@ class VendorService {
     // Fetch vendor orders safely using LEFT JOIN
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, 
-              COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, 'Rahul Sharma'), 'Resident Customer') as customer_name,
-              COALESCE(u.phone, o.customer_phone, '9876543210') as phone,
-              COALESCE(o.delivery_address, u.address, 'Tower A-402') as delivery_address,
+              COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, ''), 'Resident Customer') as customer_name,
+              COALESCE(NULLIF(o.customer_phone, ''), NULLIF(u.phone, ''), '') as phone,
+              COALESCE(NULLIF(o.delivery_address, ''), NULLIF(u.address, ''), '') as delivery_address,
               o.total_amount, o.status, COALESCE(o.created_at, o.order_timestamp) as created_at
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
