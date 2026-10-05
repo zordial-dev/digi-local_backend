@@ -125,36 +125,57 @@ async function checkAccountExists(req, res) {
     let user = null;
     let vendor = null;
 
+    // Build candidate phone representations for ultra-fast indexed matching
+    const phoneCandidates = Array.from(new Set([
+      cleanDigits,
+      last10,
+      `+91${last10}`,
+      `91${last10}`,
+      `0${last10}`,
+      `+91 ${last10}`,
+      rawTarget
+    ])).filter(Boolean);
+
+    const placeholders = phoneCandidates.map(() => '?').join(',');
+
+    let userPromise = Promise.resolve({ rows: [] });
+    let vendorPromise = Promise.resolve({ rows: [] });
+
     if (!targetRole || targetRole === 'user' || targetRole === 'resident') {
-      let userQuery;
-      let userParams;
       if (isEmail) {
-        userQuery = `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE LOWER(email) = LOWER(?)`;
-        userParams = [rawTarget];
+        userPromise = query(
+          `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1`,
+          [rawTarget]
+        ).catch(() => ({ rows: [] }));
       } else {
-        userQuery = `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE phone = ? OR phone = ? OR phone = ? OR (LENGTH(?) >= 10 AND phone LIKE ?)`;
-        userParams = [rawTarget, cleanDigits, last10, last10, `%${last10}`];
-      }
-      const userRes = await query(userQuery, userParams).catch(() => ({ rows: [] }));
-      if (userRes.rows && userRes.rows.length > 0) {
-        user = userRes.rows[0];
+        userPromise = query(
+          `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE phone IN (${placeholders}) OR phone = ? LIMIT 1`,
+          [...phoneCandidates, rawTarget]
+        ).catch(() => ({ rows: [] }));
       }
     }
 
     if (!targetRole || targetRole === 'vendor' || targetRole === 'merchant') {
-      let vendorQuery;
-      let vendorParams;
       if (isEmail) {
-        vendorQuery = `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE LOWER(email) = LOWER(?)`;
-        vendorParams = [rawTarget];
+        vendorPromise = query(
+          `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE LOWER(email) = LOWER(?) LIMIT 1`,
+          [rawTarget]
+        ).catch(() => ({ rows: [] }));
       } else {
-        vendorQuery = `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`;
-        vendorParams = [rawTarget, cleanDigits, last10, last10, `%${last10}`];
+        vendorPromise = query(
+          `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE phone_number IN (${placeholders}) OR phone_number = ? LIMIT 1`,
+          [...phoneCandidates, rawTarget]
+        ).catch(() => ({ rows: [] }));
       }
-      const vendorRes = await query(vendorQuery, vendorParams).catch(() => ({ rows: [] }));
-      if (vendorRes.rows && vendorRes.rows.length > 0) {
-        vendor = vendorRes.rows[0];
-      }
+    }
+
+    // Execute queries concurrently in parallel for sub-millisecond response times
+    const [userRes, vendorRes] = await Promise.all([userPromise, vendorPromise]);
+    if (userRes.rows && userRes.rows.length > 0) {
+      user = userRes.rows[0];
+    }
+    if (vendorRes.rows && vendorRes.rows.length > 0) {
+      vendor = vendorRes.rows[0];
     }
 
     const userExists = !!user;

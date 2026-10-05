@@ -141,13 +141,16 @@ async function getVendorStorefront(req, res) {
         }
 
         const itemsResult = await query(
-            `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, created_at
-             FROM items WHERE vendor_id = ? AND in_stock = TRUE ORDER BY created_at DESC`,
+            `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, stock, unit, is_available, created_at
+             FROM items WHERE vendor_id = ? ORDER BY created_at DESC`,
             [vendor.vendor_id]
         ).catch(() => ({ rows: [] }));
 
         const itemsList = (itemsResult.rows || []).map(i => {
             const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (i.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
+            const stockNum = i.stock !== null && i.stock !== undefined ? Math.max(0, Number(i.stock)) : 0;
+            const isAvail = (i.is_available === true || i.is_available === 1 || i.is_available === '1' || i.is_available === null || i.is_available === undefined);
+            const inStock = Boolean(i.in_stock) && stockNum > 0 && isAvail;
             return {
                 ...i,
                 item_id: Number(i.item_id),
@@ -155,7 +158,12 @@ async function getVendorStorefront(req, res) {
                 price: Number(i.price || 0),
                 unit_price: Number(i.price || 0),
                 name: i.item_name,
-                in_stock: Boolean(i.in_stock),
+                stock: stockNum,
+                available_quantity: stockNum,
+                max_quantity: stockNum,
+                unit: i.unit || 'piece',
+                in_stock: inStock,
+                is_available: inStock,
                 image_url: finalImg,
                 image: finalImg,
                 imageUrl: finalImg,
@@ -518,7 +526,7 @@ async function getItems(req, res) {
 
         let sql = `
             SELECT i.item_id, i.vendor_id, i.item_name, i.price, i.category, i.description, 
-                   i.image_url, i.in_stock, i.created_at,
+                   i.image_url, i.in_stock, i.stock, i.unit, i.is_available, i.created_at,
                    v.store_name, v.vendor_name, v.category as vendor_category, v.status as vendor_status
             FROM items i
             LEFT JOIN vendors v ON i.vendor_id = v.vendor_id
@@ -554,6 +562,9 @@ async function getItems(req, res) {
         const result = await query(sql, params).catch(() => ({ rows: [] }));
         const itemsList = (result.rows || []).map(i => {
             const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (i.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
+            const stockNum = i.stock !== null && i.stock !== undefined ? Math.max(0, Number(i.stock)) : 0;
+            const isAvail = (i.is_available === true || i.is_available === 1 || i.is_available === '1' || i.is_available === null || i.is_available === undefined);
+            const inStock = Boolean(i.in_stock) && stockNum > 0 && isAvail;
             return {
                 ...i,
                 item_id: Number(i.item_id),
@@ -562,7 +573,12 @@ async function getItems(req, res) {
                 price: Number(i.price || 0),
                 unit_price: Number(i.price || 0),
                 name: i.item_name,
-                in_stock: Boolean(i.in_stock),
+                stock: stockNum,
+                available_quantity: stockNum,
+                max_quantity: stockNum,
+                unit: i.unit || 'piece',
+                in_stock: inStock,
+                is_available: inStock,
                 image_url: finalImg,
                 image: finalImg,
                 imageUrl: finalImg,
@@ -616,6 +632,9 @@ async function getItemOrProductById(req, res, next) {
         if (itemRes.rows && itemRes.rows.length > 0) {
             const i = itemRes.rows[0];
             const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (i.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
+            const stockNum = i.stock !== null && i.stock !== undefined ? Math.max(0, Number(i.stock)) : 0;
+            const isAvail = (i.is_available === true || i.is_available === 1 || i.is_available === '1' || i.is_available === null || i.is_available === undefined);
+            const inStock = Boolean(i.in_stock) && stockNum > 0 && isAvail;
             const cleanItem = {
                 ...i,
                 item_id: Number(i.item_id),
@@ -624,7 +643,12 @@ async function getItemOrProductById(req, res, next) {
                 price: Number(i.price || 0),
                 unit_price: Number(i.price || 0),
                 name: i.item_name,
-                in_stock: Boolean(i.in_stock),
+                stock: stockNum,
+                available_quantity: stockNum,
+                max_quantity: stockNum,
+                unit: i.unit || 'piece',
+                in_stock: inStock,
+                is_available: inStock,
                 image_url: finalImg,
                 image: finalImg,
                 imageUrl: finalImg,
@@ -662,6 +686,50 @@ async function getItemOrProductById(req, res, next) {
     }
 }
 
+/**
+ * GET /api/items/:id/stock or /api/products/:id/stock
+ * Lightweight endpoint to quickly check the real-time stock of a single item
+ */
+async function getItemStock(req, res) {
+    try {
+        const itemId = req.params.id || req.params.itemId || req.params.productId;
+        if (!itemId) {
+            return res.status(400).json({ success: false, error: 'Item ID is required' });
+        }
+
+        const itemRes = await query(
+            `SELECT item_id, vendor_id, item_name, price, stock, unit, in_stock, is_available FROM items WHERE item_id = ?`,
+            [itemId]
+        );
+
+        if (!itemRes.rows || itemRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Item #${itemId} not found` });
+        }
+
+        const item = itemRes.rows[0];
+        const stockNum = item.stock !== null && item.stock !== undefined ? Math.max(0, Number(item.stock)) : 0;
+        const isAvail = (item.is_available === true || item.is_available === 1 || item.is_available === '1' || item.is_available === null || item.is_available === undefined);
+        const inStock = Boolean(item.in_stock) && stockNum > 0 && isAvail;
+
+        return res.status(200).json({
+            success: true,
+            item_id: Number(item.item_id),
+            item_name: item.item_name,
+            vendor_id: Number(item.vendor_id),
+            price: Number(item.price || 0),
+            unit: item.unit || 'piece',
+            stock: stockNum,
+            available_quantity: stockNum,
+            max_quantity: stockNum,
+            in_stock: inStock,
+            is_available: inStock
+        });
+    } catch (err) {
+        console.error('Error fetching item stock:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch item stock', message: err.message });
+    }
+}
+
 module.exports = {
     getSocietyVendorsStorefront,
     getVendorStorefront,
@@ -669,5 +737,6 @@ module.exports = {
     getLocations,
     getCategories,
     getItems,
-    getItemOrProductById
+    getItemOrProductById,
+    getItemStock
 };

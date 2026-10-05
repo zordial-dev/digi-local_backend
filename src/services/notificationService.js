@@ -71,7 +71,7 @@ class NotificationService {
   /**
    * Sends high-priority Push Notification (FCM / Expo) & Socket.IO Sound Alert to Vendor on New Order.
    */
-  async notifyVendorNewOrder({ vendor_id, order_id, total_amount, customer_name, items_count = 1, items = [] }) {
+  async notifyVendorNewOrder({ vendor_id, order_id, total_amount, customer_name, items_count = 1, items = [], remarks = '', delivery_address = '' }) {
     try {
       // 1. Deduplication Guard: Check in-memory deduplication set
       const cleanOrderId = order_id ? String(order_id).trim() : null;
@@ -131,7 +131,10 @@ class NotificationService {
 
       const formattedTotal = calcTotal.toFixed(2);
       const title = `NEW ORDER #${order_id}!`;
-      const body = `Customer: ${finalName} • Total: ₹${formattedTotal}`;
+      let body = `Customer: ${finalName} • Total: ₹${formattedTotal}`;
+      if (remarks) {
+        body += ` • Note: "${remarks}"`;
+      }
 
       let pushResult = { success: true, mode: 'mock', fcm_token: fcmToken };
 
@@ -156,6 +159,11 @@ class NotificationService {
                 type: 'NEW_ORDER',
                 vendor_id: String(vendor_id),
                 total_amount: String(formattedTotal),
+                customer_name: finalName,
+                remarks: String(remarks || ''),
+                notes: String(remarks || ''),
+                delivery_instructions: String(remarks || ''),
+                delivery_address: String(delivery_address || ''),
                 actions: ['ACCEPT', 'REJECT', 'MUTE']
               },
               ttl: 60,
@@ -214,6 +222,11 @@ class NotificationService {
                 order_id: String(order_id),
                 vendor_id: String(vendor_id),
                 total_amount: String(formattedTotal),
+                customer_name: finalName,
+                remarks: String(remarks || ''),
+                notes: String(remarks || ''),
+                delivery_instructions: String(remarks || ''),
+                delivery_address: String(delivery_address || ''),
                 sound: 'new_order_alert_sound',
                 actions: JSON.stringify(['ACCEPT', 'REJECT', 'MUTE'])
               }
@@ -247,6 +260,10 @@ class NotificationService {
             customer_name: customer_name || 'Resident',
             items_count,
             items,
+            remarks: String(remarks || ''),
+            notes: String(remarks || ''),
+            delivery_instructions: String(remarks || ''),
+            delivery_address: String(delivery_address || ''),
             timestamp: new Date().toISOString(),
             sound: 'new_order_alert_sound'
           };

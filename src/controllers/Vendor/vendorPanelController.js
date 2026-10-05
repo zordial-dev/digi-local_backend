@@ -332,8 +332,16 @@ async function updateItem(req, res) {
             params.push(price);
         }
         if (stock !== undefined) {
+            const stockVal = Math.max(0, parseInt(stock, 10) || 0);
             fields.push('stock = ?');
-            params.push(stock);
+            params.push(stockVal);
+            if (is_available === undefined) {
+                const autoAvail = stockVal > 0 ? 1 : 0;
+                fields.push('is_available = ?');
+                params.push(autoAvail);
+                fields.push('in_stock = ?');
+                params.push(stockVal > 0);
+            }
         }
         if (category !== undefined) {
             fields.push('category = ?');
@@ -763,6 +771,77 @@ async function updatePaymentDetails(req, res) {
   }
 }
 
+/**
+ * PATCH /api/vendorPanel/:vendorId/items/:itemId/stock
+ * PUT /api/vendorPanel/:vendorId/items/:itemId/stock
+ * Dedicated, lightweight endpoint for updating or adjusting an item's inventory stock count
+ */
+async function updateItemStock(req, res) {
+  try {
+    const { vendorId, itemId } = req.params;
+    const rawStock = req.body.stock !== undefined ? req.body.stock : req.body.quantity;
+    const stockChange = req.body.stock_change !== undefined ? req.body.stock_change : req.body.delta;
+
+    if (rawStock === undefined && stockChange === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Either "stock" (absolute value) or "stock_change" (increment/decrement delta) is required'
+      });
+    }
+
+    // Lookup item
+    const itemRes = await query(
+      `SELECT item_id, vendor_id, item_name, price, stock, in_stock, is_available FROM items WHERE item_id = ?`,
+      [itemId]
+    );
+
+    if (!itemRes.rows || itemRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Item #${itemId} not found` });
+    }
+
+    const item = itemRes.rows[0];
+    if (vendorId && Number(item.vendor_id) !== Number(vendorId)) {
+      return res.status(403).json({ success: false, error: 'Unauthorized: Item does not belong to this vendor' });
+    }
+
+    const currentStock = item.stock !== null && item.stock !== undefined ? Math.max(0, Number(item.stock)) : 0;
+    let newStock = currentStock;
+
+    if (rawStock !== undefined) {
+      newStock = Math.max(0, parseInt(rawStock, 10) || 0);
+    } else if (stockChange !== undefined) {
+      newStock = Math.max(0, currentStock + (parseInt(stockChange, 10) || 0));
+    }
+
+    const autoInStock = newStock > 0;
+    const autoAvail = newStock > 0 ? 1 : 0;
+
+    await query(
+      `UPDATE items 
+       SET stock = ?,
+           in_stock = ?,
+           is_available = ?
+       WHERE item_id = ?`,
+      [newStock, autoInStock, autoAvail, itemId]
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `Stock updated successfully from ${currentStock} to ${newStock}`,
+      item_id: Number(itemId),
+      item_name: item.item_name,
+      previous_stock: currentStock,
+      stock: newStock,
+      available_quantity: newStock,
+      max_quantity: newStock,
+      in_stock: autoInStock,
+      is_available: autoInStock
+    });
+  } catch (err) {
+    console.error('Error updating item stock:', err);
+    return res.status(500).json({ success: false, error: 'Failed to update item stock', message: err.message });
+  }
+}
 
 module.exports = {
   updatePaymentDetails,
@@ -773,6 +852,7 @@ module.exports = {
   addItem,
   updateItem,
   updateItemImage,
+  updateItemStock,
   deleteItem,
   updateSettings,
   renewSubscription,

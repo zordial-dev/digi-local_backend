@@ -205,6 +205,7 @@ CREATE TABLE IF NOT EXISTS orders (
     customer_phone VARCHAR(50),
     vendor_notified BOOLEAN DEFAULT FALSE,
     vendor_notified_at TIMESTAMP,
+    remarks TEXT DEFAULT '',
     order_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

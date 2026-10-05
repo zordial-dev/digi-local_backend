@@ -29,6 +29,7 @@ async function getUserOrders(req, res) {
               v.store_name, v.logo as store_logo, o.total_amount, o.status, 
               o.payment_status, o.refund_id, o.refund_amount, o.refund_status, o.refunded_at,
               COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address,
+              COALESCE(o.remarks, '') as remarks,
               u.name as user_name, u.phone as user_phone,
               u.address as user_saved_address, u.flat as user_flat, u.area as user_area, u.society_name as user_soc
        FROM orders o
@@ -128,6 +129,10 @@ async function getUserOrders(req, res) {
         refund_id: ord.refund_id || null,
         refund_amount: ord.refund_amount ? Number(ord.refund_amount) : null,
         refunded_at: ord.refunded_at || null,
+        remarks: ord.remarks || '',
+        notes: ord.remarks || '',
+        instructions: ord.remarks || '',
+        delivery_instructions: ord.remarks || '',
         date: formatISTISO(ord.created_at),
         timestamp: formatISTTimeOnly(ord.created_at),
         createdAt: formatISTISO(ord.created_at),
@@ -163,6 +168,7 @@ async function getVendorOrders(req, res) {
               COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, ''), 'Resident') as customer_name,
               COALESCE(NULLIF(o.customer_phone, ''), NULLIF(u.phone, ''), '') as phone, 
               COALESCE(NULLIF(o.delivery_address, ''), NULLIF(u.address, ''), '') as delivery_address,
+              COALESCE(o.remarks, '') as remarks,
               o.total_amount, o.status, o.created_at
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
@@ -218,6 +224,10 @@ async function getVendorOrders(req, res) {
         serviceCharge: serviceCharge,
         total: total,
         total_amount: total, // Backward compat
+        remarks: ord.remarks || '',
+        notes: ord.remarks || '',
+        instructions: ord.remarks || '',
+        delivery_instructions: ord.remarks || '',
         status: (ord.status || 'PENDING').toLowerCase(),
         timestamp: formatISTTimeOnly(ord.created_at),
         createdAt: formatISTISO(ord.created_at),
@@ -275,33 +285,94 @@ async function createOrder(req, res) {
     let subtotal = 0;
 
     for (const item of items) {
-      let itemName = item.item_name || item.itemName || item.name;
-      let itemPrice = Number(item.price || item.unit_price || item.unitPrice);
-
-      if (!itemName || !itemPrice) {
-        const dbItemRes = await query(`SELECT item_name, price FROM items WHERE item_id = ?`, [item.item_id]);
-        if (dbItemRes.rows.length > 0) {
-          itemName = itemName || dbItemRes.rows[0].item_name;
-          itemPrice = itemPrice ? itemPrice : Number(dbItemRes.rows[0].price);
-        }
-      }
-
+      const rawItemId = item.item_id || item.itemId || item.id;
       const itemQty = Number(item.quantity || item.qty || 1);
-      if (isNaN(itemPrice) || itemPrice === 0) {
-        const itemTotalAlias = item.item_total || item.itemTotal || item.total;
-        if (itemTotalAlias) {
-          itemPrice = Number(itemTotalAlias) / itemQty;
-        }
+
+      if (!rawItemId) {
+        return res.status(400).json({
+          success: false,
+          error: 'Each item in order must include a valid item_id'
+        });
       }
 
-      itemName = itemName || 'Item';
-      itemPrice = itemPrice || 0;
+      if (isNaN(itemQty) || itemQty <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid quantity '${item.quantity || item.qty}' for item #${rawItemId}. Quantity must be at least 1.`
+        });
+      }
+
+      // Query database for authoritative item data: name, price, stock, in_stock, is_available, vendor_id
+      const dbItemRes = await query(
+        `SELECT item_id, vendor_id, item_name, price, stock, in_stock, is_available FROM items WHERE item_id = ?`,
+        [rawItemId]
+      );
+
+      if (!dbItemRes.rows || dbItemRes.rows.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Item ID ${rawItemId} was not found in the store catalog.`,
+          item_id: rawItemId
+        });
+      }
+
+      const dbItem = dbItemRes.rows[0];
+
+      // Validate vendor ownership if vendor_id specified
+      if (vendor_id && Number(dbItem.vendor_id) !== Number(vendor_id)) {
+        return res.status(400).json({
+          success: false,
+          error: `Item '${dbItem.item_name}' does not belong to vendor #${vendor_id}.`,
+          item_id: rawItemId
+        });
+      }
+
+      const currentStock = dbItem.stock !== null && dbItem.stock !== undefined ? Number(dbItem.stock) : 0;
+      const isItemAvailable = (dbItem.in_stock !== false && dbItem.is_available !== false && dbItem.is_available !== 0);
+
+      // Check if out of stock
+      if (currentStock <= 0 || !isItemAvailable) {
+        return res.status(400).json({
+          success: false,
+          error: `Cannot order '${dbItem.item_name}': This item is currently out of stock.`,
+          message: `Cannot order '${dbItem.item_name}': This item is currently out of stock.`,
+          out_of_stock: true,
+          item_id: Number(dbItem.item_id),
+          item_name: dbItem.item_name,
+          available_stock: currentStock,
+          requested_quantity: itemQty
+        });
+      }
+
+      // Check if requested quantity exceeds available stock
+      if (itemQty > currentStock) {
+        return res.status(400).json({
+          success: false,
+          error: `Only ${currentStock} '${dbItem.item_name}' available in stock, but you requested ${itemQty}. Please reduce the quantity.`,
+          message: `Only ${currentStock} '${dbItem.item_name}' available in stock, but you requested ${itemQty}. Please reduce the quantity.`,
+          insufficient_stock: true,
+          item_id: Number(dbItem.item_id),
+          item_name: dbItem.item_name,
+          available_stock: currentStock,
+          requested_quantity: itemQty,
+          max_allowed: currentStock
+        });
+      }
+
+      let itemPrice = Number(item.price || item.unit_price || item.unitPrice);
+      if (isNaN(itemPrice) || itemPrice <= 0) {
+        itemPrice = Number(dbItem.price) || 0;
+      }
+      const itemName = item.item_name || item.itemName || item.name || dbItem.item_name || 'Item';
 
       populatedItems.push({
-        item_id: item.item_id,
+        item_id: Number(dbItem.item_id),
+        _resolvedItemId: Number(dbItem.item_id),
         item_name: itemName,
         quantity: itemQty,
-        price: itemPrice
+        price: itemPrice,
+        stock_before: currentStock,
+        stock_remaining: currentStock - itemQty
       });
 
       subtotal += itemPrice * itemQty;
@@ -354,11 +425,18 @@ async function createOrder(req, res) {
     const paymentStatus = 'PENDING';
     const orderStatus = 'PLACED';
 
+    const rawRemarks = String(
+      req.body.remarks || req.body.remark || req.body.notes || req.body.note ||
+      req.body.instructions || req.body.delivery_instructions || req.body.special_instructions ||
+      req.body.order_notes || req.body.order_note || req.body.comment || ''
+    ).trim();
+
     await query(
       `INSERT INTO orders (
          order_id, user_id, vendor_id, society_id, total_amount, status,
-         payment_status, payment_method, customer_phone, delivery_address, created_at, customer_name
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         payment_status, payment_method, customer_phone, delivery_address, created_at, customer_name,
+         remarks
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         orderId,
         resolvedUserId || 'usr_anonymous',
@@ -371,12 +449,13 @@ async function createOrder(req, res) {
         rawPhone || null,
         finalDeliveryAddress,
         createdAt,
-        resolvedCustomerName
+        resolvedCustomerName,
+        rawRemarks
       ]
     ).catch(async () => {
       return query(
-        `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name, remarks)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           orderId,
           resolvedUserId || 'usr_anonymous',
@@ -386,9 +465,26 @@ async function createOrder(req, res) {
           orderStatus,
           finalDeliveryAddress,
           createdAt,
-          resolvedCustomerName
+          resolvedCustomerName,
+          rawRemarks
         ]
-      );
+      ).catch(async () => {
+        return query(
+          `INSERT INTO orders (order_id, user_id, vendor_id, society_id, total_amount, status, delivery_address, created_at, customer_name)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            orderId,
+            resolvedUserId || 'usr_anonymous',
+            vendor_id,
+            society_id || null,
+            numTotal,
+            orderStatus,
+            finalDeliveryAddress,
+            createdAt,
+            resolvedCustomerName
+          ]
+        );
+      });
     });
 
     // ── Save last address entered by user to database ─────────────────────────────
@@ -425,14 +521,7 @@ async function createOrder(req, res) {
     }
 
     for (const pItem of populatedItems) {
-      let validItemId = Number(pItem.item_id) || 1;
-      const itemCheck = await query(`SELECT item_id FROM items WHERE item_id = ?`, [validItemId]).catch(() => ({ rows: [] }));
-      if (!itemCheck.rows || itemCheck.rows.length === 0) {
-        const fallbackCheck = await query(`SELECT item_id FROM items LIMIT 1`).catch(() => ({ rows: [] }));
-        if (fallbackCheck.rows && fallbackCheck.rows.length > 0) {
-          validItemId = Number(fallbackCheck.rows[0].item_id);
-        }
-      }
+      const validItemId = pItem._resolvedItemId || Number(pItem.item_id);
 
       await query(
         `INSERT INTO order_details (order_id, item_id, item_name, quantity, price, unit_price, item_total)
@@ -448,6 +537,36 @@ async function createOrder(req, res) {
         ]
       ).catch((err) => console.error('Error inserting order detail:', err.message));
     }
+
+    // ── Deduct stock atomically for each ordered item ──────────────────────────
+    for (const pItem of populatedItems) {
+      const deductId = pItem._resolvedItemId || Number(pItem.item_id);
+      const deductQty = Number(pItem.quantity) || 1;
+      if (!deductId) continue;
+
+      const deductRes = await query(
+        `UPDATE items 
+         SET stock = stock - ?,
+             in_stock = CASE WHEN (stock - ?) <= 0 THEN FALSE ELSE in_stock END
+         WHERE item_id = ? AND stock >= ?
+         RETURNING stock, in_stock`,
+        [deductQty, deductQty, deductId, deductQty]
+      ).catch(() => ({ rows: [] }));
+
+      if (deductRes.rows && deductRes.rows.length > 0) {
+        pItem.stock_remaining = Number(deductRes.rows[0].stock);
+      } else {
+        // Fallback update in case of concurrency or driver differences
+        await query(
+          `UPDATE items 
+           SET stock = GREATEST(0, stock - ?),
+               in_stock = CASE WHEN stock <= ? THEN FALSE ELSE in_stock END
+           WHERE item_id = ?`,
+          [deductQty, deductQty, deductId]
+        ).catch((err) => console.warn(`[Stock] Could not deduct stock for item ${deductId}:`, err.message));
+      }
+    }
+
 
     // Fetch vendor & society details for app order context
     const vendorRes = await query(`SELECT store_name, phone_number FROM vendors WHERE vendor_id = ?`, [vendor_id]);
@@ -501,6 +620,8 @@ async function createOrder(req, res) {
         items_count: itemsCount,
         payment_method: paymentMethod,
         payment_status: paymentStatus,
+        remarks: rawRemarks,
+        delivery_address: finalDeliveryAddress,
         items: populatedItems
       }).catch(err => console.error('[Order Push Notification Error]:', err.message));
     }
@@ -515,6 +636,9 @@ async function createOrder(req, res) {
       status: orderStatus,
       payment_method: paymentMethod,
       payment_status: paymentStatus,
+      remarks: rawRemarks,
+      notes: rawRemarks,
+      delivery_instructions: rawRemarks,
       societyName: societyName,
       created_at: createdAt,
       order: {
@@ -524,6 +648,9 @@ async function createOrder(req, res) {
         customer_name: finalCustomerName,
         phone_number: rawPhone || (req.user?.phone ? String(req.user.phone) : ''),
         delivery_address: finalDeliveryAddress || userDbAddress || '',
+        remarks: rawRemarks,
+        notes: rawRemarks,
+        delivery_instructions: rawRemarks,
         status: orderStatus,
         payment_status: paymentStatus,
         payment_method: paymentMethod,
@@ -536,7 +663,8 @@ async function createOrder(req, res) {
           item_name: i.item_name || 'Item',
           quantity: Number(i.quantity || 1),
           unit_price: Number(i.price || 0),
-          price: Number(i.price || 0)
+          price: Number(i.price || 0),
+          stock_remaining: i.stock_remaining !== undefined ? i.stock_remaining : null
         }))
       }
     };
@@ -670,6 +798,20 @@ async function updateOrderStatus(req, res) {
       } else {
         await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
       }
+
+      // ── Restore stock for cancelled orders ──────────────────────────────────
+      const cancelledItemsRes = await query(
+        `SELECT item_id, quantity FROM order_details WHERE order_id = ?`,
+        [id]
+      ).catch(() => ({ rows: [] }));
+      for (const ci of (cancelledItemsRes.rows || [])) {
+        if (!ci.item_id || !ci.quantity) continue;
+        await query(
+          `UPDATE items SET stock = stock + ?, in_stock = TRUE WHERE item_id = ?`,
+          [Number(ci.quantity), Number(ci.item_id)]
+        ).catch(e => console.warn(`[Stock] Could not restore stock for item ${ci.item_id} on cancel:`, e.message));
+      }
+
     } else {
       await query(`UPDATE orders SET status = ? WHERE order_id = ?`, [targetStatus, id]);
     }
@@ -871,6 +1013,22 @@ async function cancelOrder(req, res) {
       );
     }
 
+    // ── Restore stock for cancelled order items ───────────────────────────────
+    const cancelledItemsRes = await query(
+      `SELECT item_id, quantity FROM order_details WHERE order_id = ?`,
+      [id]
+    ).catch(() => ({ rows: [] }));
+    for (const ci of (cancelledItemsRes.rows || [])) {
+      if (!ci.item_id || !ci.quantity) continue;
+      await query(
+        `UPDATE items 
+         SET stock = stock + ?,
+             in_stock = TRUE
+         WHERE item_id = ?`,
+        [Number(ci.quantity), Number(ci.item_id)]
+      ).catch(e => console.warn(`[Stock] Could not restore stock for item ${ci.item_id} on customer cancel:`, e.message));
+    }
+
     // Notify vendor
     try {
       if (order.vendor_id) {
@@ -962,9 +1120,14 @@ async function getOrderById(req, res) {
 
     const resolvedDeliveryAddress = rawOrder.delivery_address || rawOrder.user_saved_address || [rawOrder.user_flat, rawOrder.user_soc || rawOrder.user_area].filter(Boolean).join(', ') || '';
     rawOrder.delivery_address = resolvedDeliveryAddress;
+    const orderRemarks = rawOrder.remarks || '';
 
     const enrichedOrder = {
       ...rawOrder,
+      remarks: orderRemarks,
+      notes: orderRemarks,
+      instructions: orderRemarks,
+      delivery_instructions: orderRemarks,
       refund_status_label: refundStatusLabel,
       is_refund_in_progress: Boolean(isProgress)
     };
@@ -1006,6 +1169,10 @@ async function notifyOrderVendor(req, res) {
       total_amount: numTotal,
       customer_name: customerName,
       items_count: itemsCount,
+      payment_method: order.payment_method || 'COD',
+      payment_status: order.payment_status || 'PENDING',
+      remarks: order.remarks || '',
+      delivery_address: order.delivery_address || '',
       items: items
     });
 
@@ -1057,6 +1224,97 @@ async function getOrdersByQuery(req, res) {
   });
 }
 
+/**
+ * POST /api/orders/check-stock or /api/orders/validate-cart
+ * Validates whether the requested item quantities can be fulfilled with currently available stock.
+ */
+async function validateCartStock(req, res) {
+  try {
+    const items = req.body.items || req.body.order_items || req.body.cart_items;
+    const vendor_id = req.body.vendor_id || req.body.vendorId;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Items array is required'
+      });
+    }
+
+    let allCanFulfill = true;
+    const validationResults = [];
+
+    for (const item of items) {
+      const rawItemId = item.item_id || item.itemId || item.id;
+      const requestedQty = Number(item.quantity || item.qty || 1);
+
+      if (!rawItemId) {
+        allCanFulfill = false;
+        validationResults.push({
+          item_id: null,
+          valid: false,
+          can_fulfill: false,
+          error: 'Missing item_id'
+        });
+        continue;
+      }
+
+      const dbRes = await query(
+        `SELECT item_id, vendor_id, item_name, price, stock, in_stock, is_available FROM items WHERE item_id = ?`,
+        [rawItemId]
+      );
+
+      if (!dbRes.rows || dbRes.rows.length === 0) {
+        allCanFulfill = false;
+        validationResults.push({
+          item_id: rawItemId,
+          valid: false,
+          can_fulfill: false,
+          error: `Item #${rawItemId} not found`
+        });
+        continue;
+      }
+
+      const dbItem = dbRes.rows[0];
+      const currentStock = dbItem.stock !== null && dbItem.stock !== undefined ? Math.max(0, Number(dbItem.stock)) : 0;
+      const isAvail = (dbItem.in_stock !== false && dbItem.is_available !== false && dbItem.is_available !== 0);
+      const canFulfill = isAvail && currentStock >= requestedQty;
+
+      if (!canFulfill) {
+        allCanFulfill = false;
+      }
+
+      validationResults.push({
+        item_id: Number(dbItem.item_id),
+        item_name: dbItem.item_name,
+        price: Number(dbItem.price || 0),
+        requested_quantity: requestedQty,
+        available_stock: currentStock,
+        max_allowed: currentStock,
+        remaining_after_order: Math.max(0, currentStock - requestedQty),
+        in_stock: isAvail && currentStock > 0,
+        is_available: isAvail,
+        can_fulfill: canFulfill,
+        error: !isAvail || currentStock <= 0
+          ? `'${dbItem.item_name}' is currently out of stock`
+          : (currentStock < requestedQty
+            ? `Only ${currentStock} available in stock (requested ${requestedQty})`
+            : null)
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      can_fulfill: allCanFulfill,
+      valid: allCanFulfill,
+      message: allCanFulfill ? 'All items are in stock and available for order' : 'Some items exceed available stock or are out of stock',
+      items: validationResults
+    });
+  } catch (err) {
+    console.error('Error validating cart stock:', err);
+    return res.status(500).json({ success: false, error: 'Failed to validate stock', message: err.message });
+  }
+}
+
 module.exports = {
   getUserOrders,
   getVendorOrders,
@@ -1065,5 +1323,6 @@ module.exports = {
   updateOrderStatus,
   cancelOrder,
   getOrderById,
-  notifyOrderVendor
+  notifyOrderVendor,
+  validateCartStock
 };

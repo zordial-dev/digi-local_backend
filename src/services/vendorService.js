@@ -56,6 +56,7 @@ class VendorService {
               COALESCE(NULLIF(o.customer_name, ''), NULLIF(u.name, ''), 'Resident Customer') as customer_name,
               COALESCE(NULLIF(o.customer_phone, ''), NULLIF(u.phone, ''), '') as phone,
               COALESCE(NULLIF(o.delivery_address, ''), NULLIF(u.address, ''), '') as delivery_address,
+              COALESCE(o.remarks, '') as remarks,
               o.total_amount, o.status, COALESCE(o.created_at, o.order_timestamp) as created_at
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
@@ -103,6 +104,10 @@ class VendorService {
         ...o,
         customer_name: o.customer_name || 'Resident',
         total_amount: finalTotal,
+        remarks: o.remarks || '',
+        notes: o.remarks || '',
+        instructions: o.remarks || '',
+        delivery_instructions: o.remarks || '',
         items: normalizedItems
       };
     });

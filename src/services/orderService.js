@@ -9,7 +9,7 @@ class OrderService {
   /**
    * Creates a customer order inside an ACID database transaction.
    */
-  async createOrder({ customer_name, phone_number, address, vendor_id, items }) {
+  async createOrder({ customer_name, phone_number, address, vendor_id, items, remarks = '' }) {
     return await withTransaction(async (txQuery) => {
       // 1. Verify Vendor exists and is ACTIVE
       const vendorRes = await txQuery(`SELECT vendor_id, status FROM vendors WHERE vendor_id = ?`, [vendor_id]);
@@ -98,9 +98,14 @@ class OrderService {
 
       // 7. Insert Order Record with Authoritative Server-Calculated Total
       const orderRes = await txQuery(
-        `INSERT INTO orders (vendor_id, user_id, customer_name, customer_phone, delivery_address, status, total_amount) VALUES (?, ?, ?, ?, ?, 'PLACED', ?)`,
-        [vendor_id, user_id, customer_name, phone_number, address, computedTotalAmount]
-      );
+        `INSERT INTO orders (vendor_id, user_id, customer_name, customer_phone, delivery_address, status, total_amount, remarks) VALUES (?, ?, ?, ?, ?, 'PLACED', ?, ?)`,
+        [vendor_id, user_id, customer_name, phone_number, address, computedTotalAmount, String(remarks || '').trim()]
+      ).catch(async () => {
+        return txQuery(
+          `INSERT INTO orders (vendor_id, user_id, customer_name, customer_phone, delivery_address, status, total_amount) VALUES (?, ?, ?, ?, ?, 'PLACED', ?)`,
+          [vendor_id, user_id, customer_name, phone_number, address, computedTotalAmount]
+        );
+      });
       const order_id = orderRes.insertId;
 
       // 8. Insert Order Line Items
@@ -119,7 +124,9 @@ class OrderService {
         total_amount: computedTotalAmount,
         customer_name,
         items_count: verifiedLineItems.length,
-        items: verifiedLineItems
+        items: verifiedLineItems,
+        remarks: String(remarks || '').trim(),
+        delivery_address: address
       }).catch(err => console.error('[Order Notification Error]', err.message));
 
       return {

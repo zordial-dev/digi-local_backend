@@ -255,6 +255,14 @@ async function createIndexes() {
     'CREATE INDEX IF NOT EXISTS idx_payments_cf_order_id ON payments (cashfree_order_id)',
     'CREATE INDEX IF NOT EXISTS idx_orders_cf_order_id ON orders (cashfree_order_id)',
 
+    // Indexes for Users & Account Lookup (Optimizes /api/auth/check-account)
+    'CREATE INDEX IF NOT EXISTS idx_users_phone ON users (phone)',
+    'CREATE INDEX IF NOT EXISTS idx_users_lower_email ON users (LOWER(email))',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_phone_number ON vendors (phone_number)',
+    'CREATE INDEX IF NOT EXISTS idx_vendors_lower_email ON vendors (LOWER(email))',
+    'CREATE INDEX IF NOT EXISTS idx_orders_vendor_id ON orders (vendor_id)',
+    'CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders (user_id)',
+
     // Indexes for Subscriptions, Plans & Coupons
     'CREATE INDEX IF NOT EXISTS idx_subscriptions_vendor_id ON subscriptions (vendor_id)',
     'CREATE INDEX IF NOT EXISTS idx_subscriptions_status_end_date ON subscriptions (status, end_date)',
@@ -470,6 +478,9 @@ async function setupTablesPg() {
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(50)`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vendor_notified BOOLEAN DEFAULT FALSE`,
     `ALTER TABLE orders ADD COLUMN IF NOT EXISTS vendor_notified_at TIMESTAMP`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS remarks TEXT DEFAULT ''`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`,
+    `ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_instructions TEXT DEFAULT ''`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS order_id VARCHAR(100)`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS vendor_id BIGINT`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS user_id VARCHAR(100)`,

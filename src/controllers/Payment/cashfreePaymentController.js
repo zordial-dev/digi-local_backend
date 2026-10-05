@@ -632,7 +632,7 @@ async function cashfreeWebhook(req, res) {
 
         // Fetch order to notify vendor
         const ordRes = await query(
-          `SELECT order_id, vendor_id, total_amount, customer_name FROM orders WHERE order_id = ? OR cashfree_order_id = ?`,
+          `SELECT order_id, vendor_id, total_amount, customer_name, remarks, delivery_address FROM orders WHERE order_id = ? OR cashfree_order_id = ?`,
           [orderId, orderId]
         ).catch(() => ({ rows: [] }));
 
@@ -642,7 +642,9 @@ async function cashfreeWebhook(req, res) {
             vendor_id: ord.vendor_id,
             order_id: ord.order_id,
             total_amount: Number(ord.total_amount || paymentAmount),
-            customer_name: ord.customer_name || 'Resident Customer'
+            customer_name: ord.customer_name || 'Resident Customer',
+            remarks: ord.remarks || '',
+            delivery_address: ord.delivery_address || ''
           }).catch(() => {});
         }
       }

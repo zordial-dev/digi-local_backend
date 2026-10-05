@@ -67,7 +67,8 @@ router.put(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/ser
 router.delete(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.deleteService);
 
 // ── Account Pre-Check Route (User / Vendor Existence Check) ────
-router.post(['/api/auth/check-account', '/api/auth/check-user', '/api/auth/check-exists', '/api/check-phone'], usersController.checkAccountExists);
+router.post(['/api/auth/check-account', '/api/auth/check-user', '/api/auth/check-exists', '/api/check-phone', '/auth/check-account', '/api/users/check-account', '/api/users/check-phone'], usersController.checkAccountExists);
+router.get(['/api/auth/check-account', '/api/auth/check-user', '/api/auth/check-exists', '/api/check-phone', '/auth/check-account', '/api/users/check-account', '/api/users/check-phone'], usersController.checkAccountExists);
 
 // ── Core Business API Routes ────────────────────────────────
 router.use('/api/otp', otpRoutes);                 // Message Central Mobile/Web OTP Service
@@ -405,6 +406,39 @@ router.patch(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId'
 router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
 router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
 router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+
+// ── Real-Time Inventory & Stock Management Endpoints ─────────────────────────
+router.post([
+    '/api/orders/check-stock',
+    '/api/orders/validate-cart',
+    '/api/cart/check-stock',
+    '/api/cart/validate'
+], ordersController.validateCartStock);
+
+router.get([
+    '/api/items/:id/stock',
+    '/api/products/:id/stock',
+    '/items/:id/stock',
+    '/products/:id/stock'
+], storefrontController.getItemStock);
+
+router.patch([
+    '/api/vendorPanel/:vendorId/items/:itemId/stock',
+    '/api/vendors/:vendorId/items/:itemId/stock',
+    '/api/items/:itemId/stock',
+    '/api/products/:itemId/stock',
+    '/items/:itemId/stock',
+    '/products/:itemId/stock'
+], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemStock);
+
+router.put([
+    '/api/vendorPanel/:vendorId/items/:itemId/stock',
+    '/api/vendors/:vendorId/items/:itemId/stock',
+    '/api/items/:itemId/stock',
+    '/api/products/:itemId/stock',
+    '/items/:itemId/stock',
+    '/products/:itemId/stock'
+], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemStock);
 
 // ── Root Alias Forwarding for Frontend Clients omitting /api prefix ─────
 router.get(['/vendors', '/stores'], (req, res, next) => {

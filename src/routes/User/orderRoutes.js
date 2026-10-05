@@ -11,6 +11,10 @@ router.get('/user/:userId', ordersController.getUserOrders);
 // D2. Fetch Vendor Store Orders
 router.get('/vendor/:vendorId', ordersController.getVendorOrders);
 
+// Validate Cart Stock & Availability before checkout
+router.post('/check-stock', ordersController.validateCartStock);
+router.post('/validate-cart', ordersController.validateCartStock);
+
 // D3. Create New Order
 router.post('/', ordersController.createOrder);
 
