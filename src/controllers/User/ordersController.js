@@ -27,7 +27,8 @@ async function getUserOrders(req, res) {
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
               o.payment_status, o.refund_id, o.refund_amount, o.refund_status, o.refunded_at,
-              COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address
+              COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address,
+              u.address as user_saved_address, u.flat as user_flat, u.area as user_area, u.society_name as user_soc
        FROM orders o
        LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
        LEFT JOIN societies s ON o.society_id = s.society_id
@@ -60,7 +61,7 @@ async function getUserOrders(req, res) {
       const total = Number(ord.total_amount || 0);
       const serviceCharge = Math.max(0, total - subtotal);
 
-      let flatNumber = ord.delivery_address || 'Unknown';
+      let flatNumber = ord.delivery_address || ord.user_saved_address || 'Unknown';
       let buildingNumber = '-';
       if (flatNumber.includes(',')) {
         const parts = flatNumber.split(',');
@@ -102,7 +103,7 @@ async function getUserOrders(req, res) {
         store_name: ord.store_name || 'FreshMart Grocery & Organic',
         store_logo: ord.store_logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=120&auto=format&fit=crop&q=80',
         society_name: ord.society_name || 'Greenwood Residency',
-        delivery_address: ord.delivery_address || 'Tower A-402',
+        delivery_address: ord.delivery_address || ord.user_saved_address || [ord.user_flat, ord.user_soc || ord.user_area].filter(Boolean).join(', ') || '',
         flatNumber: flatNumber,
         buildingNumber: buildingNumber,
         subtotal: subtotal,
@@ -311,10 +312,11 @@ async function createOrder(req, res) {
 
     let resolvedUserId = user_id || null;
     let resolvedCustomerName = rawCustomerName || null;
+    let userDbAddress = '';
 
     if (resolvedUserId || rawPhone) {
       const uLookup = await query(
-        `SELECT user_id, name FROM users WHERE user_id = ? OR phone = ? OR phone = ? LIMIT 1`,
+        `SELECT user_id, name, address, flat, area, society_name, city, state, pincode FROM users WHERE user_id = ? OR phone = ? OR phone = ? LIMIT 1`,
         [resolvedUserId || '', rawPhone || '', (rawPhone || '').replace(/\D/g, '')]
       ).catch(() => ({ rows: [] }));
 
@@ -323,6 +325,12 @@ async function createOrder(req, res) {
         if (!resolvedCustomerName && uLookup.rows[0].name && uLookup.rows[0].name !== 'Rahul Sharma') {
           resolvedCustomerName = uLookup.rows[0].name;
         }
+        const uRow = uLookup.rows[0];
+        userDbAddress = String(
+          uRow.address ||
+          [uRow.flat, uRow.society_name || uRow.area, uRow.city, uRow.state, uRow.pincode].filter(Boolean).join(', ') ||
+          ''
+        ).trim();
       }
     }
 
@@ -330,7 +338,8 @@ async function createOrder(req, res) {
     const orderArea = String(req.body.area || req.body.location || req.body.society_name || '').trim();
     const orderCity = String(req.body.city || '').trim();
     const orderPincode = String(req.body.pincode || req.body.zip || '').trim();
-    const finalDeliveryAddress = String(delivery_address || [orderFlat, orderArea, orderCity, orderPincode].filter(Boolean).join(', ') || '').trim();
+    const rawDeliveryAddress = String(delivery_address || [orderFlat, orderArea, orderCity, orderPincode].filter(Boolean).join(', ') || '').trim();
+    const finalDeliveryAddress = rawDeliveryAddress || userDbAddress || '';
 
     if (!resolvedCustomerName) {
       resolvedCustomerName = rawCustomerName || 'Resident Customer';
@@ -511,7 +520,7 @@ async function createOrder(req, res) {
         user_id: resolvedUserId || 'usr_9784319840',
         customer_name: finalCustomerName,
         phone_number: rawPhone || '+919784319840',
-        delivery_address: delivery_address || 'Tower A-402, Omaxe Greenwood Residency',
+        delivery_address: finalDeliveryAddress || userDbAddress || '',
         status: orderStatus,
         payment_status: paymentStatus,
         payment_method: paymentMethod,
@@ -929,7 +938,12 @@ async function cancelOrder(req, res) {
 async function getOrderById(req, res) {
   try {
     const { orderId } = req.params;
-    const orderRes = await query(`SELECT * FROM orders WHERE order_id = ?`, [orderId]);
+    const orderRes = await query(`
+      SELECT o.*, u.address as user_saved_address, u.flat as user_flat, u.area as user_area, u.society_name as user_soc
+      FROM orders o
+      LEFT JOIN users u ON o.user_id = u.user_id
+      WHERE o.order_id = ?
+    `, [orderId]);
     if (orderRes.rows.length === 0) {
       return res.status(404).json({ error: 'Order ID not found' });
     }
@@ -942,6 +956,9 @@ async function getOrderById(req, res) {
     const refundStatusLabel = isSuccess
       ? 'Refund Completed'
       : (isProgress ? 'Refund in Progress (Crediting back to original payment source)' : null);
+
+    const resolvedDeliveryAddress = rawOrder.delivery_address || rawOrder.user_saved_address || [rawOrder.user_flat, rawOrder.user_soc || rawOrder.user_area].filter(Boolean).join(', ') || '';
+    rawOrder.delivery_address = resolvedDeliveryAddress;
 
     const enrichedOrder = {
       ...rawOrder,

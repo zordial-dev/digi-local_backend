@@ -144,7 +144,15 @@ function serializeVendorForAdmin(v) {
     category: v.category || 'General',
     vendor_type: v.vendor_type || 'product',
     shop_number: v.shop_number || v.shop_no || '',
-    area: v.area || v.location || '',
+    society_id: v.society_id !== undefined && v.society_id !== null ? Number(v.society_id) : null,
+    societyId: v.society_id !== undefined && v.society_id !== null ? String(v.society_id) : '',
+    society_name: v.society_name || v.area || v.location || '',
+    societyName: v.society_name || v.area || v.location || '',
+    society: v.society_name || v.area || v.location || '',
+    locationArea: v.society_name || v.area || v.location || '',
+    area: v.area || v.society_name || v.location || '',
+    location: v.location || v.area || v.society_name || '',
+    location_area: v.society_name || v.area || v.location || '',
     city: v.city || '',
     state: v.state || '',
     pincode: v.pincode || '',
@@ -534,9 +542,17 @@ async function approveVendor(req, res) {
       locId = Number(insRes.insertId || insRes.rows[0]?.location_id || 1);
     }
 
+    let targetSocId = v.society_id;
+    if (!targetSocId && targetArea) {
+      const socMatch = await query(`SELECT society_id FROM societies WHERE LOWER(society_name) = LOWER(?)`, [targetArea]).catch(() => ({ rows: [] }));
+      if (socMatch.rows && socMatch.rows.length > 0) {
+        targetSocId = Number(socMatch.rows[0].society_id);
+      }
+    }
+
     await query(
       `UPDATE vendors SET status = 'ACTIVE', location_id = ?, area = ?, society_id = COALESCE(society_id, ?) WHERE vendor_id = ?`,
-      [locId, targetArea, locId, targetId]
+      [locId, targetArea, targetSocId || null, targetId]
     );
     await query(`UPDATE payments SET status = 'SUCCESS' WHERE vendor_id = ?`, [targetId]);
     await query(`UPDATE subscriptions SET status = 'ACTIVE' WHERE vendor_id = ?`, [targetId]);
@@ -663,6 +679,20 @@ async function updateVendor(req, res) {
     const newGstPercent = b.gst_percentage !== undefined ? b.gst_percentage : v.gst_percentage;
     const newStatus = b.status !== undefined ? String(b.status).toUpperCase() : v.status;
 
+    let newSocId = v.society_id;
+    const rawUpdateSoc = b.society_id !== undefined ? b.society_id : (b.societyId !== undefined ? b.societyId : (b.society_name !== undefined ? b.society_name : b.societyName));
+    if (rawUpdateSoc !== undefined) {
+      const rawUpdateSocStr = String(rawUpdateSoc).trim();
+      if (/^\d+$/.test(rawUpdateSocStr)) {
+        newSocId = parseInt(rawUpdateSocStr, 10);
+      } else if (rawUpdateSocStr) {
+        const foundSoc = await query(`SELECT society_id FROM societies WHERE LOWER(society_name) = LOWER(?)`, [rawUpdateSocStr]).catch(() => ({ rows: [] }));
+        if (foundSoc.rows && foundSoc.rows.length > 0) {
+          newSocId = Number(foundSoc.rows[0].society_id);
+        }
+      }
+    }
+
     await query(`
       UPDATE vendors 
       SET vendor_name = ?,
@@ -679,9 +709,10 @@ async function updateVendor(req, res) {
           min_order_value = ?,
           delivery_charge = ?,
           gst_percentage = ?,
-          status = ?
+          status = ?,
+          society_id = COALESCE(?, society_id)
       WHERE vendor_id = ?
-    `, [newVendorName, newOwnerName, newStoreName, newEmail, newPhone, newArea, newAddress, newCity, newPincode, newCategory, newGstin, newMinOrder, newDeliveryCharge, newGstPercent, newStatus, targetId]);
+    `, [newVendorName, newOwnerName, newStoreName, newEmail, newPhone, newArea, newAddress, newCity, newPincode, newCategory, newGstin, newMinOrder, newDeliveryCharge, newGstPercent, newStatus, newSocId, targetId]);
 
     const updatedRes = await query(`SELECT v.*, s.society_name FROM vendors v LEFT JOIN societies s ON v.society_id = s.society_id WHERE v.vendor_id = ?`, [targetId]);
     const updatedVendorObj = serializeVendorForAdmin(updatedRes.rows[0]);

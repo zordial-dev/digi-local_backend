@@ -223,6 +223,9 @@ async function getVendorStorefront(req, res) {
         const finalShopLogo = rawLogo ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawLogo) : rawLogo) : null;
         const finalShopImage = rawShopImage ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawShopImage) : rawShopImage) : null;
 
+        vendor.logo = finalShopLogo;
+        vendor.shop_image = finalShopImage;
+
         const cleanVendorObj = {
             ...vendor,
             vendor_id: Number(vendor.vendor_id),
@@ -510,10 +513,171 @@ async function getLocations(req, res) {
     }
 }
 
+/**
+ * GET /api/items & /api/products & /items & /products
+ * Retrieves list of catalog items / products with filters & pagination
+ */
+async function getItems(req, res) {
+    try {
+        const { vendor_id, vendorId, category, search, page, limit } = req.query || {};
+        const targetVendorId = vendor_id || vendorId;
+        const isPaginated = page !== undefined || limit !== undefined;
+        const pageNum = Math.max(1, parseInt(page || 1, 10));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit || 50, 10)));
+        const offset = (pageNum - 1) * limitNum;
+
+        let sql = `
+            SELECT i.item_id, i.vendor_id, i.item_name, i.price, i.category, i.description, 
+                   i.image_url, i.in_stock, i.created_at,
+                   v.store_name, v.vendor_name, v.category as vendor_category, v.status as vendor_status
+            FROM items i
+            LEFT JOIN vendors v ON i.vendor_id = v.vendor_id
+            WHERE i.in_stock = TRUE AND (v.status IS NULL OR UPPER(v.status) = 'ACTIVE')
+        `;
+        const params = [];
+
+        if (targetVendorId) {
+            sql += ` AND (i.vendor_id = ? OR CAST(i.vendor_id AS TEXT) = ?)`;
+            params.push(targetVendorId, String(targetVendorId));
+        }
+
+        if (category && String(category).toLowerCase() !== 'all') {
+            sql += ` AND LOWER(i.category) = LOWER(?)`;
+            params.push(String(category).trim());
+        }
+
+        if (search) {
+            sql += ` AND (LOWER(i.item_name) LIKE ? OR LOWER(COALESCE(i.description, '')) LIKE ?)`;
+            const q = `%${String(search).trim().toLowerCase()}%`;
+            params.push(q, q);
+        }
+
+        const countSql = `SELECT COUNT(*) as total FROM (${sql}) sub`;
+        const countRes = await query(countSql, params).catch(() => ({ rows: [{ total: 0 }] }));
+        const total = parseInt(countRes.rows[0]?.total || 0, 10);
+
+        sql += ` ORDER BY i.item_id DESC`;
+        if (isPaginated) {
+            sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
+        }
+
+        const result = await query(sql, params).catch(() => ({ rows: [] }));
+        const itemsList = (result.rows || []).map(i => {
+            const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (i.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
+            return {
+                ...i,
+                item_id: Number(i.item_id),
+                id: Number(i.item_id),
+                vendor_id: Number(i.vendor_id),
+                price: Number(i.price || 0),
+                unit_price: Number(i.price || 0),
+                name: i.item_name,
+                in_stock: Boolean(i.in_stock),
+                image_url: finalImg,
+                image: finalImg,
+                imageUrl: finalImg,
+                photo_url: finalImg,
+                photo: finalImg,
+                images: finalImg ? [finalImg] : []
+            };
+        });
+
+        const totalPages = Math.ceil(total / limitNum) || 1;
+        return res.status(200).json({
+            success: true,
+            total,
+            count: itemsList.length,
+            items: itemsList,
+            products: itemsList,
+            data: itemsList,
+            pagination: {
+                total,
+                total_pages: totalPages,
+                current_page: pageNum,
+                limit: limitNum,
+                has_next: pageNum < totalPages,
+                has_prev: pageNum > 1
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching items/products:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch items', message: err.message });
+    }
+}
+
+/**
+ * GET /api/items/:id & /api/products/:id & /items/:id & /products/:id
+ * Resolves by item_id (single product) or vendor_id (returns vendor catalog)
+ */
+async function getItemOrProductById(req, res, next) {
+    try {
+        const idParam = req.params.id || req.params.itemId || req.params.productId;
+        if (!idParam) return res.status(400).json({ success: false, error: 'ID is required' });
+
+        // 1. First, check if this ID is an item in the items table
+        const itemRes = await query(
+            `SELECT i.*, v.store_name, v.vendor_name, v.phone_number as vendor_phone, v.address as vendor_address, v.status as vendor_status
+             FROM items i
+             LEFT JOIN vendors v ON i.vendor_id = v.vendor_id
+             WHERE i.item_id = ? OR CAST(i.item_id AS TEXT) = ?`,
+            [idParam, String(idParam)]
+        ).catch(() => ({ rows: [] }));
+
+        if (itemRes.rows && itemRes.rows.length > 0) {
+            const i = itemRes.rows[0];
+            const finalImg = typeof normalizeImageUrl === 'function' ? normalizeImageUrl(i.image_url, DEFAULT_PRODUCT_SERVICE_IMAGE) : (i.image_url || DEFAULT_PRODUCT_SERVICE_IMAGE);
+            const cleanItem = {
+                ...i,
+                item_id: Number(i.item_id),
+                id: Number(i.item_id),
+                vendor_id: Number(i.vendor_id),
+                price: Number(i.price || 0),
+                unit_price: Number(i.price || 0),
+                name: i.item_name,
+                in_stock: Boolean(i.in_stock),
+                image_url: finalImg,
+                image: finalImg,
+                imageUrl: finalImg,
+                photo_url: finalImg,
+                photo: finalImg,
+                images: finalImg ? [finalImg] : []
+            };
+            return res.status(200).json({
+                success: true,
+                item: cleanItem,
+                product: cleanItem,
+                data: cleanItem
+            });
+        }
+
+        // 2. If not found in items, check if this ID is a vendor ID!
+        // Many frontend clients call /products/:vendorId or /items/:vendorId to fetch vendor catalog!
+        const vendorCheck = await query(
+            `SELECT vendor_id FROM vendors WHERE vendor_id = ? OR public_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+            [idParam, String(idParam), String(idParam)]
+        ).catch(() => ({ rows: [] }));
+
+        if (vendorCheck.rows && vendorCheck.rows.length > 0) {
+            req.params.vendorId = vendorCheck.rows[0].vendor_id;
+            return getVendorStorefront(req, res);
+        }
+
+        return res.status(404).json({
+            success: false,
+            error: `Item or Entity with ID "${idParam}" not found`
+        });
+    } catch (err) {
+        console.error('Error fetching item/product by ID:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch item details', message: err.message });
+    }
+}
+
 module.exports = {
     getSocietyVendorsStorefront,
     getVendorStorefront,
     searchVendorsLocationAware,
     getLocations,
-    getCategories
+    getCategories,
+    getItems,
+    getItemOrProductById
 };

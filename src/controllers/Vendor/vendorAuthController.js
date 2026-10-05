@@ -121,29 +121,44 @@ async function registerVendor(req, res) {
     const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
 
     let society_id = null;
-    const rawSociety = body.society_id || body.societyId || body.society || body.society_name || body.societyName;
+    let resolvedSocName = '';
+    const rawSociety = body.society_id || body.societyId || body.society || body.society_name || body.societyName || body.area || body.location;
 
     if (typeof rawSociety === 'number' && rawSociety > 0) {
       society_id = rawSociety;
+      const socNameRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [society_id]).catch(() => ({ rows: [] }));
+      if (socNameRes.rows && socNameRes.rows.length > 0) {
+        resolvedSocName = socNameRes.rows[0].society_name;
+      }
     } else if (rawSociety) {
       const rawStr = String(rawSociety).trim();
       if (/^\d+$/.test(rawStr)) {
         society_id = parseInt(rawStr, 10);
+        const socNameRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [society_id]).catch(() => ({ rows: [] }));
+        if (socNameRes.rows && socNameRes.rows.length > 0) {
+          resolvedSocName = socNameRes.rows[0].society_name;
+        }
       } else {
-        const foundSoc = await query(`SELECT society_id FROM societies WHERE LOWER(society_name) = LOWER(?)`, [rawStr]);
+        resolvedSocName = rawStr;
+        const foundSoc = await query(`SELECT society_id, society_name FROM societies WHERE LOWER(society_name) = LOWER(?)`, [rawStr]);
         if (foundSoc.rows && foundSoc.rows.length > 0) {
           society_id = Number(foundSoc.rows[0].society_id);
+          resolvedSocName = foundSoc.rows[0].society_name;
         } else {
-          const newSocLocation = rawAddress ? `${rawAddress}, ${city || 'City'}` : (city || 'Local Area');
+          const rawAddressStr = String(body.address || body.full_address || body.shop_address || body.address_line || '').trim();
+          const newSocLocation = rawAddressStr ? `${rawAddressStr}, ${city || 'City'}` : (city || 'Local Area');
           const newSocCity = city || 'Noida';
           const newSocState = state || 'Uttar Pradesh';
           const newSocPincode = pincode || '201310';
-          const newSocAddress = rawAddress || newSocLocation;
+          const newSocAddress = rawAddressStr || newSocLocation;
           const newSocRes = await query(
-            `INSERT INTO societies (society_name, location, address, city, state, pincode, secretary_name, secretary_mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+            `INSERT INTO societies (society_name, location, address, city, state, pincode, secretary_name, secretary_mobile, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active') RETURNING society_id, society_name`,
             [rawStr, newSocLocation, newSocAddress, newSocCity, newSocState, newSocPincode, vendor_name, phone_number]
           );
-          society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || 1);
+          society_id = Number(newSocRes.rows[0]?.society_id || newSocRes.insertId || null);
+          if (newSocRes.rows[0]?.society_name) {
+            resolvedSocName = newSocRes.rows[0].society_name;
+          }
         }
       }
     }
@@ -174,19 +189,20 @@ async function registerVendor(req, res) {
                     shop_image = ?, logo = ?, category = ?, 
                     account_number = ?, bank_account_number = ?, ifsc_code = ?,
                     bank_name = COALESCE(NULLIF(?, ''), bank_name), account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
+                    society_id = COALESCE(?, society_id), area = COALESCE(NULLIF(?, ''), area),
                     status = 'PENDING', has_resubmitted = TRUE, resubmitted_at = CURRENT_TIMESTAMP
                  WHERE vendor_id = ?`,
-        [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, account_number, account_number, ifsc_code, bank_name, account_holder_name, vendor_id]
+        [vendor_name, store_name, email, phone_number, hashedPassword, hashedPassword, gstin, pan_number, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation || resolvedSocName || area || '', vendorCity, vendorState, vendorPincode, shop_image, shop_image, category, account_number, account_number, ifsc_code, bank_name, account_holder_name, society_id, resolvedSocName || area, vendor_id]
       );
     } else {
       // Generate standardized Option B public_id (vnd@XXXX)
       const vendorPublicId = await generateUniquePublicId('vendor', query);
 
-      // Insert new vendor record (gst_number takes gstin, pan_number takes pan_number; no cross-substitution)
+      // Insert new vendor record
       const vendorRes = await query(
-        `INSERT INTO vendors (society_id, vendor_name, public_id, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, status, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-        [society_id, vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation, vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, kolkataISTNow]
+        `INSERT INTO vendors (society_id, area, vendor_name, public_id, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, status, created_at) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
+        [society_id, resolvedSocName || area || vendorLocation || '', vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation || resolvedSocName || area || '', vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, kolkataISTNow]
       );
       const newVendorRow = vendorRes.rows[0] || {};
       vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -223,7 +239,7 @@ async function registerVendor(req, res) {
     await query(
       `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
+      [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, resolvedSocName || area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
     ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
 
     // Fetch final vendor record to ensure accurate public_id
@@ -244,10 +260,17 @@ async function registerVendor(req, res) {
         public_id: finalPublicId,
         store_name,
         vendor_name,
+        society_id,
+        societyId: society_id ? String(society_id) : '',
+        society_name: resolvedSocName || area || '',
+        societyName: resolvedSocName || area || '',
+        society: resolvedSocName || area || '',
         shop_number,
         shop_no: shop_number,
         address: address || shop_number || area || vendorLocation || '',
-        area: vendorLocation,
+        area: resolvedSocName || area || vendorLocation || '',
+        location: vendorLocation || resolvedSocName || area || '',
+        locationArea: resolvedSocName || area || vendorLocation || '',
         city: vendorCity,
         state: vendorState,
         pincode: vendorPincode,

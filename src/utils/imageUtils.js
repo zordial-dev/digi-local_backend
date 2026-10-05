@@ -2,6 +2,46 @@
 
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+/**
+ * Saves base64 data URIs or base64 image strings to public/uploads directory as static files
+ * and returns the relative or absolute hosted image URL.
+ */
+function saveBase64ImageToDisk(raw) {
+    try {
+        let cleanBase64 = String(raw).trim();
+        let ext = 'jpg';
+        const match = cleanBase64.match(/^data:image\/([a-zA-Z0-9\+\-\.]+);base64,(.+)$/i);
+        if (match) {
+            ext = match[1].split('/')[1]?.split('+')[0] || match[1].split('+')[0] || 'jpg';
+            if (ext === 'jpeg' || ext === 'avif' || ext === 'heic' || ext === 'heif') ext = 'jpg';
+            cleanBase64 = match[2];
+        } else if (cleanBase64.includes('base64,')) {
+            cleanBase64 = cleanBase64.split('base64,')[1];
+        }
+        const validExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        if (!validExts.includes(ext.toLowerCase())) ext = 'jpg';
+
+        const timestamp = Date.now();
+        const rand = Math.floor(Math.random() * 100000);
+        const filename = `img-${timestamp}-${rand}.${ext}`;
+
+        const uploadDir = path.join(__dirname, '../../public/uploads');
+        if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filePath = path.join(uploadDir, filename);
+        const buf = Buffer.from(cleanBase64, 'base64');
+        if (buf.length > 0) {
+            fs.writeFileSync(filePath, buf);
+            const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+            return base ? `${base}/uploads/${filename}` : `/uploads/${filename}`;
+        }
+    } catch (_) {}
+    return null;
+}
 
 /**
  * Follows HTTP redirects and returns the final URL (up to maxRedirects hops).
@@ -74,6 +114,12 @@ function normalizeImageUrl(rawUrl, defaultFallback = null) {
     if (!url || url.length < 5 || url === 'null' || url === 'undefined') return defaultFallback;
 
     try {
+        // 0. Auto-convert Base64 data URIs or raw base64 strings into saved static upload files
+        if (url.startsWith('data:image/') || (url.length > 500 && !url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('/uploads/'))) {
+            const savedUrl = saveBase64ImageToDisk(url);
+            if (savedUrl) return savedUrl;
+        }
+
         // Fix malformed URLs like https:///uploads/ or http:///uploads/
         if (url.startsWith('https:///')) {
             url = url.replace('https:///', 'https://');
@@ -212,5 +258,6 @@ const DEFAULT_PRODUCT_SERVICE_IMAGE = 'https://i.imghos.co/NwtAJsPG.jpg';
 module.exports = {
     normalizeImageUrl,
     resolveImageUrl,
+    saveBase64ImageToDisk,
     DEFAULT_PRODUCT_SERVICE_IMAGE
 };

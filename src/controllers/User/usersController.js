@@ -581,7 +581,8 @@ async function getUserOrders(req, res) {
     const placeholders = matchedUserIds.map(() => '?').join(',');
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id, o.vendor_id, v.store_name, o.total_amount, o.status, 
-              COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address
+              COALESCE(o.created_at, o.order_timestamp) as created_at, s.society_name, o.delivery_address,
+              u.address as user_saved_address, u.flat as user_flat, u.area as user_area, u.society_name as user_soc
        FROM orders o
        LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
        LEFT JOIN societies s ON o.society_id = s.society_id
@@ -623,7 +624,7 @@ async function getUserOrders(req, res) {
         store_name: ord.store_name || 'FreshMart Grocery & Organic',
         store_logo: ord.store_logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=120&auto=format&fit=crop&q=80',
         society_name: ord.society_name || 'Greenwood Residency',
-        delivery_address: ord.delivery_address || 'Tower A-402',
+        delivery_address: ord.delivery_address || ord.user_saved_address || [ord.user_flat, ord.user_soc || ord.user_area].filter(Boolean).join(', ') || '',
         status: statusUpper,
         status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
         payment_status: ord.payment_status || 'PAID',

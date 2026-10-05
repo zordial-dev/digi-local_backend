@@ -609,9 +609,82 @@ async function deleteService(req, res) {
     }
 }
 
+/**
+ * Get All Services (Global Catalog for resident users & landing)
+ * GET /api/services & /services
+ */
+async function getAllServices(req, res) {
+    try {
+        const { vendor_id, vendorId, category, search, page, limit } = req.query || {};
+        const targetVendorId = vendor_id || vendorId;
+        const isPaginated = page !== undefined || limit !== undefined;
+        const pageNum = Math.max(1, parseInt(page || 1, 10));
+        const limitNum = Math.min(100, Math.max(1, parseInt(limit || 50, 10)));
+        const offset = (pageNum - 1) * limitNum;
+
+        let sql = `
+            SELECT s.*, v.store_name, v.vendor_name, v.category as vendor_category, v.status as vendor_status
+            FROM services s
+            LEFT JOIN vendors v ON s.vendor_id = v.vendor_id
+            WHERE (s.is_available = TRUE OR s.is_available IS NULL)
+              AND (v.status IS NULL OR UPPER(v.status) = 'ACTIVE')
+        `;
+        const params = [];
+
+        if (targetVendorId) {
+            sql += ` AND (s.vendor_id = ? OR CAST(s.vendor_id AS TEXT) = ?)`;
+            params.push(targetVendorId, String(targetVendorId));
+        }
+
+        if (category && String(category).toLowerCase() !== 'all') {
+            sql += ` AND LOWER(s.category) = LOWER(?)`;
+            params.push(String(category).trim());
+        }
+
+        if (search) {
+            sql += ` AND (LOWER(s.service_name) LIKE ? OR LOWER(COALESCE(s.description, '')) LIKE ?)`;
+            const q = `%${String(search).trim().toLowerCase()}%`;
+            params.push(q, q);
+        }
+
+        const countSql = `SELECT COUNT(*) as total FROM (${sql}) sub`;
+        const countRes = await query(countSql, params).catch(() => ({ rows: [{ total: 0 }] }));
+        const total = parseInt(countRes.rows[0]?.total || 0, 10);
+
+        sql += ` ORDER BY s.service_id DESC`;
+        if (isPaginated) {
+            sql += ` LIMIT ${limitNum} OFFSET ${offset}`;
+        }
+
+        const sRes = await query(sql, params).catch(() => ({ rows: [] }));
+        const formattedList = (sRes.rows || []).map(formatServiceRow);
+
+        const totalPages = Math.ceil(total / limitNum) || 1;
+        return res.status(200).json({
+            success: true,
+            total,
+            count: formattedList.length,
+            services: formattedList,
+            data: formattedList,
+            pagination: {
+                total,
+                total_pages: totalPages,
+                current_page: pageNum,
+                limit: limitNum,
+                has_next: pageNum < totalPages,
+                has_prev: pageNum > 1
+            }
+        });
+    } catch (err) {
+        console.error('Error fetching all services:', err);
+        return res.status(500).json({ success: false, error: 'Failed to fetch services', message: err.message });
+    }
+}
+
 module.exports = {
     addService,
     getVendorServices,
+    getAllServices,
     getServiceById,
     updateService,
     updateServiceImage,

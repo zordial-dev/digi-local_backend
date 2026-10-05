@@ -35,6 +35,7 @@ const { query } = require('../models/db');
 // ── Health & Observability Routes ───────────────────────────
 router.use('/health', healthRoutes);
 router.get('/version', (req, res) => res.redirect('/health/version'));
+router.get(['/ping', '/api/ping'], (req, res) => res.status(200).json({ status: 'ok', message: 'pong', timestamp: new Date().toISOString() }));
 
 // ── Service Vendor Enquiry Direct Routes ────────────────────
 router.post('/api/enquiries', enquiryController.createEnquiry);
@@ -48,6 +49,7 @@ router.put('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
 
 // ── Service Vendor Services Direct & Global Routes ───────────
+router.get(['/api/services', '/services'], serviceController.getAllServices);
 router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], upload.any(), handleMulterError, serviceController.addService);
 router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], serviceController.getVendorServices);
 router.get(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.getServiceById);
@@ -378,7 +380,7 @@ router.post('/api/upload-image', vendorPanelController.uploadImage);
 router.post('/api/upload-logo', vendorPanelController.uploadImage);
 
 
-// ── Generic /api/products Item & Photo Endpoints ───────────
+// ── Generic /api/products and /api/items Catalog & Entity Lookup Endpoints ───
 async function resolveItemVendorId(req, res, next) {
     if (!req.params.vendorId && req.params.itemId) {
         const itemRow = await query('SELECT vendor_id FROM items WHERE item_id = ?', [req.params.itemId]).catch(() => ({ rows: [] }));
@@ -389,12 +391,24 @@ async function resolveItemVendorId(req, res, next) {
     next();
 }
 
-router.get('/api/products/:itemId', resolveItemVendorId, storefrontController.getVendorStorefront);
-router.put('/api/products/:itemId', upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
-router.patch('/api/products/:itemId', upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
-router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
-router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
-router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+router.get(['/api/products', '/api/items', '/products', '/items'], storefrontController.getItems);
+router.get(['/api/products/:id', '/api/items/:id', '/products/:id', '/items/:id'], storefrontController.getItemOrProductById);
+
+router.put(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId', '/items/:itemId'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
+router.patch(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId', '/items/:itemId'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
+router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+
+// ── Root Alias Forwarding for Frontend Clients omitting /api prefix ─────
+router.get(['/vendors', '/stores'], (req, res, next) => {
+    req.url = '/api/vendors' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+    router.handle(req, res, next);
+});
+router.get(['/vendors/:vendorId', '/stores/:vendorId'], (req, res, next) => {
+    req.url = `/api/vendors/${req.params.vendorId}` + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+    router.handle(req, res, next);
+});
 
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
 
