@@ -700,8 +700,8 @@ async function getUserOrders(req, res) {
         payment_status: ord.payment_status || 'PAID',
         payment_method: ord.payment_method || 'COD',
         total_amount: Number(ord.total_amount || 0),
-        date: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
-        created_at: ord.created_at ? new Date(ord.created_at).toISOString() : new Date().toISOString(),
+        date: formatISTISO(ord.created_at),
+        created_at: formatISTISO(ord.created_at),
         items: mappedItems
       });
     }

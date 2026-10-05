@@ -2,6 +2,7 @@ const { query, withTransaction } = require('../models/db');
 const paymentService = require('./paymentService');
 const { normalizeImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../utils/imageUtils');
 const { recordVendorFieldChanges } = require('./vendorDiffService');
+const { formatISTISO, formatISTReadable } = require('../utils/time');
 
 /**
  * Service handling Vendor Profile, Store Settings, Subscription Renewals, and Dashboard Data.
@@ -108,6 +109,8 @@ class VendorService {
         notes: o.remarks || '',
         instructions: o.remarks || '',
         delivery_instructions: o.remarks || '',
+        created_at: formatISTISO(o.created_at),
+        created_at_readable: formatISTReadable(o.created_at),
         items: normalizedItems
       };
     });
