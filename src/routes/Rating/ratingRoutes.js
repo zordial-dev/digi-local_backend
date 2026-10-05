@@ -12,6 +12,24 @@ router.post('/api/ratings', ratingController.submitRating);
 router.post('/vendors/:vendorId/ratings', ratingController.submitRating);
 router.post('/ratings', ratingController.submitRating);
 
+// Edit Rating & Review
+router.put('/api/ratings/:ratingId', ratingController.editReview);
+router.patch('/api/ratings/:ratingId', ratingController.editReview);
+router.put('/api/reviews/:ratingId', ratingController.editReview);
+router.patch('/api/reviews/:ratingId', ratingController.editReview);
+router.post('/api/ratings/:ratingId/edit', ratingController.editReview);
+router.post('/api/reviews/:ratingId/edit', ratingController.editReview);
+router.put('/ratings/:ratingId', ratingController.editReview);
+router.patch('/ratings/:ratingId', ratingController.editReview);
+router.put('/reviews/:ratingId', ratingController.editReview);
+router.patch('/reviews/:ratingId', ratingController.editReview);
+
+// Delete Rating & Review
+router.delete('/api/ratings/:ratingId', ratingController.deleteUserReview);
+router.delete('/api/reviews/:ratingId', ratingController.deleteUserReview);
+router.delete('/ratings/:ratingId', ratingController.deleteUserReview);
+router.delete('/reviews/:ratingId', ratingController.deleteUserReview);
+
 // Fetch Vendor Ratings List
 router.get('/api/vendorPanel/:vendorId/ratings', ratingController.getVendorRatings);
 router.get('/api/vendors/:vendorId/ratings', ratingController.getVendorRatings);

@@ -471,6 +471,154 @@ async function getMyReviews(req, res) {
 }
 
 /**
+ * PUT/PATCH /api/ratings/:ratingId
+ * PUT/PATCH /api/reviews/:ratingId
+ * Allows a user to edit/update their previously submitted review and rating.
+ */
+async function editReview(req, res) {
+  try {
+    const rawRatingId = req.params.ratingId || req.params.reviewId || req.params.id || req.body?.rating_id || req.body?.review_id;
+    const ratingId = Number(rawRatingId);
+
+    if (!ratingId || isNaN(ratingId)) {
+      return sendStandardError(res, 400, 'Invalid or missing rating_id', 'INVALID_RATING_ID');
+    }
+
+    const { rating, review_text, reviewText, comment, user_name, userName, user_id, userId } = req.body || {};
+
+    // 1. Fetch existing review
+    const rCheck = await query(`SELECT * FROM vendor_ratings WHERE rating_id = ?`, [ratingId]);
+    if (!rCheck.rows || rCheck.rows.length === 0) {
+      return sendStandardError(res, 404, `Review with ID ${ratingId} not found`, 'REVIEW_NOT_FOUND');
+    }
+
+    const existingReview = rCheck.rows[0];
+
+    // 2. Authorization check: Ensure creator or authorized user edits
+    const callerUserId = String(
+      req.user?.user_id ||
+      req.user?.id ||
+      req.user?.phone ||
+      user_id ||
+      userId ||
+      ''
+    ).trim();
+
+    if (callerUserId && existingReview.user_id) {
+      const reviewOwnerId = String(existingReview.user_id).trim();
+      const isAdmin = req.user?.role === 'admin' || req.user?.is_admin;
+      if (!isAdmin && callerUserId !== reviewOwnerId && !reviewOwnerId.includes(callerUserId) && !callerUserId.includes(reviewOwnerId)) {
+        return sendStandardError(res, 403, 'You are not authorized to edit this review', 'FORBIDDEN');
+      }
+    }
+
+    // 3. Prepare fields to update
+    let updatedRating = existingReview.rating;
+    if (rating !== undefined && rating !== null && rating !== '') {
+      const numRating = parseFloat(rating);
+      if (isNaN(numRating) || numRating < 1.0 || numRating > 5.0) {
+        return sendStandardError(res, 400, 'Rating must be a number between 1.0 and 5.0 stars', 'INVALID_RATING_VALUE');
+      }
+      updatedRating = numRating;
+    }
+
+    const updatedReviewText = review_text !== undefined ? review_text : (reviewText !== undefined ? reviewText : (comment !== undefined ? comment : existingReview.review_text));
+    const updatedUserName = String(user_name || userName || existingReview.user_name || '').trim();
+
+    // 4. Update review record in database
+    const updateRes = await query(
+      `UPDATE vendor_ratings
+       SET rating = ?,
+           review_text = ?,
+           user_name = COALESCE(NULLIF(?, ''), user_name),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE rating_id = ?
+       RETURNING *`,
+      [updatedRating, String(updatedReviewText || '').trim(), updatedUserName, ratingId]
+    );
+
+    const updatedRow = updateRes.rows[0] || {};
+    const vendorId = Number(updatedRow.vendor_id || existingReview.vendor_id);
+
+    // 5. Recalculate vendor's aggregate score
+    const updatedMetrics = await recalculateVendorRating(vendorId);
+
+    return respond(res, 200, {
+      rating_id: ratingId,
+      vendor_id: vendorId,
+      user_id: updatedRow.user_id || existingReview.user_id,
+      user_name: updatedRow.user_name || existingReview.user_name,
+      rating: parseFloat(updatedRow.rating || updatedRating),
+      review_text: updatedRow.review_text || '',
+      order_id: updatedRow.order_id || existingReview.order_id,
+      status: updatedRow.status || existingReview.status,
+      has_reply: Boolean(updatedRow.reply_text),
+      reply: updatedRow.reply_text ? {
+        text: updatedRow.reply_text,
+        replied_at: updatedRow.replied_at
+      } : null,
+      created_at: updatedRow.created_at,
+      updated_at: updatedRow.updated_at,
+      vendor_summary: updatedMetrics
+    }, 'Review updated successfully.');
+  } catch (err) {
+    console.error('Error editing review:', err);
+    return sendStandardError(res, 500, err.message || 'Failed to edit review');
+  }
+}
+
+/**
+ * DELETE /api/ratings/:ratingId
+ * DELETE /api/reviews/:ratingId
+ * Allows a user to delete their review.
+ */
+async function deleteUserReview(req, res) {
+  try {
+    const rawRatingId = req.params.ratingId || req.params.reviewId || req.params.id;
+    const ratingId = Number(rawRatingId);
+
+    if (!ratingId || isNaN(ratingId)) {
+      return sendStandardError(res, 400, 'Invalid or missing rating_id', 'INVALID_RATING_ID');
+    }
+
+    const rCheck = await query(`SELECT * FROM vendor_ratings WHERE rating_id = ?`, [ratingId]);
+    if (!rCheck.rows || rCheck.rows.length === 0) {
+      return sendStandardError(res, 404, `Review with ID ${ratingId} not found`, 'REVIEW_NOT_FOUND');
+    }
+
+    const existingReview = rCheck.rows[0];
+    const callerUserId = String(
+      req.user?.user_id ||
+      req.user?.id ||
+      req.user?.phone ||
+      req.body?.user_id ||
+      ''
+    ).trim();
+
+    if (callerUserId && existingReview.user_id) {
+      const reviewOwnerId = String(existingReview.user_id).trim();
+      const isAdmin = req.user?.role === 'admin' || req.user?.is_admin;
+      if (!isAdmin && callerUserId !== reviewOwnerId && !reviewOwnerId.includes(callerUserId) && !callerUserId.includes(reviewOwnerId)) {
+        return sendStandardError(res, 403, 'You are not authorized to delete this review', 'FORBIDDEN');
+      }
+    }
+
+    const vendorId = Number(existingReview.vendor_id);
+    await query(`DELETE FROM vendor_ratings WHERE rating_id = ?`, [ratingId]);
+    const updatedMetrics = await recalculateVendorRating(vendorId);
+
+    return respond(res, 200, {
+      deleted_rating_id: ratingId,
+      vendor_id: vendorId,
+      vendor_summary: updatedMetrics
+    }, 'Review deleted successfully.');
+  } catch (err) {
+    console.error('Error deleting user review:', err);
+    return sendStandardError(res, 500, err.message || 'Failed to delete review');
+  }
+}
+
+/**
  * GET /api/admin/vendor-ratings
  * Admin list and filter vendor ratings across platform.
  */
@@ -641,6 +789,8 @@ module.exports = {
   getVendorSelfRatings,
   replyToRating,
   getMyReviews,
+  editReview,
+  deleteUserReview,
   getAllAdminRatings,
   updateAdminRatingStatus,
   deleteAdminRating

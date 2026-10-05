@@ -72,6 +72,9 @@ router.get('/:userId/orders', usersController.getUserOrders);
 router.get('/my-reviews', authenticateToken, ratingController.getMyReviews);
 router.get('/:userId/reviews', authenticateToken, ratingController.getMyReviews);
 router.get('/reviews', authenticateToken, ratingController.getMyReviews);
+router.put(['/reviews/:ratingId', '/ratings/:ratingId'], authenticateToken, ratingController.editReview);
+router.patch(['/reviews/:ratingId', '/ratings/:ratingId'], authenticateToken, ratingController.editReview);
+router.delete(['/reviews/:ratingId', '/ratings/:ratingId'], authenticateToken, ratingController.deleteUserReview);
 
 // B4. Fetch Resident User Service Enquiries
 router.get('/:userId/enquiries', enquiryController.getUserEnquiries);
