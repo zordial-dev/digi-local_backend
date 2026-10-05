@@ -64,12 +64,42 @@ async function getUserOrders(req, res) {
       const total = Number(ord.total_amount || 0);
       const serviceCharge = Math.max(0, total - subtotal);
 
-      let flatNumber = ord.delivery_address || ord.user_saved_address || 'Unknown';
-      let buildingNumber = '-';
-      if (flatNumber.includes(',')) {
-        const parts = flatNumber.split(',');
-        flatNumber = parts[0].trim();
-        buildingNumber = parts.length > 1 ? parts[1].trim() : '-';
+      // Prefer user's live profile address over whatever was stored at order creation time.
+      // Stored delivery_address may have been set to just the society name during a creation-time bug.
+      const profileAddress = [
+        String(ord.user_flat || '').trim(),
+        String(ord.user_soc || ord.user_area || '').trim()
+      ].filter(Boolean).join(', ');
+
+      const fullDeliveryAddress =
+        profileAddress ||
+        String(ord.delivery_address || '').trim() ||
+        String(ord.user_saved_address || '').trim();
+
+      let flatNumber = String(ord.user_flat || '').trim();
+      let buildingNumber = String(ord.user_soc || ord.user_area || '').trim();
+
+      if (fullDeliveryAddress.includes(',')) {
+        const parts = fullDeliveryAddress.split(',').map(p => p.trim()).filter(Boolean);
+        if (parts.length > 0) flatNumber = parts[0];
+        if (parts.length > 1) buildingNumber = parts[1];
+      } else if (fullDeliveryAddress && !flatNumber) {
+        flatNumber = fullDeliveryAddress;
+      }
+      if (!flatNumber) flatNumber = 'Unknown';
+      if (!buildingNumber) buildingNumber = '-';
+
+      let finalSociety = '';
+      if (buildingNumber && buildingNumber !== '-' && buildingNumber !== 'Unknown') {
+        finalSociety = buildingNumber;
+      } else if (ord.user_soc && String(ord.user_soc).trim()) {
+        finalSociety = String(ord.user_soc).trim();
+      } else if (ord.user_area && String(ord.user_area).trim()) {
+        finalSociety = String(ord.user_area).trim();
+      } else if (ord.society_name && !['arg ananta', 'ag ananta', 'arg anantra', 'ag anantra'].includes(String(ord.society_name).trim().toLowerCase())) {
+        finalSociety = String(ord.society_name).trim();
+      } else {
+        finalSociety = (buildingNumber !== '-' ? buildingNumber : '') || ord.user_soc || ord.user_area || '';
       }
 
       const statusUpper = String(ord.status || 'PLACED').toUpperCase();
@@ -105,10 +135,17 @@ async function getUserOrders(req, res) {
         vendor_id: Number(ord.vendor_id),
         store_name: ord.store_name || '',
         store_logo: ord.store_logo || '',
-        society_name: ord.society_name || ord.user_soc || ord.user_area || '',
-        delivery_address: ord.delivery_address || ord.user_saved_address || [ord.user_flat, ord.user_soc || ord.user_area].filter(Boolean).join(', ') || '',
+        society_name: finalSociety,
+        society: finalSociety,
+        societyName: finalSociety,
+        delivery_address: fullDeliveryAddress,
+        address: fullDeliveryAddress,
+        full_address: fullDeliveryAddress,
+        shipping_address: fullDeliveryAddress,
         flatNumber: flatNumber,
         buildingNumber: buildingNumber,
+        flat: flatNumber,
+        building: buildingNumber,
         subtotal: subtotal,
         tax: 0,
         deliveryCharge: 0,
@@ -573,7 +610,8 @@ async function createOrder(req, res) {
     const societyRes = await query(`SELECT society_name FROM societies WHERE society_id = ?`, [society_id || 1]);
 
     const storeName = vendorRes.rows[0]?.store_name || 'Vendor Store';
-    const societyName = societyRes.rows[0]?.society_name || 'Society Name';
+    const rawDbSocName = societyRes.rows[0]?.society_name || '';
+    const societyName = orderArea || (rawDbSocName && !['arg ananta', 'ag ananta'].includes(rawDbSocName.toLowerCase()) ? rawDbSocName : (orderArea || 'Society Name'));
 
     const finalCustomerName = resolvedCustomerName || 'Resident Customer';
     const itemsCount = populatedItems.reduce((acc, item) => acc + (Number(item.quantity) || 1), 0);
@@ -640,6 +678,16 @@ async function createOrder(req, res) {
       notes: rawRemarks,
       delivery_instructions: rawRemarks,
       societyName: societyName,
+      society_name: societyName,
+      society: societyName,
+      delivery_address: finalDeliveryAddress || userDbAddress || '',
+      address: finalDeliveryAddress || userDbAddress || '',
+      full_address: finalDeliveryAddress || userDbAddress || '',
+      shipping_address: finalDeliveryAddress || userDbAddress || '',
+      flatNumber: orderFlat || 'Unknown',
+      buildingNumber: orderArea || societyName || '-',
+      flat: orderFlat || 'Unknown',
+      building: orderArea || societyName || '-',
       created_at: createdAt,
       order: {
         order_id: orderId,
@@ -648,6 +696,16 @@ async function createOrder(req, res) {
         customer_name: finalCustomerName,
         phone_number: rawPhone || (req.user?.phone ? String(req.user.phone) : ''),
         delivery_address: finalDeliveryAddress || userDbAddress || '',
+        address: finalDeliveryAddress || userDbAddress || '',
+        full_address: finalDeliveryAddress || userDbAddress || '',
+        shipping_address: finalDeliveryAddress || userDbAddress || '',
+        society_name: societyName,
+        society: societyName,
+        societyName: societyName,
+        flatNumber: orderFlat || 'Unknown',
+        buildingNumber: orderArea || societyName || '-',
+        flat: orderFlat || 'Unknown',
+        building: orderArea || societyName || '-',
         remarks: rawRemarks,
         notes: rawRemarks,
         delivery_instructions: rawRemarks,
@@ -1118,8 +1176,55 @@ async function getOrderById(req, res) {
       ? 'Refund Completed'
       : (isProgress ? 'Refund in Progress (Crediting back to original payment source)' : null);
 
-    const resolvedDeliveryAddress = rawOrder.delivery_address || rawOrder.user_saved_address || [rawOrder.user_flat, rawOrder.user_soc || rawOrder.user_area].filter(Boolean).join(', ') || '';
+    // Prefer user's live profile address over whatever was stored at order creation time.
+    const profileAddress = [
+      String(rawOrder.user_flat || '').trim(),
+      String(rawOrder.user_soc || rawOrder.user_area || '').trim()
+    ].filter(Boolean).join(', ');
+
+    const resolvedDeliveryAddress =
+      profileAddress ||
+      String(rawOrder.delivery_address || '').trim() ||
+      String(rawOrder.user_saved_address || '').trim();
     rawOrder.delivery_address = resolvedDeliveryAddress;
+
+    let flatNumber = String(rawOrder.user_flat || '').trim();
+    let buildingNumber = String(rawOrder.user_soc || rawOrder.user_area || '').trim();
+
+    if (resolvedDeliveryAddress.includes(',')) {
+      const parts = resolvedDeliveryAddress.split(',').map(p => p.trim()).filter(Boolean);
+      if (parts.length > 0) flatNumber = parts[0];
+      if (parts.length > 1) buildingNumber = parts[1];
+    } else if (resolvedDeliveryAddress && !flatNumber) {
+      flatNumber = resolvedDeliveryAddress;
+    }
+    if (!flatNumber) flatNumber = 'Unknown';
+    if (!buildingNumber) buildingNumber = '-';
+
+    let finalSociety = '';
+    if (buildingNumber && buildingNumber !== '-' && buildingNumber !== 'Unknown') {
+      finalSociety = buildingNumber;
+    } else if (rawOrder.user_soc && String(rawOrder.user_soc).trim()) {
+      finalSociety = String(rawOrder.user_soc).trim();
+    } else if (rawOrder.user_area && String(rawOrder.user_area).trim()) {
+      finalSociety = String(rawOrder.user_area).trim();
+    } else if (rawOrder.society_name && !['arg ananta', 'ag ananta', 'arg anantra', 'ag anantra'].includes(String(rawOrder.society_name).trim().toLowerCase())) {
+      finalSociety = String(rawOrder.society_name).trim();
+    } else {
+      finalSociety = (buildingNumber !== '-' ? buildingNumber : '') || rawOrder.user_soc || rawOrder.user_area || '';
+    }
+
+    rawOrder.address = resolvedDeliveryAddress;
+    rawOrder.full_address = resolvedDeliveryAddress;
+    rawOrder.shipping_address = resolvedDeliveryAddress;
+    rawOrder.flatNumber = flatNumber;
+    rawOrder.buildingNumber = buildingNumber;
+    rawOrder.flat = flatNumber;
+    rawOrder.building = buildingNumber;
+    rawOrder.society_name = finalSociety;
+    rawOrder.society = finalSociety;
+    rawOrder.societyName = finalSociety;
+
     const orderRemarks = rawOrder.remarks || '';
 
     const enrichedOrder = {

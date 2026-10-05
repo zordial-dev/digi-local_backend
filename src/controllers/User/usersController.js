@@ -637,6 +637,43 @@ async function getUserOrders(req, res) {
 
       const statusUpper = String(ord.status || 'PLACED').toUpperCase();
 
+      // Prefer user's live profile address over whatever was stored at order creation time.
+      const profileAddress = [
+        String(ord.user_flat || '').trim(),
+        String(ord.user_soc || ord.user_area || '').trim()
+      ].filter(Boolean).join(', ');
+
+      const fullDeliveryAddress =
+        profileAddress ||
+        String(ord.delivery_address || '').trim() ||
+        String(ord.user_saved_address || '').trim();
+
+      let flatNumber = String(ord.user_flat || '').trim();
+      let buildingNumber = String(ord.user_soc || ord.user_area || '').trim();
+
+      if (fullDeliveryAddress.includes(',')) {
+        const parts = fullDeliveryAddress.split(',').map(p => p.trim()).filter(Boolean);
+        if (parts.length > 0) flatNumber = parts[0];
+        if (parts.length > 1) buildingNumber = parts[1];
+      } else if (fullDeliveryAddress && !flatNumber) {
+        flatNumber = fullDeliveryAddress;
+      }
+      if (!flatNumber) flatNumber = 'Unknown';
+      if (!buildingNumber) buildingNumber = '-';
+
+      let finalSociety = '';
+      if (buildingNumber && buildingNumber !== '-' && buildingNumber !== 'Unknown') {
+        finalSociety = buildingNumber;
+      } else if (ord.user_soc && String(ord.user_soc).trim()) {
+        finalSociety = String(ord.user_soc).trim();
+      } else if (ord.user_area && String(ord.user_area).trim()) {
+        finalSociety = String(ord.user_area).trim();
+      } else if (ord.society_name && !['arg ananta', 'ag ananta', 'arg anantra', 'ag anantra'].includes(String(ord.society_name).trim().toLowerCase())) {
+        finalSociety = String(ord.society_name).trim();
+      } else {
+        finalSociety = (buildingNumber !== '-' ? buildingNumber : '') || ord.user_soc || ord.user_area || '';
+      }
+
       orders.push({
         order_id: String(ord.order_id),
         id: String(ord.order_id),
@@ -647,8 +684,17 @@ async function getUserOrders(req, res) {
         vendor_id: Number(ord.vendor_id),
         store_name: ord.store_name || '',
         store_logo: ord.store_logo || '',
-        society_name: ord.society_name || ord.user_soc || ord.user_area || '',
-        delivery_address: ord.delivery_address || ord.user_saved_address || [ord.user_flat, ord.user_soc || ord.user_area].filter(Boolean).join(', ') || '',
+        society_name: finalSociety,
+        society: finalSociety,
+        societyName: finalSociety,
+        delivery_address: fullDeliveryAddress,
+        address: fullDeliveryAddress,
+        full_address: fullDeliveryAddress,
+        shipping_address: fullDeliveryAddress,
+        flatNumber: flatNumber,
+        buildingNumber: buildingNumber,
+        flat: flatNumber,
+        building: buildingNumber,
         status: statusUpper,
         status_label: statusUpper === 'DELIVERED' || statusUpper === 'COMPLETED' ? 'Order Delivered' : 'Order Paid & Out for Delivery',
         payment_status: ord.payment_status || 'PAID',
