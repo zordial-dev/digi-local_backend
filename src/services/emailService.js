@@ -12,8 +12,8 @@ function createTransporter(portOverride = null) {
     const port = portOverride || parseInt(process.env.SMTP_PORT || '2587', 10);
 
     if (user && (!host || host === 'smtp.gmail.com') && process.env.AWS_SMTP_USERNAME) {
-        host = process.env.AWS_REGION 
-            ? `email-smtp.${process.env.AWS_REGION}.amazonaws.com` 
+        host = process.env.AWS_REGION
+            ? `email-smtp.${process.env.AWS_REGION}.amazonaws.com`
             : 'email-smtp.us-east-1.amazonaws.com';
     }
 
@@ -39,7 +39,7 @@ function createTransporter(portOverride = null) {
  */
 async function sendEmail({ to, subject, html }) {
     const defaultPort = parseInt(process.env.SMTP_PORT || '2587', 10);
-    const candidatePorts = [defaultPort, 2587, 587, 465].filter((v, i, a) => a.indexOf(v) === i);
+    const candidatePorts = 2587;
 
     const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
     const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
