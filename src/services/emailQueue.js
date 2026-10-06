@@ -3,14 +3,14 @@ const EventEmitter = require('events');
 /**
  * Asynchronous Background Email Queue Processor.
  * Dispatches emails in background workers without blocking HTTP client responses.
- * Implements Exponential Backoff Retry handling for transient network/SMTP failures.
+ * Implements Exponential Backoff Retry handling for transient network/SMTP failures (max 2 retries).
  */
 class EmailQueueProcessor extends EventEmitter {
   constructor() {
     super();
     this.queue = [];
     this.isProcessing = false;
-    this.maxRetries = 3;
+    this.maxRetries = 2; // Max 2 retries after initial attempt (3 total tries per email)
     this.baseDelayMs = 2000;
   }
 
@@ -53,7 +53,7 @@ class EmailQueueProcessor extends EventEmitter {
           this.processNext();
         }, delay);
       } else {
-        console.error(`[EmailQueue Failed] Task '${item.taskName}' exhausted all ${this.maxRetries} retries.`);
+        console.error(`[EmailQueue Failed] Task '${item.taskName}' exhausted all ${this.maxRetries} retries. Email will NOT be re-queued.`);
       }
     } finally {
       this.isProcessing = false;

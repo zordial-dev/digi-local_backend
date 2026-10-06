@@ -38,8 +38,7 @@ function createTransporter(portOverride = null) {
  * Sends an email using the configured SMTP transporter (AWS SES or standard SMTP).
  */
 async function sendEmail({ to, subject, html }) {
-    const defaultPort = parseInt(process.env.SMTP_PORT || '2587', 10);
-    const candidatePorts = 2587;
+    const candidatePorts = [parseInt(process.env.SMTP_PORT || '2587', 10)]; // must be array — for...of on a bare number iterates digits
 
     const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
     const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
