@@ -21,10 +21,15 @@ const { upload, handleMulterError } = require('../../middleware/upload');
  * Vendor Auth & Admin Vendor Management Routes (/api/vendors)
  */
 
-// Helper middleware: enforce ACTIVE status for resident user / public storefront requests
+// Helper middleware: enforce ACTIVE status for resident user / public storefront requests.
+// Allowed privileged roles are admin/super_admin/sub_admin only — 'vendor' is intentionally
+// excluded, so an authenticated vendor token is treated as a forbidden request.
+const ALLOWED_ROLES = ['super_admin', 'admin', 'sub_admin'];
+
 function enforceActiveVendorsForUser(req, res, next) {
   const isAdminClient = req.headers['x-platform-client'] === 'admin_dashboard';
   if (!isAdminClient && (!req.headers.authorization || !req.headers.authorization.includes('Bearer '))) {
+    // Unauthenticated / public — show only active vendors
     req.query.status = 'ACTIVE';
   } else if (!isAdminClient) {
     try {
@@ -32,7 +37,16 @@ function enforceActiveVendorsForUser(req, res, next) {
       const authConfig = require('../../config/auth');
       const token = req.headers.authorization.replace('Bearer ', '').trim();
       const decoded = verifyJwt(token, authConfig.jwt.secret);
-      if (!decoded || !['super_admin', 'admin', 'sub_admin'].includes(String(decoded.role || '').toLowerCase())) {
+      const role = String(decoded?.role || '').toLowerCase();
+
+      if (role === 'vendor') {
+        // Vendor role is not in ALLOWED_ROLES — deny access
+        return res.status(403).json({
+          error: 'Forbidden: Vendor accounts are not permitted to access the vendor directory.'
+        });
+      }
+
+      if (!decoded || !ALLOWED_ROLES.includes(role)) {
         req.query.status = 'ACTIVE';
       }
     } catch (_) {

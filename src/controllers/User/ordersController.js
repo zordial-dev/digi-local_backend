@@ -206,7 +206,8 @@ async function getVendorOrders(req, res) {
               COALESCE(NULLIF(o.customer_phone, ''), NULLIF(u.phone, ''), '') as phone, 
               COALESCE(NULLIF(o.delivery_address, ''), NULLIF(u.address, ''), '') as delivery_address,
               COALESCE(o.remarks, '') as remarks,
-              o.total_amount, o.status, o.created_at
+              o.total_amount, o.status, o.created_at,
+              COALESCE(NULLIF(o.payment_method, ''), 'COD') as payment_method
        FROM orders o
        LEFT JOIN users u ON o.user_id = u.user_id
        WHERE o.vendor_id = ?
@@ -266,6 +267,8 @@ async function getVendorOrders(req, res) {
         instructions: ord.remarks || '',
         delivery_instructions: ord.remarks || '',
         status: (ord.status || 'PENDING').toLowerCase(),
+        payment_method: ord.payment_method || 'COD',
+        payment_mode: ord.payment_method || 'COD', // Alias for frontend compatibility
         timestamp: formatISTTimeOnly(ord.created_at),
         createdAt: formatISTISO(ord.created_at),
         created_at: formatISTISO(ord.created_at),
