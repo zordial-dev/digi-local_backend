@@ -184,6 +184,14 @@ router.put(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.
 router.patch(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
 router.delete('/api/people/:id', adminPanelController.deleteUser);
 
+// Vendor Unban / Unblock & Strikes
+router.post(['/api/vendors/:id/unblock', '/api/vendors/:id/unban', '/api/v1/admin/vendors/:id/unban', '/api/v1/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unban'], adminPanelController.unbanVendor);
+router.delete(['/api/admin/vendors/:id/ban', '/api/admin/vendors/:id/block', '/api/v1/admin/vendors/:id/ban', '/api/v1/admin/vendors/:id/block'], adminPanelController.unbanVendor);
+router.get(['/api/vendors/:id/strike', '/api/vendors/:id/strikes', '/api/admin/vendors/:id/strike', '/api/admin/vendors/:id/strikes', '/api/v1/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strikes'], adminPanelController.getVendorStrikesAdmin);
+router.post(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], adminPanelController.strikeVendor);
+router.delete(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], adminPanelController.unstrikeVendor);
+router.post(['/api/vendors/:id/unstrike', '/api/admin/vendors/:id/unstrike', '/api/v1/admin/vendors/:id/unstrike'], adminPanelController.unstrikeVendor);
+
 const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
 
 // ── Cashfree Payment Gateway Routes (PG v3) ───────────────────

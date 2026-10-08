@@ -165,10 +165,20 @@ CREATE TABLE IF NOT EXISTS vendors (
     platform VARCHAR(50) DEFAULT 'android',
     public_id VARCHAR(50),
     status VARCHAR(20) DEFAULT 'PENDING',
+    strikes INT DEFAULT 0,
     hold_reason TEXT,
     hold_email_subject VARCHAR(255),
     has_resubmitted BOOLEAN DEFAULT FALSE,
     resubmitted_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS vendor_strikes (
+    strike_id BIGSERIAL PRIMARY KEY,
+    vendor_id BIGINT NOT NULL,
+    strike_number INT NOT NULL,
+    reason TEXT NOT NULL,
+    admin_id VARCHAR(100) DEFAULT 'admin',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

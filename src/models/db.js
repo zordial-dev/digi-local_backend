@@ -464,6 +464,7 @@ async function setupTablesPg() {
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS total_ratings_sum DECIMAL(10,2) DEFAULT 0.00`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS state VARCHAR(100)`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS strikes INT DEFAULT 0`,
+    `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS strikes INT DEFAULT 0`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS public_id VARCHAR(50)`,
     `ALTER TABLE vendors ADD COLUMN IF NOT EXISTS public_id VARCHAR(50)`,
     `CREATE INDEX IF NOT EXISTS idx_users_public_id ON users(public_id)`,
@@ -598,6 +599,18 @@ async function setupTablesPg() {
     CREATE TABLE IF NOT EXISTS user_strikes (
       strike_id BIGSERIAL PRIMARY KEY,
       user_id VARCHAR(100) NOT NULL,
+      strike_number INT NOT NULL,
+      reason TEXT NOT NULL,
+      admin_id VARCHAR(100) DEFAULT 'admin',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `).catch(() => { });
+
+  // Ensure vendor_strikes table for tracking vendor strike reasons and history
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS vendor_strikes (
+      strike_id BIGSERIAL PRIMARY KEY,
+      vendor_id BIGINT NOT NULL,
       strike_number INT NOT NULL,
       reason TEXT NOT NULL,
       admin_id VARCHAR(100) DEFAULT 'admin',

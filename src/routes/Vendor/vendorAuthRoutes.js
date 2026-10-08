@@ -187,6 +187,11 @@ router.post('/:vendorId/approve', authenticateAdminToken, requirePower('VENDORS'
 router.post('/:vendorId/reject', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.rejectVendor);
 router.post('/:vendorId/hold', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.holdVendor);
 router.post('/:vendorId/block', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.blockVendor);
+router.post(['/:vendorId/unblock', '/:vendorId/unban'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unbanVendor);
+router.get(['/:vendorId/strike', '/:vendorId/strikes'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.getVendorStrikesAdmin);
+router.post('/:vendorId/strike', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.strikeVendor);
+router.delete('/:vendorId/strike', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
+router.post('/:vendorId/unstrike', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
 router.post('/:vendorId/status', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.updateVendorStatus);
 router.post('/:vendorId/resubmit', vendorAuthController.resubmitVendorRequest);
 router.put('/:vendorId/resubmit', vendorAuthController.resubmitVendorRequest);

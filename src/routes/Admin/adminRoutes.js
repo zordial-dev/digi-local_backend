@@ -30,6 +30,12 @@ router.get(['/vendors/:id/reapplication-changes', '/vendors/:id/changes', '/requ
 router.put('/vendors/:id', adminPanelController.updateVendor);
 router.patch('/vendors/:id', adminPanelController.updateVendor);
 router.post('/vendors/:id/block', adminPanelController.blockVendor);
+router.post(['/vendors/:id/unblock', '/vendors/:id/unban'], adminPanelController.unbanVendor);
+router.delete(['/vendors/:id/block', '/vendors/:id/ban'], adminPanelController.unbanVendor);
+router.get(['/vendors/:id/strike', '/vendors/:id/strikes'], adminPanelController.getVendorStrikesAdmin);
+router.post('/vendors/:id/strike', adminPanelController.strikeVendor);
+router.delete('/vendors/:id/strike', adminPanelController.unstrikeVendor);
+router.post('/vendors/:id/unstrike', adminPanelController.unstrikeVendor);
 router.patch('/vendors/:id/status', adminPanelController.updateVendorStatus);
 router.post('/vendors/:id/status', adminPanelController.updateVendorStatus);
 router.get('/vendors/:id/payments', adminPanelController.getVendorPayments);
@@ -38,6 +44,7 @@ router.post('/requests/:id/approve', adminPanelController.approveVendor);
 router.post('/requests/:id/reject', adminPanelController.rejectVendor);
 router.post('/requests/:id/hold', adminPanelController.holdVendor);
 router.post('/requests/:id/block', adminPanelController.blockVendor);
+router.post(['/requests/:id/unblock', '/requests/:id/unban'], adminPanelController.unbanVendor);
 
 // ── Users & People Directory ──────────────────────────────────────────
 router.get('/users', adminPanelController.listUsers);
