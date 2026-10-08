@@ -1251,6 +1251,191 @@ async function getOrderById(req, res) {
 }
 
 /**
+ * GET /api/orders/:orderId/refund-status
+ * Dedicated endpoint for frontend (Mobile App & Web) to verify whether refund has completed.
+ */
+async function getOrderRefundStatus(req, res) {
+  try {
+    const orderId = req.params.orderId || req.params.id;
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: 'Order ID is required' });
+    }
+
+    const orderRes = await query(
+      `SELECT o.order_id, o.user_id, o.vendor_id, o.status, o.total_amount,
+              o.payment_status, o.payment_method, o.refund_id, o.refund_amount,
+              o.refund_status, o.refunded_at, o.cashfree_order_id, o.cashfree_payment_id,
+              o.created_at, v.store_name
+       FROM orders o
+       LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
+       WHERE o.order_id = ?`,
+      [orderId]
+    );
+
+    if (!orderRes.rows || orderRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Order ID '${orderId}' not found` });
+    }
+
+    const ord = orderRes.rows[0];
+
+    const rawRefundStatus = String(ord.refund_status || '').toUpperCase();
+    const rawPaymentStatus = String(ord.payment_status || '').toUpperCase();
+
+    const isCompleted = (
+      rawRefundStatus === 'SUCCESS' ||
+      rawRefundStatus === 'COMPLETED' ||
+      rawPaymentStatus === 'REFUND_COMPLETED' ||
+      rawPaymentStatus === 'REFUNDED'
+    );
+
+    const isInProgress = !isCompleted && (
+      rawPaymentStatus === 'REFUND_IN_PROGRESS' ||
+      rawRefundStatus === 'IN_PROGRESS' ||
+      rawRefundStatus === 'PENDING' ||
+      Boolean(ord.refund_id && !isCompleted)
+    );
+
+    let refundState = 'NOT_APPLICABLE';
+    let refundStatusLabel = 'No Refund Applicable';
+    let message = 'This order does not have any active refund.';
+
+    if (isCompleted) {
+      refundState = 'COMPLETED';
+      refundStatusLabel = 'Refund Completed';
+      message = 'Refund has been completed successfully and credited back to the original payment source.';
+    } else if (isInProgress) {
+      refundState = 'IN_PROGRESS';
+      refundStatusLabel = 'Refund in Progress (Crediting back to original payment source)';
+      message = 'Refund has been initiated and is currently being processed by the banking network.';
+    } else if (String(ord.status).toUpperCase() === 'CANCELLED') {
+      if (ord.payment_method === 'COD' || rawPaymentStatus === 'CANCELLED' || rawPaymentStatus === 'PENDING') {
+        refundState = 'NOT_APPLICABLE';
+        refundStatusLabel = 'No Refund Applicable (Cash on Delivery or Unpaid)';
+        message = 'Order was Cash on Delivery or unpaid. No payment was deducted, so no refund is needed.';
+      }
+    }
+
+    const totalAmount = Number(ord.total_amount || 0);
+    const refundAmount = ord.refund_amount !== null && ord.refund_amount !== undefined
+      ? Number(ord.refund_amount)
+      : (isCompleted || isInProgress ? totalAmount : 0);
+
+    return res.status(200).json({
+      success: true,
+      order_id: String(ord.order_id),
+      user_id: ord.user_id ? String(ord.user_id) : null,
+      vendor_id: ord.vendor_id ? Number(ord.vendor_id) : null,
+      store_name: ord.store_name || '',
+      order_status: ord.status,
+      is_refund_completed: Boolean(isCompleted),
+      is_refund_in_progress: Boolean(isInProgress),
+      refund_status: refundState,
+      refund_status_label: refundStatusLabel,
+      payment_status: ord.payment_status || 'PAID',
+      payment_method: ord.payment_method || 'CASHFREE',
+      total_amount: totalAmount,
+      refund_amount: refundAmount,
+      refund_id: ord.refund_id || null,
+      refunded_at: ord.refunded_at || null,
+      destination: (isCompleted || isInProgress) ? 'Original Payment Source (Bank Account / UPI / Card)' : null,
+      estimated_settlement: isInProgress ? '5-7 business days' : (isCompleted ? 'Completed' : null),
+      message: message
+    });
+  } catch (err) {
+    console.error('Error fetching order refund status:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch refund status: ' + err.message });
+  }
+}
+
+/**
+ * GET /api/orders/user/:userId/refunds
+ * Fetches all refunded or in-progress refund orders for a user.
+ */
+async function getUserRefunds(req, res) {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'User ID is required' });
+    }
+
+    const ordersRes = await query(
+      `SELECT o.order_id, o.user_id, o.vendor_id, o.status, o.total_amount,
+              o.payment_status, o.payment_method, o.refund_id, o.refund_amount,
+              o.refund_status, o.refunded_at, o.created_at, v.store_name
+       FROM orders o
+       LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
+       WHERE (o.user_id = ? OR CAST(o.user_id AS TEXT) = ?)
+         AND (
+           o.refund_id IS NOT NULL
+           OR o.payment_status IN ('REFUND_COMPLETED', 'REFUNDED', 'REFUND_IN_PROGRESS')
+           OR o.refund_status IN ('COMPLETED', 'SUCCESS', 'IN_PROGRESS', 'PENDING')
+         )
+       ORDER BY o.order_id DESC`,
+      [userId, String(userId)]
+    );
+
+    const refunds = (ordersRes.rows || []).map(ord => {
+      const rawRefundStatus = String(ord.refund_status || '').toUpperCase();
+      const rawPaymentStatus = String(ord.payment_status || '').toUpperCase();
+
+      const isCompleted = (
+        rawRefundStatus === 'SUCCESS' ||
+        rawRefundStatus === 'COMPLETED' ||
+        rawPaymentStatus === 'REFUND_COMPLETED' ||
+        rawPaymentStatus === 'REFUNDED'
+      );
+
+      const isInProgress = !isCompleted && (
+        rawPaymentStatus === 'REFUND_IN_PROGRESS' ||
+        rawRefundStatus === 'IN_PROGRESS' ||
+        rawRefundStatus === 'PENDING' ||
+        Boolean(ord.refund_id && !isCompleted)
+      );
+
+      const refundState = isCompleted ? 'COMPLETED' : (isInProgress ? 'IN_PROGRESS' : 'UNKNOWN');
+      const refundStatusLabel = isCompleted
+        ? 'Refund Completed'
+        : (isInProgress ? 'Refund in Progress (Crediting back to original payment source)' : 'Refund Pending');
+
+      const totalAmount = Number(ord.total_amount || 0);
+      const refundAmount = ord.refund_amount !== null && ord.refund_amount !== undefined
+        ? Number(ord.refund_amount)
+        : totalAmount;
+
+      return {
+        order_id: String(ord.order_id),
+        user_id: String(ord.user_id),
+        vendor_id: ord.vendor_id ? Number(ord.vendor_id) : null,
+        store_name: ord.store_name || '',
+        order_status: ord.status,
+        is_refund_completed: Boolean(isCompleted),
+        is_refund_in_progress: Boolean(isInProgress),
+        refund_status: refundState,
+        refund_status_label: refundStatusLabel,
+        payment_status: ord.payment_status,
+        payment_method: ord.payment_method || 'CASHFREE',
+        total_amount: totalAmount,
+        refund_amount: refundAmount,
+        refund_id: ord.refund_id || null,
+        refunded_at: ord.refunded_at || null,
+        destination: 'Original Payment Source (Bank Account / UPI / Card)',
+        created_at: ord.created_at
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: refunds.length,
+      refunds: refunds
+    });
+  } catch (err) {
+    console.error('Error fetching user refunds:', err);
+    return res.status(500).json({ success: false, error: 'Failed to fetch user refunds: ' + err.message });
+  }
+}
+
+
+/**
  * POST /api/orders/:id/notify or /api/orders/:id/confirm-whatsapp
  * Triggers Firebase push notification & socket alarm to vendor when user confirms via WhatsApp
  */
@@ -1432,5 +1617,7 @@ module.exports = {
   cancelOrder,
   getOrderById,
   notifyOrderVendor,
-  validateCartStock
+  validateCartStock,
+  getOrderRefundStatus,
+  getUserRefunds
 };

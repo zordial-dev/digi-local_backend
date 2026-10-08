@@ -5,6 +5,10 @@ const ordersController = require('../../controllers/User/ordersController');
 // GET /api/orders (Query Params: phone, user_id, vendor_id)
 router.get('/', ordersController.getOrdersByQuery);
 
+// Dedicated Refund Status APIs for App & Web Frontends
+router.get('/user/:userId/refunds', ordersController.getUserRefunds);
+router.get('/user/:userId/refund-status', ordersController.getUserRefunds);
+
 // D1. Fetch Resident User Orders
 router.get('/user/:userId', ordersController.getUserOrders);
 
@@ -28,6 +32,10 @@ router.patch('/vendor/:vendorId/orders/:id/status', ordersController.updateOrder
 router.put('/:vendorId/orders/:id/status', ordersController.updateOrderStatus);
 router.post('/:vendorId/orders/:id/status', ordersController.updateOrderStatus);
 router.patch('/:vendorId/orders/:id/status', ordersController.updateOrderStatus);
+
+// Dedicated Refund Status API for Order
+router.get('/:orderId/refund-status', ordersController.getOrderRefundStatus);
+router.get('/:orderId/refund', ordersController.getOrderRefundStatus);
 
 // GET /api/orders/:orderId - Single order detail lookup
 router.get('/:orderId', ordersController.getOrderById);

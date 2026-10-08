@@ -236,6 +236,11 @@ router.post([
   '/api/payments/cashfree/process-refund'
 ], cashfreePaymentController.processOrderRefund);
 
+router.get([
+  '/api/payments/cashfree/refund-status/:orderId',
+  '/api/payments/refund-status/:orderId'
+], ordersController.getOrderRefundStatus);
+
 router.post([
   '/api/orders/:id/cancel',
   '/api/orders/:id/user-cancel'
