@@ -19,7 +19,7 @@ async function getSocietyVendorsStorefront(req, res) {
         const isAll = !societyId || String(societyId).toLowerCase() === 'all' || societyId === '0';
 
         let sql = `SELECT v.vendor_id, v.society_id, v.vendor_name, v.gst_number, v.phone_number, v.email,
-                          v.store_name, v.logo, v.description, v.status, v.account_number, v.ifsc_code,
+                          v.store_name, v.logo, v.shop_image, v.description, v.status, v.account_number, v.ifsc_code,
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods,
                           v.vendor_type, v.can_add_items,
@@ -68,11 +68,22 @@ async function getSocietyVendorsStorefront(req, res) {
             console.log(`vendors query time: ${endTime - startTime}`);
         }
 
+        const formattedRows = (result.rows || []).map(v => {
+            const rawImg = v.logo || v.shop_image || null;
+            const finalImg = rawImg ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImg) : rawImg) : null;
+            return {
+                ...v,
+                logo: finalImg,
+                shop_image: finalImg,
+                logo_url: finalImg
+            };
+        });
+
         if (isPaginated) {
             const total_pages = Math.ceil(total_records / limitNum) || 1;
             return res.status(200).json({
                 success: true,
-                data: result.rows,
+                data: formattedRows,
                 meta: {
                     total_records,
                     total_pages,
@@ -84,7 +95,7 @@ async function getSocietyVendorsStorefront(req, res) {
             });
         }
 
-        res.status(200).json(result.rows);
+        res.status(200).json(formattedRows);
     } catch (err) {
         console.error('Error fetching vendors:', err);
         res.status(500).json({ error: 'DB query failed: Unable to fetch vendors' });
@@ -216,13 +227,12 @@ async function getVendorStorefront(req, res) {
             servicesList = [];
         }
 
-        const rawLogo = vendor.logo || vendor.shop_image || null;
-        const rawShopImage = vendor.shop_image || vendor.logo || null;
-        const finalShopLogo = rawLogo ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawLogo) : rawLogo) : null;
-        const finalShopImage = rawShopImage ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawShopImage) : rawShopImage) : null;
+        const rawImage = vendor.logo || vendor.shop_image || null;
+        const finalImage = rawImage ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImage) : rawImage) : null;
 
-        vendor.logo = finalShopLogo;
-        vendor.shop_image = finalShopImage;
+        vendor.logo = finalImage;
+        vendor.shop_image = finalImage;
+        vendor.logo_url = finalImage;
 
         const cleanVendorObj = {
             ...vendor,
@@ -254,8 +264,9 @@ async function getVendorStorefront(req, res) {
             city: vendor.city || '',
             state: vendor.state || '',
             pincode: vendor.pincode || '',
-            shop_image: finalShopImage,
-            logo: finalShopLogo,
+            shop_image: finalImage,
+            logo: finalImage,
+            logo_url: finalImage,
             status: String(vendor.status || 'ACTIVE').toLowerCase(),
             is_servicable: true
         };
@@ -352,7 +363,7 @@ async function searchVendorsLocationAware(req, res) {
         const offset = (pageNum - 1) * limitNum;
 
         let sql = `SELECT v.vendor_id, v.society_id, v.vendor_name, v.gst_number, v.phone_number, v.email,
-                          v.store_name, v.logo, v.description, v.status, v.account_number, v.ifsc_code,
+                          v.store_name, v.logo, v.shop_image, v.description, v.status, v.account_number, v.ifsc_code,
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods,
                           v.vendor_type, v.can_add_items, v.location_address, v.location, v.city, v.state, v.pincode,
@@ -407,19 +418,26 @@ async function searchVendorsLocationAware(req, res) {
         const vendorRes = await query(sql, params);
         const vendors = vendorRes.rows || [];
 
-        const formattedVendors = vendors.map(v => ({
-            ...v,
-            vendor_id: Number(v.vendor_id),
-            society_id: Number(v.society_id),
-            vendor_type: v.vendor_type || 'product',
-            can_add_items: v.can_add_items !== false && (v.vendor_type || 'product') === 'product',
-            area: v.area || v.location || v.location_address || v.address || '',
-            location: v.area || v.location || v.location_address || v.address || '',
-            city: v.city || '',
-            state: v.state || '',
-            pincode: v.pincode || '',
-            coverage_badge: v.area ? `Area: ${v.area}` : 'Servicable Store'
-        }));
+        const formattedVendors = vendors.map(v => {
+            const rawImg = v.logo || v.shop_image || null;
+            const finalImg = rawImg ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImg) : rawImg) : null;
+            return {
+                ...v,
+                vendor_id: Number(v.vendor_id),
+                society_id: Number(v.society_id),
+                logo: finalImg,
+                shop_image: finalImg,
+                logo_url: finalImg,
+                vendor_type: v.vendor_type || 'product',
+                can_add_items: v.can_add_items !== false && (v.vendor_type || 'product') === 'product',
+                area: v.area || v.location || v.location_address || v.address || '',
+                location: v.area || v.location || v.location_address || v.address || '',
+                city: v.city || '',
+                state: v.state || '',
+                pincode: v.pincode || '',
+                coverage_badge: v.area ? `Area: ${v.area}` : 'Servicable Store'
+            };
+        });
 
         if (isPaginated) {
             const total_pages = Math.ceil(formattedVendors.length / limitNum) || 1;

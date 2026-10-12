@@ -156,7 +156,9 @@ function serializeVendorForAdmin(v) {
     city: v.city || '',
     state: v.state || '',
     pincode: v.pincode || '',
-    shop_image: v.shop_image || v.logo || v.avatar_url || '',
+    shop_image: v.logo || v.shop_image || v.avatar_url || '',
+    logo: v.logo || v.shop_image || v.avatar_url || '',
+    logo_url: v.logo || v.shop_image || v.avatar_url || '',
     description: v.description || '',
     status: (v.status || 'PENDING').toUpperCase(),
     is_blocked: String(v.status || '').toUpperCase() === 'BLOCKED' || String(v.status || '').toUpperCase() === 'SUSPENDED',
@@ -818,7 +820,7 @@ async function updateVendorStatus(req, res) {
         `UPDATE vendors SET status = 'ACTIVE', strikes = 0, hold_reason = NULL WHERE vendor_id = ?`,
         [targetId]
       );
-      await query(`DELETE FROM vendor_strikes WHERE vendor_id = ?`, [targetId]).catch(() => {});
+      await query(`DELETE FROM vendor_strikes WHERE vendor_id = ?`, [targetId]).catch(() => { });
     } else {
       await query(
         `UPDATE vendors SET status = ?, hold_reason = COALESCE(?, hold_reason) WHERE vendor_id = ?`,
@@ -1813,7 +1815,7 @@ async function updateUserStatus(req, res) {
         `UPDATE users SET status = 'ACTIVE', strikes = 0 WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
         [targetId, String(targetId), String(targetId)]
       );
-      await query(`DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [String(targetId), String(targetId)]).catch(() => {});
+      await query(`DELETE FROM user_strikes WHERE user_id = ? OR CAST(user_id AS TEXT) = ?`, [String(targetId), String(targetId)]).catch(() => { });
     } else {
       await query(
         `UPDATE users SET status = ? WHERE user_id = ? OR CAST(user_id AS TEXT) = ? OR phone = ?`,
@@ -1901,10 +1903,10 @@ async function unbanUser(req, res) {
     }
 
     const u = userRes.rows[0];
-    const city    = u.city    || u.soc_city    || '';
-    const state   = u.state   || u.soc_state   || '';
+    const city = u.city || u.soc_city || '';
+    const state = u.state || u.soc_state || '';
     const pincode = u.pincode || u.soc_pincode || '';
-    const previousStatus  = u.status  || 'BLOCKED';
+    const previousStatus = u.status || 'BLOCKED';
     const previousStrikes = Number(u.strike_count !== undefined && u.strike_count !== null ? u.strike_count : (u.strikes || 0));
 
     // 1. Reset status to ACTIVE and clear strikes atomically
@@ -1929,25 +1931,25 @@ async function unbanUser(req, res) {
     ).catch(e => console.error('Error logging unban audit record:', e));
 
     return respond(res, 200, {
-      user_id:           String(u.user_id),
-      name:              u.name  || '',
-      phone:             u.phone || '',
-      phone_number:      get10DigitPhone(u.phone),
+      user_id: String(u.user_id),
+      name: u.name || '',
+      phone: u.phone || '',
+      phone_number: get10DigitPhone(u.phone),
       city,
       state,
       pincode,
-      pin_code:          pincode,
-      status:            'active',
-      is_blocked:        false,
-      is_banned:         false,
-      strike_count:      0,
-      strikes:           0,
-      flags_count:       0,
+      pin_code: pincode,
+      status: 'active',
+      is_blocked: false,
+      is_banned: false,
+      strike_count: 0,
+      strikes: 0,
+      flags_count: 0,
       max_strikes_allowed: 3,
-      previous_status:   previousStatus.toLowerCase(),
-      previous_strikes:  previousStrikes,
-      unban_reason:      unbanReason,
-      unbanned_by:       adminId
+      previous_status: previousStatus.toLowerCase(),
+      previous_strikes: previousStrikes,
+      unban_reason: unbanReason,
+      unbanned_by: adminId
     }, `User "${u.name || u.user_id}" has been successfully unbanned. Status set to ACTIVE and all ${previousStrikes} strike(s) cleared.`);
   } catch (err) {
     console.error('Error unbanning user:', err);
@@ -1998,13 +2000,13 @@ async function unbanVendor(req, res) {
     );
 
     // Clear vendor_strikes
-    await query(`DELETE FROM vendor_strikes WHERE vendor_id = ?`, [targetId]).catch(() => {});
+    await query(`DELETE FROM vendor_strikes WHERE vendor_id = ?`, [targetId]).catch(() => { });
 
     const adminId = req.user?.id || req.user?.admin_id || 'admin';
     await query(
       `INSERT INTO vendor_strikes (vendor_id, strike_number, reason, admin_id) VALUES (?, 0, ?, ?)`,
       [targetId, `[UNBAN] ${unbanReason}`, adminId]
-    ).catch(() => {});
+    ).catch(() => { });
 
     const updatedRes = await query(`SELECT v.*, s.society_name FROM vendors v LEFT JOIN societies s ON v.society_id = s.society_id WHERE v.vendor_id = ?`, [targetId]);
     const serialized = serializeVendorForAdmin(updatedRes.rows[0]);
@@ -2482,12 +2484,12 @@ async function updateSettingsSection(req, res) {
           await query(
             `UPDATE plans SET price = ?, name = ?, description = ?, features = ?::jsonb WHERE plan_code = 'ANNUAL_5999'`,
             [price, name, description, features]
-          ).catch(() => {});
+          ).catch(() => { });
         } else {
           await query(
             `UPDATE plans SET price = ?, name = ?, description = ? WHERE plan_code = 'ANNUAL_5999'`,
             [price, name, description]
-          ).catch(() => {});
+          ).catch(() => { });
         }
       }
 

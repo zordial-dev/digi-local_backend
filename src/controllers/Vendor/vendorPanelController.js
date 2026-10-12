@@ -170,7 +170,7 @@ async function updateVendorLogo(req, res) {
             return res.status(400).json({ error: 'Please provide a logo image file (multipart form-data), base64 string, or logo_url string' });
         }
 
-        await query(`UPDATE vendors SET logo = ? WHERE vendor_id = ? OR public_id = ?`, [logoUrl, vendorId, String(vendorId)]);
+        await query(`UPDATE vendors SET logo = ?, shop_image = ? WHERE vendor_id = ? OR public_id = ?`, [logoUrl, logoUrl, vendorId, String(vendorId)]);
         const memoryCache = require('../../utils/cache');
         memoryCache.clear();
 
@@ -179,7 +179,8 @@ async function updateVendorLogo(req, res) {
             message: 'Shop logo updated successfully!',
             vendor_id: vendorId,
             logo: logoUrl,
-            logo_url: logoUrl
+            logo_url: logoUrl,
+            shop_image: logoUrl
         });
     } catch (err) {
         console.error('Error updating vendor logo:', err);
@@ -715,31 +716,31 @@ async function updateVendorCoverage(req, res) {
 
 
 async function updatePaymentDetails(req, res) {
-  try {
-    const vendorId = req.params.vendorId || req.user?.vendorId || req.body.vendor_id || req.body.vendorId;
-    const body = req.body || {};
+    try {
+        const vendorId = req.params.vendorId || req.user?.vendorId || req.body.vendor_id || req.body.vendorId;
+        const body = req.body || {};
 
-    const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
-    const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
-    const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
-    const account_holder_name = String(body.account_holder_name || body.accountHolderName || '').trim();
-    const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
-    const qr_code = String(body.qr_code || body.qr_code_url || body.qrCodeUrl || body.upi_qr_code || '').trim();
+        const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
+        const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
+        const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
+        const account_holder_name = String(body.account_holder_name || body.accountHolderName || '').trim();
+        const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
+        const qr_code = String(body.qr_code || body.qr_code_url || body.qrCodeUrl || body.upi_qr_code || '').trim();
 
-    if (!vendorId) {
-      return res.status(400).json({ error: 'Vendor ID is required to update payment details.' });
-    }
+        if (!vendorId) {
+            return res.status(400).json({ error: 'Vendor ID is required to update payment details.' });
+        }
 
-    const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [vendorId]);
-    if (!existing.rows || existing.rows.length === 0) {
-      return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
-    }
+        const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [vendorId]);
+        if (!existing.rows || existing.rows.length === 0) {
+            return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
+        }
 
-    const currentVendor = existing.rows[0];
-    await recordVendorFieldChanges(vendorId, currentVendor, body);
+        const currentVendor = existing.rows[0];
+        await recordVendorFieldChanges(vendorId, currentVendor, body);
 
-    await query(
-      `UPDATE vendors SET 
+        await query(
+            `UPDATE vendors SET 
         account_number = COALESCE(NULLIF(?, ''), account_number),
         bank_account_number = COALESCE(NULLIF(?, ''), bank_account_number),
         ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
@@ -748,27 +749,27 @@ async function updatePaymentDetails(req, res) {
         upi_id = COALESCE(NULLIF(?, ''), upi_id),
         qr_code = COALESCE(NULLIF(?, ''), qr_code)
       WHERE vendor_id = ?`,
-      [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, vendorId]
-    );
+            [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, vendorId]
+        );
 
-    return res.status(200).json({
-      success: true,
-      message: 'Bank account and payment details updated successfully.',
-      data: {
-        vendor_id: Number(vendorId),
-        account_number,
-        ifsc_code,
-        bank_name,
-        account_holder_name,
-        upi_id,
-        qr_code,
-        qr_code_url: qr_code
-      }
-    });
-  } catch (err) {
-    console.error('Error updating payment details:', err);
-    return res.status(500).json({ error: 'Failed to update payment details.', details: err.message });
-  }
+        return res.status(200).json({
+            success: true,
+            message: 'Bank account and payment details updated successfully.',
+            data: {
+                vendor_id: Number(vendorId),
+                account_number,
+                ifsc_code,
+                bank_name,
+                account_holder_name,
+                upi_id,
+                qr_code,
+                qr_code_url: qr_code
+            }
+        });
+    } catch (err) {
+        console.error('Error updating payment details:', err);
+        return res.status(500).json({ error: 'Failed to update payment details.', details: err.message });
+    }
 }
 
 /**
@@ -777,89 +778,89 @@ async function updatePaymentDetails(req, res) {
  * Dedicated, lightweight endpoint for updating or adjusting an item's inventory stock count
  */
 async function updateItemStock(req, res) {
-  try {
-    const { vendorId, itemId } = req.params;
-    const rawStock = req.body.stock !== undefined ? req.body.stock : req.body.quantity;
-    const stockChange = req.body.stock_change !== undefined ? req.body.stock_change : req.body.delta;
+    try {
+        const { vendorId, itemId } = req.params;
+        const rawStock = req.body.stock !== undefined ? req.body.stock : req.body.quantity;
+        const stockChange = req.body.stock_change !== undefined ? req.body.stock_change : req.body.delta;
 
-    if (rawStock === undefined && stockChange === undefined) {
-      return res.status(400).json({
-        success: false,
-        error: 'Either "stock" (absolute value) or "stock_change" (increment/decrement delta) is required'
-      });
-    }
+        if (rawStock === undefined && stockChange === undefined) {
+            return res.status(400).json({
+                success: false,
+                error: 'Either "stock" (absolute value) or "stock_change" (increment/decrement delta) is required'
+            });
+        }
 
-    // Lookup item
-    const itemRes = await query(
-      `SELECT item_id, vendor_id, item_name, price, stock, in_stock, is_available FROM items WHERE item_id = ?`,
-      [itemId]
-    );
+        // Lookup item
+        const itemRes = await query(
+            `SELECT item_id, vendor_id, item_name, price, stock, in_stock, is_available FROM items WHERE item_id = ?`,
+            [itemId]
+        );
 
-    if (!itemRes.rows || itemRes.rows.length === 0) {
-      return res.status(404).json({ success: false, error: `Item #${itemId} not found` });
-    }
+        if (!itemRes.rows || itemRes.rows.length === 0) {
+            return res.status(404).json({ success: false, error: `Item #${itemId} not found` });
+        }
 
-    const item = itemRes.rows[0];
-    if (vendorId && Number(item.vendor_id) !== Number(vendorId)) {
-      return res.status(403).json({ success: false, error: 'Unauthorized: Item does not belong to this vendor' });
-    }
+        const item = itemRes.rows[0];
+        if (vendorId && Number(item.vendor_id) !== Number(vendorId)) {
+            return res.status(403).json({ success: false, error: 'Unauthorized: Item does not belong to this vendor' });
+        }
 
-    const currentStock = item.stock !== null && item.stock !== undefined ? Math.max(0, Number(item.stock)) : 0;
-    let newStock = currentStock;
+        const currentStock = item.stock !== null && item.stock !== undefined ? Math.max(0, Number(item.stock)) : 0;
+        let newStock = currentStock;
 
-    if (rawStock !== undefined) {
-      newStock = Math.max(0, parseInt(rawStock, 10) || 0);
-    } else if (stockChange !== undefined) {
-      newStock = Math.max(0, currentStock + (parseInt(stockChange, 10) || 0));
-    }
+        if (rawStock !== undefined) {
+            newStock = Math.max(0, parseInt(rawStock, 10) || 0);
+        } else if (stockChange !== undefined) {
+            newStock = Math.max(0, currentStock + (parseInt(stockChange, 10) || 0));
+        }
 
-    const autoInStock = newStock > 0;
-    const autoAvail = newStock > 0 ? 1 : 0;
+        const autoInStock = newStock > 0;
+        const autoAvail = newStock > 0 ? 1 : 0;
 
-    await query(
-      `UPDATE items 
+        await query(
+            `UPDATE items 
        SET stock = ?,
            in_stock = ?,
            is_available = ?
        WHERE item_id = ?`,
-      [newStock, autoInStock, autoAvail, itemId]
-    );
+            [newStock, autoInStock, autoAvail, itemId]
+        );
 
-    return res.status(200).json({
-      success: true,
-      message: `Stock updated successfully from ${currentStock} to ${newStock}`,
-      item_id: Number(itemId),
-      item_name: item.item_name,
-      previous_stock: currentStock,
-      stock: newStock,
-      available_quantity: newStock,
-      max_quantity: newStock,
-      in_stock: autoInStock,
-      is_available: autoInStock
-    });
-  } catch (err) {
-    console.error('Error updating item stock:', err);
-    return res.status(500).json({ success: false, error: 'Failed to update item stock', message: err.message });
-  }
+        return res.status(200).json({
+            success: true,
+            message: `Stock updated successfully from ${currentStock} to ${newStock}`,
+            item_id: Number(itemId),
+            item_name: item.item_name,
+            previous_stock: currentStock,
+            stock: newStock,
+            available_quantity: newStock,
+            max_quantity: newStock,
+            in_stock: autoInStock,
+            is_available: autoInStock
+        });
+    } catch (err) {
+        console.error('Error updating item stock:', err);
+        return res.status(500).json({ success: false, error: 'Failed to update item stock', message: err.message });
+    }
 }
 
 module.exports = {
-  updatePaymentDetails,
-  uploadImage,
-  updateVendorLogo,
-  getDashboard,
-  getVendorPurchases,
-  addItem,
-  updateItem,
-  updateItemImage,
-  updateItemStock,
-  deleteItem,
-  updateSettings,
-  renewSubscription,
-  toggleAvailability,
-  registerFcmToken,
-  deleteFcmToken,
-  testPushNotification,
-  deleteStore,
-  updateVendorCoverage
+    updatePaymentDetails,
+    uploadImage,
+    updateVendorLogo,
+    getDashboard,
+    getVendorPurchases,
+    addItem,
+    updateItem,
+    updateItemImage,
+    updateItemStock,
+    deleteItem,
+    updateSettings,
+    renewSubscription,
+    toggleAvailability,
+    registerFcmToken,
+    deleteFcmToken,
+    testPushNotification,
+    deleteStore,
+    updateVendorCoverage
 };
