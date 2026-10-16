@@ -49,11 +49,11 @@ function getStaticAuthToken() {
  */
 class SmsCreditExhaustedError extends Error {
   constructor(message = 'insufficient credits', providerCode = 508) {
-    super('SMS gateway credits exhausted. SMS cannot be delivered.');
+    super('SMS service is temporarily unavailable.');
     this.name = 'SmsCreditExhaustedError';
     this.isCreditExhausted = true;
     this.statusCode = 503;
-    this.errorCode = 'SMS_CREDITS_EXHAUSTED';
+    this.errorCode = 'SMS_SERVICE_UNAVAILABLE';
     this.providerCode = Number(providerCode) || 508;
   }
 }
@@ -62,12 +62,12 @@ class SmsCreditExhaustedError extends Error {
  * Custom Error for Generic SMS Gateway Errors
  */
 class SmsGatewayError extends Error {
-  constructor(message = 'SMS delivery failed via gateway', providerCode = null) {
+  constructor(message = 'SMS service is temporarily unavailable.', providerCode = null) {
     super(message);
     this.name = 'SmsGatewayError';
     this.isGatewayError = true;
     this.statusCode = 502;
-    this.errorCode = 'SMS_GATEWAY_ERROR';
+    this.errorCode = 'SMS_SERVICE_UNAVAILABLE';
     this.providerCode = providerCode ? Number(providerCode) : null;
   }
 }
@@ -119,21 +119,16 @@ function isCreditExhaustedError(errOrData) {
  * Formats standard error response payload for controllers
  */
 function formatSmsErrorResponse(error) {
-  if (error.isCreditExhausted || error.errorCode === 'SMS_CREDITS_EXHAUSTED' || error.name === 'SmsCreditExhaustedError') {
+  if (error.isCreditExhausted || error.errorCode === 'SMS_CREDITS_EXHAUSTED' || error.errorCode === 'SMS_SERVICE_UNAVAILABLE' || error.name === 'SmsCreditExhaustedError') {
     return {
       statusCode: 503,
       body: {
         success: false,
-        error_code: 'SMS_CREDITS_EXHAUSTED',
-        error: 'SMS gateway credits exhausted. SMS cannot be delivered.',
-        message: 'SMS service is temporarily unavailable due to gateway limits. Please use Email OTP or contact support.',
+        error_code: 'SMS_SERVICE_UNAVAILABLE',
+        error: 'SMS service is temporarily unavailable.',
+        message: 'SMS service is temporarily unavailable.',
         channel: 'mobile_sms',
-        provider: 'message_central',
-        provider_response_code: Number(error.providerCode) || 508,
-        fallback_available: {
-          email_otp: true
-        },
-        action: 'USE_EMAIL_OTP'
+        provider: 'message_central'
       }
     };
   }
@@ -143,16 +138,11 @@ function formatSmsErrorResponse(error) {
       statusCode: 502,
       body: {
         success: false,
-        error_code: 'SMS_GATEWAY_ERROR',
-        error: error.message || 'SMS delivery failed via gateway.',
-        message: 'SMS service is temporarily unavailable. Please try again or use Email OTP.',
+        error_code: 'SMS_SERVICE_UNAVAILABLE',
+        error: 'SMS service is temporarily unavailable.',
+        message: 'SMS service is temporarily unavailable.',
         channel: 'mobile_sms',
-        provider: 'message_central',
-        provider_response_code: error.providerCode ? Number(error.providerCode) : null,
-        fallback_available: {
-          email_otp: true
-        },
-        action: 'USE_EMAIL_OTP'
+        provider: 'message_central'
       }
     };
   }
