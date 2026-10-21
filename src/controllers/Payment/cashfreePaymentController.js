@@ -1,6 +1,7 @@
 const { query } = require('../../models/db');
 const cashfreeService = require('../../services/cashfreeService');
 const notificationService = require('../../services/notificationService');
+const subscriptionService = require('../../services/subscriptionService');
 
 /**
  * Cashfree Payment Controller
@@ -613,7 +614,20 @@ async function cashfreeWebhook(req, res) {
     console.log(`🔔 [CASHFREE WEBHOOK] Event: ${eventType} | Order: ${orderId} | Status: ${paymentStatus}`);
 
     if (paymentStatus === 'SUCCESS' || eventType.includes('SUCCESS') || eventType === 'ORDER_PAID') {
-      if (orderId) {
+      if (orderId && (orderId.startsWith('SUB_') || orderData.order_tags?.order_type === 'VENDOR_SUBSCRIPTION')) {
+        console.log(`💳 [CASHFREE WEBHOOK] Vendor Subscription Payment Detected for #${orderId}`);
+        try {
+          await subscriptionService.verifyAndActivatePayment({
+            orderId,
+            vendorId: orderData.order_tags?.vendor_id,
+            couponCode: orderData.order_tags?.coupon_code,
+            planId: orderData.order_tags?.plan_id,
+            transactionId: cfPaymentId
+          });
+        } catch (subErr) {
+          console.error('❌ [CASHFREE WEBHOOK] Error activating vendor subscription:', subErr.message);
+        }
+      } else if (orderId) {
         // Update order status to PLACED (awaiting vendor acceptance)
         await query(
           `UPDATE orders 

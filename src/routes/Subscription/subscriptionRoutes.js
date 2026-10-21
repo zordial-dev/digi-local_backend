@@ -15,6 +15,13 @@ router.post('/coupons/generate', subscriptionController.generateCoupon.bind(subs
 router.post('/subscribe', subscriptionController.subscribe.bind(subscriptionController));
 router.post('/renew', subscriptionController.subscribe.bind(subscriptionController));
 
+// Real Cashfree Payment Session & Verification Endpoints
+router.post('/create-payment-session', subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/create-session', subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/pay', subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/verify-payment', subscriptionController.verifyPayment.bind(subscriptionController));
+router.post('/verify', subscriptionController.verifyPayment.bind(subscriptionController));
+
 // 4. Vendor Subscription Status & Expiry Popup Data
 router.get('/status', subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
 router.get('/status/:vendorId', subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));

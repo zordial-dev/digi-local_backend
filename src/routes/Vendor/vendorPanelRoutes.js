@@ -200,6 +200,10 @@ router.get('/:vendorId/subscription-status', subscriptionController.getVendorSub
 router.get('/:vendorId/coupons', subscriptionController.getCoupons.bind(subscriptionController));
 router.post('/:vendorId/subscribe', subscriptionController.subscribe.bind(subscriptionController));
 router.post('/:vendorId/renew', subscriptionController.subscribe.bind(subscriptionController));
+router.post('/:vendorId/subscription-session', subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/:vendorId/create-payment-session', subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/:vendorId/verify-subscription', subscriptionController.verifyPayment.bind(subscriptionController));
+router.post('/:vendorId/verify-payment', subscriptionController.verifyPayment.bind(subscriptionController));
 
 // FCM / Expo Push Device Token Endpoints
 router.post('/fcm-token', vendorPanelController.registerFcmToken);

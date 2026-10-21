@@ -2,6 +2,7 @@ const { query, withTransaction } = require('../models/db');
 const { generateUniqueCouponCode } = require('../utils/couponGenerator');
 const memoryCache = require('../utils/cache');
 const { sendRenewalEmail, sendSubscriptionExpiryEmail } = require('../config/email');
+const cashfreeService = require('./cashfreeService');
 
 /**
  * Subscription Service
@@ -343,6 +344,307 @@ class SubscriptionService {
         coupon_applied: appliedCoupon ? appliedCoupon.coupon_code : null,
         payment_method: rawMethod || 'ONLINE',
         transaction_id: txnId,
+        status: 'ACTIVE',
+        shop_visible_on_portal: true
+      };
+    });
+  }
+
+  /**
+   * 4a. CREATE SUBSCRIPTION REAL PAYMENT SESSION (Cashfree PG)
+   * Calculates plan amount, applies coupon discount, and generates Cashfree payment_session_id.
+   */
+  async createSubscriptionPaymentSession({ vendorId, planId, couponCode, returnUrl, notifyUrl, options = {} }) {
+    const vId = Number(vendorId);
+    if (!vId || isNaN(vId)) {
+      throw new Error('Valid vendor_id is required');
+    }
+
+    // Check vendor exists
+    const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`, [vId]);
+    if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      throw new Error(`Vendor ${vId} not found.`);
+    }
+    const vendor = vendorRes.rows[0];
+
+    // Fetch plan details (1-year 5999 default)
+    let plan = null;
+    if (planId) {
+      const pRes = await query(`SELECT * FROM plans WHERE plan_id = ? AND is_active = TRUE`, [planId]);
+      if (pRes.rows.length > 0) plan = pRes.rows[0];
+    }
+    if (!plan) {
+      const pRes = await query(`SELECT * FROM plans WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE LIMIT 1`);
+      plan = pRes.rows[0] || { plan_id: 1, name: 'Annual Merchant Plan', price: 5999.00, duration_days: 365 };
+    }
+
+    const basePrice = parseFloat(plan.price || 5999.00);
+    let discountAmount = 0.00;
+    let appliedCoupon = null;
+
+    // Validate & apply coupon if provided
+    if (couponCode) {
+      const couponCheck = await this.applyCoupon({ vendorId: vId, couponCode, planId: plan.plan_id });
+      discountAmount = couponCheck.discount_amount;
+      appliedCoupon = couponCheck;
+    }
+
+    const finalPrice = Math.max(0, Math.round((basePrice - discountAmount) * 100) / 100);
+
+    // Call Cashfree PG to create checkout session
+    const session = await cashfreeService.createSubscriptionPaymentSession({
+      vendor_id: vId,
+      store_name: vendor.store_name,
+      vendor_name: vendor.vendor_name,
+      amount: finalPrice,
+      plan_id: plan.plan_id,
+      coupon_code: appliedCoupon ? appliedCoupon.coupon_code : null,
+      email: vendor.email,
+      phone_number: vendor.phone_number,
+      return_url: returnUrl,
+      notify_url: notifyUrl
+    }, options);
+
+    if (!session || !session.success || !session.payment_session_id) {
+      throw new Error(session?.error || 'Failed to generate Cashfree payment session for subscription');
+    }
+
+    // Record initial PENDING payment in payments table for audit
+    await query(
+      `INSERT INTO payments (
+         order_id, vendor_id, amount, currency, payment_status,
+         payment_method, payment_gateway, cashfree_order_id,
+         customer_name, customer_phone, customer_email, notes, created_at
+       ) VALUES (?, ?, ?, 'INR', 'PENDING', 'CASHFREE', 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        session.order_id,
+        vId,
+        finalPrice,
+        session.cf_order_id || session.order_id,
+        vendor.vendor_name || vendor.store_name,
+        vendor.phone_number,
+        vendor.email,
+        `Annual Subscription Payment for ${vendor.store_name}${appliedCoupon ? ' (Coupon: ' + appliedCoupon.coupon_code + ')' : ''}`
+      ]
+    ).catch(err => console.warn('Could not pre-insert payment audit log:', err.message));
+
+    return {
+      success: true,
+      mode: session.mode,
+      payment_session_id: session.payment_session_id,
+      order_id: session.order_id,
+      cf_order_id: session.cf_order_id,
+      order_amount: finalPrice,
+      order_currency: 'INR',
+      original_price: basePrice,
+      discount_amount: discountAmount,
+      final_price: finalPrice,
+      coupon_applied: appliedCoupon ? appliedCoupon.coupon_code : null,
+      payment_url: session.payment_url,
+      environment: session.mode === 'live' ? 'PRODUCTION' : (session.mode === 'sandbox' || session.mode === 'test_sandbox' ? 'SANDBOX' : 'PRODUCTION'),
+      vendor_id: vId,
+      store_name: vendor.store_name,
+      plan_id: plan.plan_id,
+      plan_name: plan.name,
+      cashfree: session
+    };
+  }
+
+  /**
+   * 4b. VERIFY AND ACTIVATE SUBSCRIPTION REAL PAYMENT (Cashfree PG)
+   * Verifies payment status via Cashfree PG, prevents duplicate activations,
+   * activates subscription for 1 year, updates vendor status to ACTIVE, marks coupon used, and sends confirmation email.
+   */
+  async verifyAndActivatePayment({ orderId, vendorId, couponCode, planId, transactionId, options = {} }) {
+    if (!orderId) {
+      throw new Error('order_id is required for payment verification');
+    }
+
+    // Extract vendorId from orderId if missing (Format: SUB_<timestamp>_<vendorId>)
+    let vId = vendorId ? Number(vendorId) : null;
+    if (!vId && orderId.startsWith('SUB_')) {
+      const parts = orderId.split('_');
+      if (parts.length >= 3) {
+        vId = Number(parts[2]);
+      }
+    }
+
+    // If still missing, check in payments table
+    if (!vId) {
+      const pCheck = await query(`SELECT vendor_id FROM payments WHERE order_id = ? OR cashfree_order_id = ? LIMIT 1`, [orderId, orderId]);
+      if (pCheck.rows.length > 0) {
+        vId = Number(pCheck.rows[0].vendor_id);
+      }
+    }
+
+    if (!vId || isNaN(vId)) {
+      throw new Error('Unable to resolve vendor_id for subscription payment verification');
+    }
+
+    // 1. Check if this payment order has ALREADY activated a subscription (Idempotency protection)
+    const existingSubCheck = await query(
+      `SELECT s.*, v.store_name 
+       FROM subscriptions s 
+       JOIN vendors v ON s.vendor_id = v.vendor_id 
+       WHERE s.transaction_id = ? OR s.transaction_id LIKE ? 
+       ORDER BY s.subscription_id DESC LIMIT 1`,
+      [orderId, `%${orderId}%`]
+    );
+
+    if (existingSubCheck.rows && existingSubCheck.rows.length > 0) {
+      const existingSub = existingSubCheck.rows[0];
+      return {
+        success: true,
+        verified: true,
+        already_processed: true,
+        message: `Subscription is already active until ${existingSub.end_date instanceof Date ? existingSub.end_date.toISOString().split('T')[0] : existingSub.end_date}.`,
+        subscription_id: existingSub.subscription_id,
+        vendor_id: vId,
+        store_name: existingSub.store_name,
+        plan_name: existingSub.plan_name,
+        start_date: existingSub.start_date,
+        end_date: existingSub.end_date,
+        payment_method: existingSub.payment_method || 'CASHFREE',
+        transaction_id: existingSub.transaction_id,
+        status: existingSub.status,
+        shop_visible_on_portal: true
+      };
+    }
+
+    // 2. Query Cashfree PG to verify real payment status
+    const verification = await cashfreeService.verifyPaymentStatus(orderId, transactionId, options);
+
+    if (!verification.success || !verification.verified) {
+      return {
+        success: false,
+        verified: false,
+        payment_status: verification.payment_status || 'FAILED',
+        order_id: orderId,
+        error: verification.error || 'Payment has not been completed or was declined by Cashfree'
+      };
+    }
+
+    const verifiedPaymentId = verification.cf_payment_id || transactionId || `CF_PAY_${Date.now()}`;
+    const verifiedAmount = Number(verification.payment_amount || 5999.00);
+
+    // 3. Vendor lookup
+    const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`, [vId]);
+    if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      throw new Error(`Vendor ${vId} not found.`);
+    }
+    const vendor = vendorRes.rows[0];
+
+    // 4. Resolve coupon code if not explicitly passed
+    let activeCouponCode = couponCode;
+    if (!activeCouponCode) {
+      const payMeta = await query(`SELECT notes FROM payments WHERE order_id = ? OR cashfree_order_id = ? LIMIT 1`, [orderId, orderId]);
+      if (payMeta.rows?.[0]?.notes && payMeta.rows[0].notes.includes('Coupon: ')) {
+        const match = payMeta.rows[0].notes.match(/Coupon:\s*([A-Za-z0-9]+)/);
+        if (match && match[1]) activeCouponCode = match[1];
+      }
+    }
+
+    // 5. Activate subscription inside transaction
+    const todayStr = this.getTodayIST();
+
+    // Check existing active subscription to compute dates
+    const existingActiveSubRes = await query(
+      `SELECT subscription_id, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date, status 
+       FROM subscriptions 
+       WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' 
+       ORDER BY subscription_id DESC LIMIT 1`,
+      [vId]
+    );
+
+    let startDateStr = todayStr;
+    const activeSub = existingActiveSubRes.rows && existingActiveSubRes.rows[0];
+    if (activeSub && activeSub.end_date && activeSub.end_date >= todayStr) {
+      startDateStr = activeSub.end_date;
+    }
+
+    const startDateObj = new Date(startDateStr + 'T00:00:00+05:30');
+    const endDateObj = new Date(startDateObj);
+    endDateObj.setFullYear(endDateObj.getFullYear() + 1);
+    const endDateStr = endDateObj.toISOString().split('T')[0];
+
+    return await withTransaction(async (txQuery) => {
+      // Mark coupon used if applicable
+      if (activeCouponCode) {
+        await txQuery(
+          `UPDATE coupons SET status = 'used' WHERE UPPER(coupon_code) = ? AND (vendor_id = ? OR vendor_id IS NULL)`,
+          [activeCouponCode.toUpperCase(), vId]
+        ).catch(() => {});
+      }
+
+      const finalTxnIdentifier = `${verifiedPaymentId}_${orderId}`.slice(0, 100);
+
+      // Insert subscription record
+      const subRes = await txQuery(
+        `INSERT INTO subscriptions (
+           vendor_id, plan_id, plan_name, start_date, end_date, 
+           original_price, discount_amount, final_price, coupon_code, 
+           payment_method, transaction_id, status, reminders_sent, created_at, updated_at
+         ) VALUES (?, ?, ?, ?::date, ?::date, ?, ?, ?, ?, 'CASHFREE', ?, 'ACTIVE', '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [
+          vId,
+          planId || 1,
+          'Annual Merchant Plan',
+          startDateStr,
+          endDateStr,
+          5999.00,
+          Math.max(0, 5999.00 - verifiedAmount),
+          verifiedAmount,
+          activeCouponCode || null,
+          finalTxnIdentifier
+        ]
+      );
+
+      const newSub = subRes.rows[0];
+
+      // Update vendor status to ACTIVE
+      await txQuery(`UPDATE vendors SET status = 'ACTIVE' WHERE vendor_id = ?`, [vId]);
+
+      // Update / insert payments table
+      await txQuery(
+        `UPDATE payments 
+         SET payment_status = 'SUCCESS',
+             payment_method = 'CASHFREE',
+             payment_gateway = 'CASHFREE',
+             cashfree_payment_id = ?,
+             amount = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = ? OR cashfree_order_id = ?`,
+        [verifiedPaymentId, verifiedAmount, orderId, orderId]
+      );
+
+      // Send confirmation email
+      try {
+        if (vendor.email && !vendor.email.includes('@vendor.digilocal')) {
+          sendRenewalEmail(vendor.email, vendor.vendor_name, vendor.store_name, endDateStr, verifiedAmount, verifiedPaymentId);
+        }
+      } catch (mailErr) {
+        console.warn('[SubscriptionService] Could not send confirmation email:', mailErr.message);
+      }
+
+      // Clear cache
+      memoryCache.clear();
+
+      return {
+        success: true,
+        verified: true,
+        message: `Subscription activated successfully for 1 full year until ${endDateStr}! Store is now visible on DigiLocal user portal.`,
+        subscription_id: newSub.subscription_id,
+        vendor_id: vId,
+        store_name: vendor.store_name,
+        plan_name: 'Annual Merchant Plan',
+        start_date: startDateStr,
+        end_date: endDateStr,
+        final_price: verifiedAmount,
+        coupon_applied: activeCouponCode || null,
+        payment_method: 'CASHFREE',
+        transaction_id: verifiedPaymentId,
+        cashfree_order_id: orderId,
         status: 'ACTIVE',
         shop_visible_on_portal: true
       };

@@ -115,6 +115,29 @@ router.post([
   '/api/subscriptions/:vendorId/renew'
 ], subscriptionController.subscribe.bind(subscriptionController));
 
+router.post([
+  '/api/subscriptions/create-payment-session',
+  '/api/subscriptions/create-session',
+  '/api/subscriptions/pay',
+  '/api/subscriptions/:vendorId/create-payment-session',
+  '/api/subscriptions/:vendorId/pay',
+  '/api/vendorPanel/:vendorId/subscription-session',
+  '/api/vendorPanel/:vendorId/create-payment-session',
+  '/api/payments/cashfree/subscription-session',
+  '/api/payments/cashfree/create-subscription-session'
+], subscriptionController.createPaymentSession.bind(subscriptionController));
+
+router.post([
+  '/api/subscriptions/verify-payment',
+  '/api/subscriptions/verify',
+  '/api/subscriptions/:vendorId/verify-payment',
+  '/api/subscriptions/:vendorId/verify',
+  '/api/vendorPanel/:vendorId/verify-subscription',
+  '/api/vendorPanel/:vendorId/verify-payment',
+  '/api/payments/cashfree/verify-subscription',
+  '/api/payments/cashfree/verify-subscription-payment'
+], subscriptionController.verifyPayment.bind(subscriptionController));
+
 // ── Categories & Platform Config Direct Endpoints ──────────
 router.get('/api/categories', storefrontController.getCategories);
 router.get('/api/vendors/categories', storefrontController.getCategories);
@@ -464,5 +487,116 @@ router.get(['/vendors/:vendorId', '/stores/:vendorId'], (req, res, next) => {
 });
 
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
+
+// ── Cashfree Hosted Checkout Web Bridge (Zero-Crash Native & Web Checkout) ────
+router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (req, res) => {
+    const sessionId = req.query.session_id || req.query.payment_session_id;
+    const isMock = req.query.mock === 'true' || sessionId?.startsWith('CF_ORD_') || sessionId?.startsWith('SUB_');
+    const env = (req.query.env || process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase() === 'SANDBOX' ? 'sandbox' : 'production';
+
+    if (!sessionId) {
+        return res.status(400).send('<div style="font-family:sans-serif;padding:30px;text-align:center;"><h2>Missing Payment Session</h2><p>Please initiate payment again from the app.</p></div>');
+    }
+
+    if (isMock) {
+        return res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DigiLocal Simulation Checkout</title>
+  <style>
+    body { font-family: sans-serif; background: #0A1428; color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; padding: 20px; text-align: center; }
+    .card { background: #16243E; padding: 28px; border-radius: 16px; border: 1px solid #C5A880; max-width: 360px; }
+    .btn { background: #10B981; color: #fff; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block; margin-top: 16px; border: none; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🧪 Test / Sandbox Payment</h2>
+    <p>Simulating Cashfree payment for session:</p>
+    <code style="word-break:break-all;color:#C5A880;">${sessionId}</code>
+    <br/>
+    <button class="btn" onclick="window.location.href='/payments/cashfree/return?order_id=${sessionId}&status=SUCCESS'">Complete Test Payment</button>
+  </div>
+</body>
+</html>`);
+    }
+
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DigiLocal Secure Payment</title>
+  <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0; background: #FAF9F6; color: #211A19;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; text-align: center;
+    }
+    .loader {
+      border: 4px solid #E5E7EB; width: 44px; height: 44px; border-radius: 50%;
+      border-left-color: #541D26; animation: spin 0.9s linear infinite; margin-bottom: 20px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    h2 { font-size: 19px; margin: 0 0 8px 0; color: #211A19; }
+    p { font-size: 14px; color: #78716C; margin: 0; }
+  </style>
+</head>
+<body>
+  <div class="loader"></div>
+  <h2>Opening Cashfree Payments...</h2>
+  <p>Securely connecting to UPI, Cards & NetBanking.</p>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function() {
+      try {
+        const cashfree = Cashfree({ mode: "${env}" });
+        cashfree.checkout({
+          paymentSessionId: "${sessionId}",
+          redirectTarget: "_self"
+        });
+      } catch (err) {
+        document.body.innerHTML = '<div style="padding: 24px;"><h2>Checkout Error</h2><p>' + err.message + '</p></div>';
+      }
+    });
+  </script>
+</body>
+</html>`;
+    res.setHeader('Content-Type', 'text/html');
+    res.send(html);
+});
+
+// ── Payment Return / Callback Helper ──────────────────────────────────────────
+router.get(['/payments/cashfree/return', '/payments/cashfree/direct-return', '/vendor/subscription/verify'], (req, res) => {
+    const orderId = req.query.order_id || req.query.orderId || '';
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Payment Completed - DigiLocal</title>
+  <style>
+    body { font-family: sans-serif; background: #FAF9F6; color: #211A19; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
+    .card { background: #FFFFFF; padding: 32px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 380px; }
+    h2 { color: #10B981; margin: 0 0 12px 0; font-size: 22px; }
+    p { color: #57534E; font-size: 15px; line-height: 1.5; margin: 0 0 20px 0; }
+    .btn { background: #541D26; color: #FFFFFF; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>✅ Payment Processed!</h2>
+    <p>Your transaction has been recorded. You can now return to the DigiLocal app.</p>
+    <a class="btn" href="javascript:window.close();">Done</a>
+  </div>
+</body>
+</html>`);
+});
 
 module.exports = router;

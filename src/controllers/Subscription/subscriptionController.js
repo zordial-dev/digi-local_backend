@@ -121,6 +121,88 @@ class SubscriptionController {
   }
 
   /**
+   * POST /api/subscriptions/create-payment-session
+   * Generates a real Cashfree PG payment session for vendor subscription.
+   */
+  async createPaymentSession(req, res) {
+    try {
+      const vendorId = req.body.vendor_id || req.body.vendorId || req.params.vendorId || req.user?.vendor_id || req.user?.id;
+      const planId = req.body.plan_id || req.body.planId;
+      const couponCode = req.body.coupon_code || req.body.couponCode || req.body.code;
+      const returnUrl = req.body.return_url || req.body.returnUrl;
+      const notifyUrl = req.body.notify_url || req.body.notifyUrl;
+
+      if (!vendorId) {
+        return res.status(400).json({ success: false, error: 'vendor_id is required' });
+      }
+
+      const session = await subscriptionService.createSubscriptionPaymentSession({
+        vendorId,
+        planId,
+        couponCode,
+        returnUrl,
+        notifyUrl,
+        options: {
+          env: req.body.env,
+          app_id: req.body.app_id,
+          secret_key: req.body.secret_key
+        }
+      });
+
+      return res.status(200).json(session);
+    } catch (err) {
+      console.error('Error creating subscription payment session:', err);
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Failed to create subscription payment session'
+      });
+    }
+  }
+
+  /**
+   * POST /api/subscriptions/verify-payment
+   * Verifies Cashfree payment for vendor subscription and activates 1-year merchant status.
+   */
+  async verifyPayment(req, res) {
+    try {
+      const orderId = req.body.order_id || req.body.orderId || req.body.cashfree_order_id;
+      const vendorId = req.body.vendor_id || req.body.vendorId || req.params.vendorId || req.user?.vendor_id || req.user?.id;
+      const transactionId = req.body.transaction_id || req.body.transactionId || req.body.cashfree_payment_id;
+      const couponCode = req.body.coupon_code || req.body.couponCode;
+      const planId = req.body.plan_id || req.body.planId;
+
+      if (!orderId) {
+        return res.status(400).json({ success: false, error: 'order_id is required for payment verification' });
+      }
+
+      const result = await subscriptionService.verifyAndActivatePayment({
+        orderId,
+        vendorId,
+        couponCode,
+        planId,
+        transactionId,
+        options: {
+          env: req.body.env,
+          app_id: req.body.app_id,
+          secret_key: req.body.secret_key
+        }
+      });
+
+      if (!result.success || !result.verified) {
+        return res.status(400).json(result);
+      }
+
+      return res.status(200).json(result);
+    } catch (err) {
+      console.error('Error verifying subscription payment:', err);
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Failed to verify subscription payment'
+      });
+    }
+  }
+
+  /**
    * GET /api/vendorPanel/:vendorId/subscription-status (also /api/subscriptions/status/:vendorId, /api/subscriptions/status)
    * Returns current subscription status, days left, and expiry popup data for Web/App frontends.
    */

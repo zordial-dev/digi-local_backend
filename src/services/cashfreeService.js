@@ -63,7 +63,7 @@ function generateSimulationSession(payload, reason = 'Test Environment Active') 
     order_amount: amount,
     order_currency: payload.order_currency || 'INR',
     payment_status: 'ACTIVE',
-    payment_url: `https://payments-test.cashfree.com/order/#${generatedOrderId}`,
+    payment_url: `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://').replace(/\/+$/, '')}/payments/cashfree/checkout?session_id=${generatedOrderId}&mock=true`,
     message: `Cashfree session created in Test mode (${reason})`
   };
 }
@@ -208,6 +208,11 @@ async function createPaymentSession(payload = {}, options = {}) {
       body.order_tags = payload.order_tags;
     }
 
+    if (options.mock === true || options.env === 'MOCK' || options.env === 'SIMULATION') {
+      console.log(`💳 [CASHFREE SERVICE] Returning simulation session for Order #${body.order_id}`);
+      return generateSimulationSession(body, 'Simulation/Test Requested');
+    }
+
     const activeAppId = options.app_id || payload.app_id;
     const activeSecretKey = options.secret_key || payload.secret_key;
     const activeEnv = options.env || payload.env;
@@ -243,6 +248,9 @@ async function createPaymentSession(payload = {}, options = {}) {
 
     console.log(`✅ [CASHFREE SERVICE SUCCESS] Live Session ID generated: ${data.payment_session_id}`);
 
+    const apiOrigin = (process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://').replace(/\/+$/, '');
+    const checkoutUrl = `${apiOrigin}/payments/cashfree/checkout?session_id=${encodeURIComponent(data.payment_session_id)}&env=${currentEnv === 'SANDBOX' ? 'sandbox' : 'production'}`;
+
     return {
       success: true,
       mode: currentEnv === 'SANDBOX' ? 'sandbox' : 'live',
@@ -252,7 +260,7 @@ async function createPaymentSession(payload = {}, options = {}) {
       order_amount: data.order_amount,
       order_currency: data.order_currency,
       payment_status: data.order_status,
-      payment_url: data.payment_link || `https://payments.cashfree.com/order/#${data.order_id}`,
+      payment_url: data.payment_link || checkoutUrl,
       raw: data
     };
   } catch (err) {
@@ -414,12 +422,89 @@ async function createVendorRegistrationPayment(vendorDetails = {}, options = {})
 }
 
 /**
+ * Creates Vendor Subscription Payment Session (1-Year Annual Merchant Subscription)
+ */
+async function createSubscriptionPaymentSession(params = {}, options = {}) {
+  const {
+    vendor_id,
+    store_name,
+    vendor_name,
+    amount,
+    plan_id,
+    coupon_code,
+    email,
+    phone_number,
+    return_url,
+    notify_url
+  } = params;
+
+  const order_id = `SUB_${Date.now()}_${vendor_id || Math.floor(1000 + Math.random() * 9000)}`;
+
+  const payload = {
+    order_id,
+    order_amount: Number(amount || 5999.00),
+    order_currency: 'INR',
+    order_note: `DigiLocal Annual Merchant Subscription for ${store_name || vendor_name || 'Vendor #' + vendor_id}`,
+    customer_details: {
+      customer_id: String(vendor_id || `VND_${Date.now()}`),
+      customer_name: String(vendor_name || store_name || 'Merchant Owner'),
+      customer_email: String(email || 'vendor@digilocal.in'),
+      customer_phone: String(phone_number || '9876543210')
+    },
+    order_meta: {
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+      payment_methods: 'cc,dc,upi,nb,app,paylater'
+    },
+    order_tags: {
+      vendor_id: String(vendor_id || ''),
+      order_type: 'VENDOR_SUBSCRIPTION',
+      plan_id: String(plan_id || 1),
+      coupon_code: String(coupon_code || '')
+    }
+  };
+
+  const mergedOptions = {
+    ...params,
+    ...options,
+    env: options.env || params.env,
+    app_id: options.app_id || params.app_id,
+    secret_key: options.secret_key || params.secret_key,
+    mock: options.mock === true || params.mock === true || options.env === 'TEST' || params.env === 'TEST'
+  };
+
+  const session = await createPaymentSession(payload, mergedOptions);
+  return {
+    ...session,
+    vendor_id,
+    store_name,
+    plan_id: plan_id || 1,
+    coupon_code: coupon_code || null
+  };
+}
+
+/**
  * Verifies Payment Status with Cashfree PG
  * Supports live verification and simulation fallback
  */
 async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
   if (!orderId) {
     return { success: false, error: 'Missing order_id for verification' };
+  }
+
+  if (options.mock === true || options.env === 'MOCK' || options.env === 'SIMULATION' || orderId.startsWith('CF_ORD_SIM_') || orderId.includes('_MOCK_')) {
+    return {
+      success: true,
+      verified: true,
+      mode: 'simulation',
+      payment_status: 'SUCCESS',
+      order_id: orderId,
+      cf_payment_id: paymentId || `CF_PAY_SIM_${Date.now()}`,
+      payment_amount: 5999.00,
+      payment_currency: 'INR',
+      payment_method: 'CASHFREE',
+      payment_time: new Date().toISOString()
+    };
   }
 
   try {
@@ -654,6 +739,7 @@ module.exports = {
   createUserToVendorPaymentSession,
   createVendorDirectPaymentSession,
   createVendorRegistrationPayment,
+  createSubscriptionPaymentSession,
   verifyPaymentStatus,
   getPaymentDetails,
   createRefund,
