@@ -116,6 +116,30 @@ router.get('/orders', authenticateToken, requireVendor, (req, res) => {
 // GET /api/vendorPanel/:vendorId/orders - Vendor Store Orders
 router.get('/:vendorId/orders', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
 
+// PATCH / PUT /api/vendorPanel/orders/:orderId/status & /:vendorId/orders/:orderId/status
+router.patch('/orders/:orderId/status', authenticateToken, requireVendor, (req, res) => {
+    const vid = req.user?.vendor_id || req.user?.id;
+    if (!vid) return res.status(401).json({ error: 'Vendor authentication required' });
+    req.params.vendorId = String(vid);
+    req.params.id = req.params.orderId;
+    return ordersController.updateOrderStatus(req, res);
+});
+router.put('/orders/:orderId/status', authenticateToken, requireVendor, (req, res) => {
+    const vid = req.user?.vendor_id || req.user?.id;
+    if (!vid) return res.status(401).json({ error: 'Vendor authentication required' });
+    req.params.vendorId = String(vid);
+    req.params.id = req.params.orderId;
+    return ordersController.updateOrderStatus(req, res);
+});
+router.patch('/:vendorId/orders/:orderId/status', authenticateToken, requireVendorOwner, (req, res) => {
+    req.params.id = req.params.orderId;
+    return ordersController.updateOrderStatus(req, res);
+});
+router.put('/:vendorId/orders/:orderId/status', authenticateToken, requireVendorOwner, (req, res) => {
+    req.params.id = req.params.orderId;
+    return ordersController.updateOrderStatus(req, res);
+});
+
 // GET /api/vendorPanel/:vendorId - Full vendor dashboard data
 router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
 
@@ -125,7 +149,8 @@ router.get('/:vendorId/purchases', authenticateToken, requireVendorOwner, vendor
 router.get('/:vendorId/my-orders', authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
 router.get('/:vendorId/orders-made', authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
 
-
+// Standalone image upload for mobile app items
+router.post(['/items/upload-image', '/products/upload-image', '/:vendorId/items/upload-image', '/:vendorId/products/upload-image'], upload.any(), handleMulterError, authenticateToken, requireVendor, vendorPanelController.uploadItemImage);
 
 // POST /api/vendorPanel/:vendorId/items & /products (Supports multipart/form-data camera/gallery uploads and JSON)
 router.post(['/:vendorId/items', '/:vendorId/products'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(addItemSchema), vendorPanelController.addItem);

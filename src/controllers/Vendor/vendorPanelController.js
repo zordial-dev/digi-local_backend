@@ -445,6 +445,39 @@ async function updateItemImage(req, res) {
 }
 
 /**
+ * POST /api/vendorPanel/items/upload-image - Standalone image upload for mobile app
+ */
+async function uploadItemImage(req, res) {
+    try {
+        const file = req.file || (req.files && req.files.length > 0 ? req.files[0] : null);
+        let imageUrl = null;
+        if (file) {
+            const baseUrl = getBaseUrl(req);
+            imageUrl = `${baseUrl}/uploads/${file.filename}`;
+        } else {
+            const base64Result = processBase64Upload(req);
+            if (base64Result) {
+                imageUrl = base64Result.image_url;
+            } else {
+                imageUrl = req.body?.image_url || req.body?.imageUrl || req.body?.image || req.body?.photo;
+            }
+        }
+        if (!imageUrl) {
+            return res.status(400).json({ error: 'No image provided', code: 'NO_IMAGE_PROVIDED' });
+        }
+        res.status(200).json({
+            success: true,
+            imageUrl,
+            image_url: imageUrl,
+            message: 'Image uploaded successfully'
+        });
+    } catch (err) {
+        console.error('Error uploading item image:', err);
+        res.status(500).json({ error: 'Failed to upload image', details: err.message });
+    }
+}
+
+/**
  * DELETE /api/vendorPanel/:vendorId/items/:itemId - Delete item
  */
 async function deleteItem(req, res) {
@@ -853,6 +886,7 @@ module.exports = {
     addItem,
     updateItem,
     updateItemImage,
+    uploadItemImage,
     updateItemStock,
     deleteItem,
     updateSettings,

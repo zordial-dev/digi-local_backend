@@ -12,26 +12,35 @@ function initSocket(server) {
 
   io.on('connection', (socket) => {
     socket.on('join_vendor_room', (vendorId) => {
-      if (vendorId) {
-        socket.join(`vendor_${vendorId}`);
-        socket.join(String(vendorId));
-        console.log(`🔌 [SOCKET.IO] Vendor #${vendorId} joined real-time notification channel (rooms: vendor_${vendorId}, ${vendorId})`);
+      const vId = typeof vendorId === 'object' && vendorId !== null 
+        ? (vendorId.vendor_id || vendorId.id || vendorId.vendorId) 
+        : vendorId;
+      if (vId) {
+        socket.join(`vendor_${vId}`);
+        socket.join(String(vId));
+        console.log(`🔌 [SOCKET.IO] Vendor #${vId} joined real-time notification channel (rooms: vendor_${vId}, ${vId})`);
       }
     });
 
     socket.on('join_user_room', (userId) => {
-      if (userId) {
-        socket.join(`user_${userId}`);
-        socket.join(String(userId));
-        console.log(`🔌 [SOCKET.IO] User #${userId} joined real-time channel (rooms: user_${userId}, ${userId})`);
+      const uId = typeof userId === 'object' && userId !== null 
+        ? (userId.user_id || userId.id || userId.userId) 
+        : userId;
+      if (uId) {
+        socket.join(`user_${uId}`);
+        socket.join(String(uId));
+        console.log(`🔌 [SOCKET.IO] User #${uId} joined real-time channel (rooms: user_${uId}, ${uId})`);
       }
     });
 
     socket.on('join_order_room', (orderId) => {
-      if (orderId) {
-        socket.join(`order_${orderId}`);
-        socket.join(String(orderId));
-        console.log(`🔌 [SOCKET.IO] Joined order tracking room (rooms: order_${orderId}, ${orderId})`);
+      const oId = typeof orderId === 'object' && orderId !== null 
+        ? (orderId.order_id || orderId.id || orderId.orderId) 
+        : orderId;
+      if (oId) {
+        socket.join(`order_${oId}`);
+        socket.join(String(oId));
+        console.log(`🔌 [SOCKET.IO] Joined order tracking room (rooms: order_${oId}, ${oId})`);
       }
     });
 
