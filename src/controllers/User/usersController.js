@@ -141,30 +141,43 @@ async function checkAccountExists(req, res) {
     let userPromise = Promise.resolve({ rows: [] });
     let vendorPromise = Promise.resolve({ rows: [] });
 
-    if (!targetRole || targetRole === 'user' || targetRole === 'resident') {
+    const shouldCheckUser = !targetRole || targetRole.includes('user') || targetRole.includes('resident') || targetRole.includes('customer') || (!targetRole.includes('vendor') && !targetRole.includes('merchant') && !targetRole.includes('seller') && !targetRole.includes('store'));
+    const shouldCheckVendor = !targetRole || targetRole.includes('vendor') || targetRole.includes('merchant') || targetRole.includes('seller') || targetRole.includes('store') || targetRole.includes('partner') || (!targetRole.includes('user') && !targetRole.includes('resident'));
+
+    if (shouldCheckUser) {
       if (isEmail) {
         userPromise = query(
-          `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1`,
+          `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1`,
           [rawTarget]
         ).catch(() => ({ rows: [] }));
       } else {
         userPromise = query(
-          `SELECT user_id, public_id, name, email, phone, status, society_id, society_name FROM users WHERE phone IN (${placeholders}) OR phone = ? LIMIT 1`,
-          [...phoneCandidates, rawTarget]
+          `SELECT user_id, public_id, name, email, phone, status, society_id, society_name 
+           FROM users 
+           WHERE phone IN (${placeholders}) 
+              OR phone = ? 
+              OR (LENGTH(?) >= 10 AND RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = ?) 
+           LIMIT 1`,
+          [...phoneCandidates, rawTarget, last10, last10]
         ).catch(() => ({ rows: [] }));
       }
     }
 
-    if (!targetRole || targetRole === 'vendor' || targetRole === 'merchant') {
+    if (shouldCheckVendor) {
       if (isEmail) {
         vendorPromise = query(
-          `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE LOWER(email) = LOWER(?) LIMIT 1`,
+          `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1`,
           [rawTarget]
         ).catch(() => ({ rows: [] }));
       } else {
         vendorPromise = query(
-          `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type FROM vendors WHERE phone_number IN (${placeholders}) OR phone_number = ? LIMIT 1`,
-          [...phoneCandidates, rawTarget]
+          `SELECT vendor_id, public_id, store_name, vendor_name, email, phone_number, status, vendor_type 
+           FROM vendors 
+           WHERE phone_number IN (${placeholders}) 
+              OR phone_number = ? 
+              OR (LENGTH(?) >= 10 AND RIGHT(REGEXP_REPLACE(phone_number, '\\D', '', 'g'), 10) = ?) 
+           LIMIT 1`,
+          [...phoneCandidates, rawTarget, last10, last10]
         ).catch(() => ({ rows: [] }));
       }
     }
@@ -183,9 +196,9 @@ async function checkAccountExists(req, res) {
     const exists = userExists || vendorExists;
 
     let accountType = 'none';
-    if (userExists && vendorExists) accountType = 'both';
-    else if (userExists) accountType = 'user';
+    if (userExists && vendorExists) accountType = (targetRole && (targetRole.includes('vendor') || targetRole.includes('merchant'))) ? 'vendor' : 'both';
     else if (vendorExists) accountType = 'vendor';
+    else if (userExists) accountType = 'user';
 
     const nextAction = exists ? 'LOGIN' : 'REGISTER';
     const cooldownInfo = getCooldownStatus(rawTarget);
@@ -193,7 +206,10 @@ async function checkAccountExists(req, res) {
     return res.status(200).json({
       success: true,
       exists,
+      is_registered: exists,
+      registered: exists,
       account_type: accountType,
+      role: accountType,
       next_action: nextAction,
       identifier: rawTarget,
       phone: !isEmail ? (cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits) : null,
@@ -217,11 +233,15 @@ async function checkAccountExists(req, res) {
         status: user.status || 'ACTIVE'
       } : null,
       vendor: vendor ? {
-        vendor_id: vendor.vendor_id,
+        vendor_id: Number(vendor.vendor_id),
+        id: Number(vendor.vendor_id),
         public_id: vendor.public_id,
         store_name: vendor.store_name,
         vendor_name: vendor.vendor_name,
+        name: vendor.vendor_name || vendor.store_name,
         phone: vendor.phone_number,
+        phone_number: vendor.phone_number,
+        email: vendor.email,
         status: vendor.status || 'ACTIVE',
         vendor_type: vendor.vendor_type || 'product'
       } : null
