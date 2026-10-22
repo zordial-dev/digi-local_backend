@@ -231,7 +231,6 @@ router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);
 
 // Subscription & Coupons Endpoints (Vendor Owner Only)
-const subscriptionController = require('../../controllers/Subscription/subscriptionController');
 router.get('/:vendorId/subscription-status', authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
 router.get('/:vendorId/coupons', authenticateToken, requireVendorOwner, subscriptionController.getCoupons.bind(subscriptionController));
 router.post('/:vendorId/subscribe', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
