@@ -246,7 +246,7 @@ async function registerVendor(req, res) {
     const finalVendorRes = await query(`SELECT public_id FROM vendors WHERE vendor_id = ?`, [vendor_id]).catch(() => ({ rows: [] }));
     const finalPublicId = finalVendorRes.rows[0]?.public_id || ('vnd@' + String(vendor_id).padStart(4, '0'));
 
-    const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor', 'user', 'customer'], isVendor: true, isUser: true };
+    const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
 
     return res.status(201).json({
@@ -553,7 +553,7 @@ async function loginVendor(req, res) {
       return res.status(401).json({ error: 'Incorrect password. Please check your password and try again.' });
     }
 
-    const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
+    const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
 
     const vendorPublicId = v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0'));
@@ -951,7 +951,7 @@ async function loginVendorWithOtp(req, res) {
       });
     }
 
-    const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor', 'user'], isVendor: true };
+    const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
 
     const vendorPublicId = v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0'));

@@ -1,12 +1,14 @@
 const { verifyJwt } = require('../utils/auth');
 const authConfig = require('../config/auth');
 
+const ADMIN_ROLES = ['admin', 'super_admin', 'superadmin', 'sub_admin'];
+
 /**
  * Extracts and verifies JWT access token from request headers or query params.
  * Attaches user payload to req.user if valid.
  */
 function authenticateToken(req, res, next) {
-  const authHeader = req.headers['authorization'];
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
   const token = (authHeader && authHeader.startsWith('Bearer '))
     ? authHeader.split(' ')[1]
     : (req.headers['x-access-token'] || req.query.token || req.body?.token);
@@ -27,11 +29,31 @@ function authenticateToken(req, res, next) {
 }
 
 /**
+ * Internal helper to ensure req.user is populated if token was supplied
+ */
+function ensureAuthenticated(req) {
+  if (req.user !== undefined) return;
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+  const token = (authHeader && authHeader.startsWith('Bearer '))
+    ? authHeader.split(' ')[1]
+    : (req.headers['x-access-token'] || req.query.token || req.body?.token);
+
+  if (!token) {
+    req.user = null;
+    return;
+  }
+
+  const payload = verifyJwt(token, authConfig.jwt.secret);
+  req.user = payload || null;
+}
+
+/**
  * Middleware enforcing mandatory authentication.
  */
 function requireAuth(req, res, next) {
+  ensureAuthenticated(req);
   if (!req.user) {
-    return res.status(401).json({ error: 'Unauthorized: Access token is missing or invalid' });
+    return res.status(401).json({ success: false, error: 'Unauthorized: Access token is missing or invalid' });
   }
   next();
 }
@@ -40,64 +62,187 @@ function requireAuth(req, res, next) {
  * Role-Based Access Control (RBAC) Middleware.
  */
 function requireRole(...allowedRoles) {
+  const normalizedAllowed = allowedRoles.map(r => String(r).toLowerCase());
   return (req, res, next) => {
+    ensureAuthenticated(req);
     if (!req.user) {
-      return res.status(401).json({ error: 'Unauthorized: Authentication required' });
+      return res.status(401).json({ success: false, error: 'Unauthorized: Authentication required' });
     }
-    const userRole = req.user.role;
-    const userRoles = req.user.roles || [userRole];
-    const hasPermission = allowedRoles.some(role => allowedRoles.includes(userRole) || userRoles.includes(role));
+    const userRole = String(req.user.role || '').toLowerCase();
+    const userRoles = Array.isArray(req.user.roles) 
+      ? req.user.roles.map(r => String(r).toLowerCase()) 
+      : [userRole];
+
+    const hasPermission = normalizedAllowed.some(role => 
+      role === userRole || userRoles.includes(role)
+    );
 
     if (!hasPermission) {
-      return res.status(403).json({ error: `Forbidden: Requires one of [${allowedRoles.join(', ')}] role(s)` });
+      return res.status(403).json({ success: false, error: `Forbidden: Requires one of [${allowedRoles.join(', ')}] role(s)` });
     }
     next();
   };
 }
 
 /**
- * Admin Access Guard.
+ * Admin Panel Access Guard.
+ * Strictly permits administrators (Super Admin and Sub-Admins).
+ * Strictly forbids users and vendors.
  */
-const requireAdmin = requireRole('admin');
+function requireAdmin(req, res, next) {
+  ensureAuthenticated(req);
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Admin authentication required. Please log in to admin panel.' });
+  }
+
+  const roleLower = String(req.user.role || '').toLowerCase();
+  const roles = Array.isArray(req.user.roles) ? req.user.roles.map(r => String(r).toLowerCase()) : [roleLower];
+  const hasAdminRole = ADMIN_ROLES.includes(roleLower) || roles.some(r => ADMIN_ROLES.includes(r));
+
+  if (!hasAdminRole) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Admin privileges required. Users and vendors cannot access the admin panel.'
+    });
+  }
+  next();
+}
 
 /**
- * Vendor Access Guard.
+ * Vendor Panel Access Guard.
+ * Permits vendors and platform admins for moderation/support.
+ * Strictly blocks resident users/customers.
  */
-const requireVendor = requireRole('vendor', 'admin');
+function requireVendor(req, res, next) {
+  ensureAuthenticated(req);
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Vendor authentication required. Please log in to vendor portal.' });
+  }
+
+  const roleLower = String(req.user.role || '').toLowerCase();
+  const isAdmin = ADMIN_ROLES.includes(roleLower);
+  const isVendor = roleLower === 'vendor' || req.user.isVendor === true;
+
+  if (!isVendor && !isAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Vendor access required. Users cannot access vendor panel.'
+    });
+  }
+  next();
+}
 
 /**
- * User / Customer Access Guard (Permits users, customers, vendors, and admins).
+ * User / Customer Panel Access Guard.
+ * Strictly permits resident users/customers (and platform admins for customer support/dispute resolution).
+ * Strictly forbids vendors from accessing resident user private data using vendor credentials.
  */
-const requireUser = requireRole('user', 'customer', 'vendor', 'admin');
+function requireUser(req, res, next) {
+  ensureAuthenticated(req);
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: User authentication required. Please log in.' });
+  }
+
+  const roleLower = String(req.user.role || '').toLowerCase();
+  const isAdmin = ADMIN_ROLES.includes(roleLower);
+  const isUser = (roleLower === 'user' || roleLower === 'customer' || req.user.isUser === true) && roleLower !== 'vendor';
+
+  if (!isUser && !isAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: User access required. Vendors cannot access user panel with vendor credentials.'
+    });
+  }
+  next();
+}
 
 /**
  * Vendor Ownership & IDOR Protection Guard.
- * Ensures vendors can only view/modify their own store resources.
+ * Ensures only vendors can access vendor store resources, and they can only access their own store.
  */
 function requireVendorOwner(req, res, next) {
-  // If an authenticated user token is present, enforce strict ownership matching
-  if (req.user) {
-    const targetVendorId = req.params.vendorId || req.body?.vendor_id || req.query?.vendor_id;
-    if (targetVendorId) {
-      const uVendorId = String(req.user.vendor_id || '');
-      const uId = String(req.user.id || '');
-      const uPublicId = String(req.user.public_id || '');
-      const targetStr = String(targetVendorId).trim();
+  ensureAuthenticated(req);
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: Vendor authentication required' });
+  }
 
-      const isOwner = (
-        (uVendorId && uVendorId === targetStr) ||
-        (uId && uId === targetStr) ||
-        (uPublicId && uPublicId === targetStr)
-      );
-      const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user.role || '').toLowerCase());
+  const roleLower = String(req.user.role || '').toLowerCase();
+  const isAdmin = ADMIN_ROLES.includes(roleLower);
+  const isVendor = (roleLower === 'vendor' || req.user.isVendor === true);
 
-      if (!isOwner && !isAdmin) {
-        return res.status(403).json({ error: 'Forbidden: You do not have permission to access or modify this vendor resource (IDOR Protection)' });
-      }
+  if (!isVendor && !isAdmin) {
+    return res.status(403).json({ success: false, error: 'Forbidden: Vendor access required. Users cannot access vendor panel.' });
+  }
+
+  // Admins have full access for moderation/support
+  if (isAdmin) {
+    return next();
+  }
+
+  // Vendor ownership verification
+  const targetVendorId = req.params.vendorId || req.body?.vendor_id || req.query?.vendor_id;
+  if (targetVendorId) {
+    const uVendorId = String(req.user.vendor_id || req.user.id || '').trim();
+    const uPublicId = String(req.user.public_id || '').trim();
+    const targetStr = String(targetVendorId).trim();
+
+    const isOwner = (
+      (uVendorId && uVendorId === targetStr) ||
+      (uPublicId && uPublicId === targetStr)
+    );
+
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: 'Forbidden: You do not have permission to access or modify this vendor resource (IDOR Protection)' });
     }
   }
-  
-  // Non-blocking fallback for existing legacy unauthenticated frontend calls
+
+  next();
+}
+
+/**
+ * Resident User Ownership & IDOR Protection Guard.
+ * Ensures resident users can only access their own profile, orders, addresses, and tickets.
+ */
+function requireUserOwner(req, res, next) {
+  ensureAuthenticated(req);
+  if (!req.user) {
+    return res.status(401).json({ success: false, error: 'Unauthorized: User authentication required' });
+  }
+
+  const roleLower = String(req.user.role || '').toLowerCase();
+  const isAdmin = ADMIN_ROLES.includes(roleLower);
+  const isUser = (roleLower === 'user' || roleLower === 'customer' || req.user.isUser === true) && roleLower !== 'vendor';
+
+  if (!isUser && !isAdmin) {
+    return res.status(403).json({ success: false, error: 'Forbidden: User access required. Vendors cannot access user panel with vendor credentials.' });
+  }
+
+  // Platform admins can access user records for order dispute/support
+  if (isAdmin) {
+    return next();
+  }
+
+  const targetUserId = req.params.userId || req.body?.user_id || req.query?.user_id || req.params.id;
+  if (targetUserId) {
+    const authUserId = String(req.user.id || req.user.user_id || '').trim();
+    const authPublicId = String(req.user.public_id || '').trim();
+    const authPhone = String(req.user.phone || '').trim().replace(/\D/g, '');
+    const last10 = authPhone.length >= 10 ? authPhone.slice(-10) : authPhone;
+
+    const targetStr = String(targetUserId).trim();
+    const targetCleanPhone = targetStr.replace(/\D/g, '');
+
+    const isOwner = (
+      (authUserId && authUserId === targetStr) ||
+      (authPublicId && authPublicId === targetStr) ||
+      (last10 && targetCleanPhone && (targetCleanPhone === last10 || targetCleanPhone.endsWith(last10)))
+    );
+
+    if (!isOwner) {
+      return res.status(403).json({ success: false, error: "Forbidden: You do not have permission to access another user's private data (IDOR Protection)" });
+    }
+  }
+
   next();
 }
 
@@ -108,5 +253,6 @@ module.exports = {
   requireAdmin,
   requireVendor,
   requireUser,
-  requireVendorOwner
+  requireVendorOwner,
+  requireUserOwner
 };

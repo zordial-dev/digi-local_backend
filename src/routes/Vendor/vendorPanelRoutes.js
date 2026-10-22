@@ -5,7 +5,7 @@ const multer = require('multer');
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
 const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
 const serviceController = require('../../controllers/Vendor/serviceController');
-const { authenticateToken, requireVendorOwner } = require('../../middleware/auth');
+const { authenticateToken, requireVendor, requireVendorOwner } = require('../../middleware/auth');
 const { validateRequest } = require('../../middleware/validate');
 const { addItemSchema, updateSettingsSchema } = require('../../schemas/vendorSchema');
 
@@ -79,48 +79,52 @@ function handleMulterError(err, req, res, next) {
 }
 
 // POST /api/vendorPanel/upload-image & /upload-logo
-router.post('/upload-image', upload.any(), handleMulterError, vendorPanelController.uploadImage);
-router.post('/upload-logo', upload.any(), handleMulterError, vendorPanelController.uploadImage);
+router.post('/upload-image', upload.any(), handleMulterError, authenticateToken, requireVendor, vendorPanelController.uploadImage);
+router.post('/upload-logo', upload.any(), handleMulterError, authenticateToken, requireVendor, vendorPanelController.uploadImage);
 
 // POST/PUT /api/vendorPanel/:vendorId/logo
-router.post('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
-router.put('/:vendorId/logo', upload.any(), handleMulterError, vendorPanelController.updateVendorLogo);
+router.post('/:vendorId/logo', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateVendorLogo);
+router.put('/:vendorId/logo', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateVendorLogo);
 
 const ratingController = require('../../controllers/Rating/ratingController');
 
 // GET & POST Vendor Ratings and Reviews in vendorPanel
-router.get('/ratings', ratingController.getVendorSelfRatings);
-router.get('/reviews', ratingController.getVendorSelfRatings);
-router.get('/:vendorId/ratings', ratingController.getVendorSelfRatings);
-router.get('/:vendorId/reviews', ratingController.getVendorSelfRatings);
-router.get('/:vendorId/ratings/summary', ratingController.getVendorRatingSummary);
-router.post('/:vendorId/ratings', ratingController.submitRating);
-router.post('/:vendorId/reviews', ratingController.submitRating);
-router.post('/ratings/:ratingId/reply', ratingController.replyToRating);
-router.post('/reviews/:ratingId/reply', ratingController.replyToRating);
+router.get('/ratings', authenticateToken, requireVendor, ratingController.getVendorSelfRatings);
+router.get('/reviews', authenticateToken, requireVendor, ratingController.getVendorSelfRatings);
+router.get('/:vendorId/ratings', authenticateToken, requireVendorOwner, ratingController.getVendorSelfRatings);
+router.get('/:vendorId/reviews', authenticateToken, requireVendorOwner, ratingController.getVendorSelfRatings);
+router.get('/:vendorId/ratings/summary', authenticateToken, requireVendorOwner, ratingController.getVendorRatingSummary);
+router.post('/:vendorId/ratings', authenticateToken, requireVendorOwner, ratingController.submitRating);
+router.post('/:vendorId/reviews', authenticateToken, requireVendorOwner, ratingController.submitRating);
+router.post('/ratings/:ratingId/reply', authenticateToken, requireVendor, ratingController.replyToRating);
+router.post('/reviews/:ratingId/reply', authenticateToken, requireVendor, ratingController.replyToRating);
 
-// Direct vendor status check
-router.get('/status', vendorAuthController.getVendorStatus);
-router.get('/:vendorId/status', vendorAuthController.getVendorStatus);
-
-// GET /api/vendorPanel/:vendorId - Full vendor dashboard data
-router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
+// Direct vendor status check (Vendor Only)
+router.get('/status', authenticateToken, requireVendor, vendorAuthController.getVendorStatus);
+router.get('/:vendorId/status', authenticateToken, requireVendorOwner, vendorAuthController.getVendorStatus);
 
 const ordersController = require('../../controllers/User/ordersController');
 
-// GET /api/vendorPanel/:vendorId/orders - Vendor Store Orders
-router.get('/:vendorId/orders', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
-router.get('/orders', authenticateToken, (req, res) => {
+// GET /api/vendorPanel/orders - Vendor Store Orders (Self lookup for logged-in vendor)
+router.get('/orders', authenticateToken, requireVendor, (req, res) => {
     const vid = req.user?.vendor_id || req.user?.id;
     if (!vid) return res.status(401).json({ error: 'Vendor authentication required' });
     req.params.vendorId = String(vid);
     return ordersController.getVendorOrders(req, res);
 });
 
+// GET /api/vendorPanel/:vendorId/orders - Vendor Store Orders
+router.get('/:vendorId/orders', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
+
+// GET /api/vendorPanel/:vendorId - Full vendor dashboard data
+router.get('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.getDashboard);
+
+
 // GET /api/vendorPanel/:vendorId/purchases & /my-orders - Vendor B2B / B2C orders placed by vendor buying from other vendors
-router.get('/:vendorId/purchases', vendorPanelController.getVendorPurchases);
-router.get('/:vendorId/my-orders', vendorPanelController.getVendorPurchases);
-router.get('/:vendorId/orders-made', vendorPanelController.getVendorPurchases);
+router.get('/:vendorId/purchases', authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
+router.get('/:vendorId/my-orders', authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
+router.get('/:vendorId/orders-made', authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
+
 
 
 // POST /api/vendorPanel/:vendorId/items & /products (Supports multipart/form-data camera/gallery uploads and JSON)
@@ -138,9 +142,9 @@ router.post(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/phot
 router.put(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
 router.patch(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
 
-// Toggle Item Availability Endpoints
-router.patch(['/items/:itemId/availability', '/products/:itemId/availability', '/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, vendorPanelController.toggleAvailability);
-router.put(['/items/:itemId/availability', '/products/:itemId/availability', '/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, vendorPanelController.toggleAvailability);
+// Toggle Item Availability Endpoints (Vendor Owner Only)
+router.patch(['/items/:itemId/availability', '/products/:itemId/availability', '/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, requireVendorOwner, vendorPanelController.toggleAvailability);
+router.put(['/items/:itemId/availability', '/products/:itemId/availability', '/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, requireVendorOwner, vendorPanelController.toggleAvailability);
 
 // DELETE /api/vendorPanel/:vendorId/items/:itemId & /products/:itemId
 router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], authenticateToken, requireVendorOwner, vendorPanelController.deleteItem);
@@ -148,8 +152,8 @@ router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], authe
 // ── Service Vendor Services Catalog Endpoints ────────────────────
 // POST /api/vendorPanel/:vendorId/services (Supports multipart/form-data camera/gallery uploads and JSON)
 router.post('/:vendorId/services', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.addService);
-router.get('/:vendorId/services', serviceController.getVendorServices);
-router.get('/:vendorId/services/:serviceId', serviceController.getServiceById);
+router.get('/:vendorId/services', authenticateToken, requireVendorOwner, serviceController.getVendorServices);
+router.get('/:vendorId/services/:serviceId', authenticateToken, requireVendorOwner, serviceController.getServiceById);
 router.put('/:vendorId/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
 router.patch('/:vendorId/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
 router.post(['/:vendorId/services/:serviceId', '/:vendorId/services/:serviceId/edit', '/:vendorId/services/:serviceId/update'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
@@ -159,13 +163,13 @@ router.post(['/:vendorId/services/:serviceId/image', '/:vendorId/services/:servi
 router.put(['/:vendorId/services/:serviceId/image', '/:vendorId/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
 router.patch(['/:vendorId/services/:serviceId/image', '/:vendorId/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
 
-// Direct / vendor-agnostic service endpoints
-router.put('/services/:serviceId', upload.any(), handleMulterError, authenticateToken, serviceController.updateService);
-router.patch('/services/:serviceId', upload.any(), handleMulterError, authenticateToken, serviceController.updateService);
-router.post(['/services/:serviceId', '/services/:serviceId/edit', '/services/:serviceId/update'], upload.any(), handleMulterError, authenticateToken, serviceController.updateService);
-router.post(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, serviceController.updateServiceImage);
-router.put(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, serviceController.updateServiceImage);
-router.patch(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, serviceController.updateServiceImage);
+// Direct / vendor-agnostic service endpoints (Vendor Only)
+router.put('/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendor, serviceController.updateService);
+router.patch('/services/:serviceId', upload.any(), handleMulterError, authenticateToken, requireVendor, serviceController.updateService);
+router.post(['/services/:serviceId', '/services/:serviceId/edit', '/services/:serviceId/update'], upload.any(), handleMulterError, authenticateToken, requireVendor, serviceController.updateService);
+router.post(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendor, serviceController.updateServiceImage);
+router.put(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendor, serviceController.updateServiceImage);
+router.patch(['/services/:serviceId/image', '/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendor, serviceController.updateServiceImage);
 
 // Service availability and deletion
 router.patch('/:vendorId/services/:serviceId/availability', authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
@@ -173,18 +177,18 @@ router.put('/:vendorId/services/:serviceId/availability', authenticateToken, req
 router.delete('/:vendorId/services/:serviceId', authenticateToken, requireVendorOwner, serviceController.deleteService);
 
 // PUT /api/vendorPanel/payment-details & /:vendorId/payment-details
-router.put('/payment-details', vendorPanelController.updatePaymentDetails);
-router.put('/:vendorId/payment-details', vendorPanelController.updatePaymentDetails);
+router.put('/payment-details', authenticateToken, requireVendor, vendorPanelController.updatePaymentDetails);
+router.put('/:vendorId/payment-details', authenticateToken, requireVendorOwner, vendorPanelController.updatePaymentDetails);
 
 // Password Management Endpoints
-router.put('/:vendorId/password', vendorAuthController.updateVendorPassword);
-router.patch('/:vendorId/password', vendorAuthController.updateVendorPassword);
-router.post('/:vendorId/password', vendorAuthController.updateVendorPassword);
-router.put('/:vendorId/change-password', vendorAuthController.updateVendorPassword);
-router.post('/:vendorId/change-password', vendorAuthController.updateVendorPassword);
-router.put('/password', vendorAuthController.updateVendorPassword);
-router.post('/password', vendorAuthController.updateVendorPassword);
-router.post('/change-password', vendorAuthController.updateVendorPassword);
+router.put('/:vendorId/password', authenticateToken, requireVendorOwner, vendorAuthController.updateVendorPassword);
+router.patch('/:vendorId/password', authenticateToken, requireVendorOwner, vendorAuthController.updateVendorPassword);
+router.post('/:vendorId/password', authenticateToken, requireVendorOwner, vendorAuthController.updateVendorPassword);
+router.put('/:vendorId/change-password', authenticateToken, requireVendorOwner, vendorAuthController.updateVendorPassword);
+router.post('/:vendorId/change-password', authenticateToken, requireVendorOwner, vendorAuthController.updateVendorPassword);
+router.put('/password', authenticateToken, requireVendor, vendorAuthController.updateVendorPassword);
+router.post('/password', authenticateToken, requireVendor, vendorAuthController.updateVendorPassword);
+router.post('/change-password', authenticateToken, requireVendor, vendorAuthController.updateVendorPassword);
 
 // PUT/POST/PATCH /api/vendorPanel/:vendorId/settings, /profile, and /:vendorId directly
 router.put(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, validateRequest(updateSettingsSchema), vendorPanelController.updateSettings);
@@ -194,28 +198,28 @@ router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload
 // PUT /api/vendorPanel/:vendorId/coverage
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);
 
-// Subscription & Coupons Endpoints
+// Subscription & Coupons Endpoints (Vendor Owner Only)
 const subscriptionController = require('../../controllers/Subscription/subscriptionController');
-router.get('/:vendorId/subscription-status', subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
-router.get('/:vendorId/coupons', subscriptionController.getCoupons.bind(subscriptionController));
-router.post('/:vendorId/subscribe', subscriptionController.subscribe.bind(subscriptionController));
-router.post('/:vendorId/renew', subscriptionController.subscribe.bind(subscriptionController));
-router.post('/:vendorId/subscription-session', subscriptionController.createPaymentSession.bind(subscriptionController));
-router.post('/:vendorId/create-payment-session', subscriptionController.createPaymentSession.bind(subscriptionController));
-router.post('/:vendorId/verify-subscription', subscriptionController.verifyPayment.bind(subscriptionController));
-router.post('/:vendorId/verify-payment', subscriptionController.verifyPayment.bind(subscriptionController));
+router.get('/:vendorId/subscription-status', authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+router.get('/:vendorId/coupons', authenticateToken, requireVendorOwner, subscriptionController.getCoupons.bind(subscriptionController));
+router.post('/:vendorId/subscribe', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
+router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
+router.post('/:vendorId/subscription-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/:vendorId/create-payment-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/:vendorId/verify-subscription', authenticateToken, requireVendorOwner, subscriptionController.verifyPayment.bind(subscriptionController));
+router.post('/:vendorId/verify-payment', authenticateToken, requireVendorOwner, subscriptionController.verifyPayment.bind(subscriptionController));
 
 // FCM / Expo Push Device Token Endpoints
-router.post('/fcm-token', vendorPanelController.registerFcmToken);
-router.post('/:vendorId/fcm-token', vendorPanelController.registerFcmToken);
-router.delete('/fcm-token', vendorPanelController.deleteFcmToken);
-router.delete('/:vendorId/fcm-token', vendorPanelController.deleteFcmToken);
+router.post('/fcm-token', authenticateToken, requireVendor, vendorPanelController.registerFcmToken);
+router.post('/:vendorId/fcm-token', authenticateToken, requireVendorOwner, vendorPanelController.registerFcmToken);
+router.delete('/fcm-token', authenticateToken, requireVendor, vendorPanelController.deleteFcmToken);
+router.delete('/:vendorId/fcm-token', authenticateToken, requireVendorOwner, vendorPanelController.deleteFcmToken);
 
 const supportController = require('../../controllers/Support/supportController');
 
 // Vendor Support Desk Tickets (vendor-portal)
-router.post('/tickets', supportController.createVendorTicket);
-router.get('/tickets', supportController.getVendorTickets);
+router.post('/tickets', authenticateToken, requireVendor, supportController.createVendorTicket);
+router.get('/tickets', authenticateToken, requireVendor, supportController.getVendorTickets);
 
 module.exports = router;
 

@@ -2,13 +2,19 @@ const express = require('express');
 const router = express.Router();
 const adminController = require('../../controllers/Admin/adminController');
 const adminPanelController = require('../../controllers/Admin/adminPanelController');
+const { authenticateAdminToken } = require('../../middleware/adminAuth');
 
-// ── Auth & Dashboard ──────────────────────────────────────────────────
+// ── Public Auth Endpoints ─────────────────────────────────────────────
 router.post('/login', adminPanelController.login);
 router.post('/refresh', adminPanelController.refreshToken);
+
+// ── All Admin Panel Routes Below Require Admin Authentication ─────────
+router.use(authenticateAdminToken);
+
 router.get('/me', adminPanelController.getMe);
 router.post('/logout', adminPanelController.logout);
 router.get('/dashboard', adminPanelController.getDashboardData);
+
 
 // ── Societies ────────────────────────────────────────────────────────
 router.get('/societies', adminPanelController.listSocieties);

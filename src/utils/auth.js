@@ -156,23 +156,42 @@ function verifyJwt(token, secret) {
  * Generates an Access Token (24h) and Refresh Token (7d) pair.
  */
 function generateTokens(vendorOrUser, targetRole = null) {
-  const role = targetRole || vendorOrUser.role || (vendorOrUser.email?.includes('admin') ? 'admin' : 'vendor');
+  const role = String(targetRole || vendorOrUser.role || (vendorOrUser.email?.includes('admin') ? 'admin' : 'vendor')).toLowerCase();
+  const isAdmin = ['admin', 'super_admin', 'superadmin', 'sub_admin'].includes(role);
+  const isVendor = role === 'vendor';
+  const isUser = (role === 'user' || role === 'customer') && !isVendor && !isAdmin;
+
   const payload = {
     id: vendorOrUser.vendor_id || vendorOrUser.id || vendorOrUser.user_id,
-    vendor_id: vendorOrUser.vendor_id || vendorOrUser.id,
     email: vendorOrUser.email,
-    name: vendorOrUser.vendor_name || vendorOrUser.customer_name || vendorOrUser.name || 'User',
+    name: vendorOrUser.vendor_name || vendorOrUser.customer_name || vendorOrUser.name || (isAdmin ? 'Admin' : (isVendor ? 'Vendor' : 'User')),
     role: role,
-    roles: [role, 'user', 'customer'],
-    isVendor: role === 'vendor' || role === 'admin',
-    isUser: true
+    roles: isAdmin ? [role, 'admin'] : (isVendor ? ['vendor'] : ['user']),
+    isVendor: isVendor,
+    isUser: isUser,
+    isAdmin: isAdmin
   };
+
+  if (isVendor) {
+    payload.vendor_id = vendorOrUser.vendor_id || vendorOrUser.id;
+    if (vendorOrUser.public_id) payload.public_id = vendorOrUser.public_id;
+  } else if (isAdmin) {
+    if (vendorOrUser.powers) {
+      payload.powers = vendorOrUser.powers;
+    }
+  } else if (isUser) {
+    payload.user_id = vendorOrUser.user_id || vendorOrUser.id;
+    if (vendorOrUser.phone) payload.phone = vendorOrUser.phone;
+    if (vendorOrUser.public_id) payload.public_id = vendorOrUser.public_id;
+  }
 
   const accessToken = signJwt(payload, authConfig.jwt.secret, 24 * 3600); // 24 Hours
   const refreshToken = signJwt({ id: payload.id, type: 'refresh' }, authConfig.jwt.refreshTokenSecret, 90 * 86400); // 90 Days
 
   return { accessToken, refreshToken, expiresIn: '24h' };
 }
+
+
 
 /**
  * Revokes a token (adds to blacklist).

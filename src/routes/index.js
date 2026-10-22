@@ -27,7 +27,7 @@ const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 const vendorAuthController = require('../controllers/Vendor/vendorAuthController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, requireVendor, requireVendorOwner, requireUser, requireUserOwner } = require('../middleware/auth');
 const { upload, handleMulterError } = require('../middleware/upload');
 const { query } = require('../models/db');
 
@@ -38,33 +38,33 @@ router.get('/version', (req, res) => res.redirect('/health/version'));
 router.get(['/ping', '/api/ping'], (req, res) => res.status(200).json({ status: 'ok', message: 'pong', timestamp: new Date().toISOString() }));
 
 // ── Service Vendor Enquiry Direct Routes ────────────────────
-router.post('/api/enquiries', enquiryController.createEnquiry);
-router.post('/api/vendors/enquiries', enquiryController.createEnquiry);
-router.post('/api/vendors/:vendorId/enquiries', enquiryController.createEnquiry);
-router.get('/api/vendors/:vendorId/enquiries', enquiryController.getVendorEnquiries);
-router.get('/api/user/:userId/enquiries', enquiryController.getUserEnquiries);
-router.get('/api/users/:userId/enquiries', enquiryController.getUserEnquiries);
-router.patch('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
-router.put('/api/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
-router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', enquiryController.updateEnquiryStatus);
+router.post('/api/enquiries', authenticateToken, requireUser, enquiryController.createEnquiry);
+router.post('/api/vendors/enquiries', authenticateToken, requireUser, enquiryController.createEnquiry);
+router.post('/api/vendors/:vendorId/enquiries', authenticateToken, requireUser, enquiryController.createEnquiry);
+router.get('/api/vendors/:vendorId/enquiries', authenticateToken, requireVendorOwner, enquiryController.getVendorEnquiries);
+router.get('/api/user/:userId/enquiries', authenticateToken, requireUserOwner, enquiryController.getUserEnquiries);
+router.get('/api/users/:userId/enquiries', authenticateToken, requireUserOwner, enquiryController.getUserEnquiries);
+router.patch('/api/enquiries/:enquiryId', authenticateToken, requireVendor, enquiryController.updateEnquiryStatus);
+router.put('/api/enquiries/:enquiryId', authenticateToken, requireVendor, enquiryController.updateEnquiryStatus);
+router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', authenticateToken, requireVendorOwner, enquiryController.updateEnquiryStatus);
 
 // ── Service Vendor Services Direct & Global Routes ───────────
 router.get(['/api/services', '/services'], serviceController.getAllServices);
-router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], upload.any(), handleMulterError, serviceController.addService);
+router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.addService);
 router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], serviceController.getVendorServices);
 router.get(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.getServiceById);
-router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
-router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, serviceController.updateService);
-router.post(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId', '/api/services/:serviceId/edit', '/api/services/:serviceId/update'], upload.any(), handleMulterError, serviceController.updateService);
+router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
+router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
+router.post(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId', '/api/services/:serviceId/edit', '/api/services/:serviceId/update'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
 
-// Dedicated Service Photo / Image Update Endpoints
-router.post(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, serviceController.updateServiceImage);
-router.put(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, serviceController.updateServiceImage);
-router.patch(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, serviceController.updateServiceImage);
+// Dedicated Service Photo / Image Update Endpoints (Vendor Owner Only)
+router.post(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
+router.put(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
+router.patch(['/api/vendors/:vendorId/services/:serviceId/image', '/api/vendors/:vendorId/services/:serviceId/photo', '/api/services/:serviceId/image', '/api/services/:serviceId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateServiceImage);
 
-router.patch(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
-router.put(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], serviceController.toggleServiceAvailability);
-router.delete(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.deleteService);
+router.patch(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
+router.put(['/api/vendors/:vendorId/services/:serviceId/availability', '/api/services/:serviceId/availability'], authenticateToken, requireVendorOwner, serviceController.toggleServiceAvailability);
+router.delete(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], authenticateToken, requireVendorOwner, serviceController.deleteService);
 
 // ── Account Pre-Check Route (User / Vendor Existence Check) ────
 router.post(['/api/auth/check-account', '/api/auth/check-user', '/api/auth/check-exists', '/api/check-phone', '/auth/check-account', '/api/users/check-account', '/api/users/check-phone'], usersController.checkAccountExists);
@@ -101,7 +101,7 @@ router.get([
   '/api/vendor/:vendorId/subscription-status',
   '/api/subscriptions/status/:vendorId',
   '/api/subscriptions/:vendorId/status'
-], subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+], authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
 
 router.post([
   '/api/vendorPanel/:vendorId/subscribe',
@@ -113,7 +113,7 @@ router.post([
   '/api/subscriptions/subscribe',
   '/api/subscriptions/:vendorId/subscribe',
   '/api/subscriptions/:vendorId/renew'
-], subscriptionController.subscribe.bind(subscriptionController));
+], authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
 
 router.post([
   '/api/subscriptions/create-payment-session',
@@ -125,7 +125,7 @@ router.post([
   '/api/vendorPanel/:vendorId/create-payment-session',
   '/api/payments/cashfree/subscription-session',
   '/api/payments/cashfree/create-subscription-session'
-], subscriptionController.createPaymentSession.bind(subscriptionController));
+], authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 
 router.post([
   '/api/subscriptions/verify-payment',
@@ -136,7 +136,7 @@ router.post([
   '/api/vendorPanel/:vendorId/verify-payment',
   '/api/payments/cashfree/verify-subscription',
   '/api/payments/cashfree/verify-subscription-payment'
-], subscriptionController.verifyPayment.bind(subscriptionController));
+], authenticateToken, requireVendorOwner, subscriptionController.verifyPayment.bind(subscriptionController));
 
 // ── Categories & Platform Config Direct Endpoints ──────────
 router.get('/api/categories', storefrontController.getCategories);
@@ -155,65 +155,65 @@ router.get('/api/about-us', cmsController.getAboutUs);
 router.get('/api/privacy-policy', cmsController.getPrivacyPolicy);
 router.get('/api/terms-conditions', cmsController.getTermsConditions);
 router.get('/api/support/contact-info', cmsController.getSupportContacts);
-router.put('/api/admin/cms/pages/:slug', cmsController.updateCmsPageBySlug);
-router.put('/api/admin/cms/contacts', cmsController.updateSupportContacts);
+router.put('/api/admin/cms/pages/:slug', authenticateAdminToken, requirePower('SETTINGS'), cmsController.updateCmsPageBySlug);
+router.put('/api/admin/cms/contacts', authenticateAdminToken, requirePower('SETTINGS'), cmsController.updateSupportContacts);
 
-// ── Additional Admin Panel Specification Alias Routes ────────
-router.get('/api/dashboard', adminPanelController.getDashboardData);
-router.get('/api/admin/dashboard', adminPanelController.getDashboardData);
-router.get('/api/vendors/:id/payments', adminPanelController.getVendorPayments);
+// ── Additional Admin Panel Specification Alias Routes (Admin Only) ────
+router.get('/api/dashboard', authenticateAdminToken, adminPanelController.getDashboardData);
+router.get('/api/admin/dashboard', authenticateAdminToken, adminPanelController.getDashboardData);
+router.get('/api/vendors/:id/payments', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.getVendorPayments);
 
 router.all('/api/v1/auth/login', adminPanelController.login);
-router.all('/api/v1/auth/me', adminPanelController.getMe);
-router.all('/api/v1/admin/users/strikes', adminPanelController.listAllUserStrikesAdmin);
-router.all('/api/v1/admin/users', adminPanelController.listUsers);
+router.all('/api/v1/auth/me', authenticateAdminToken, adminPanelController.getMe);
+router.all('/api/v1/admin/users/strikes', authenticateAdminToken, adminPanelController.listAllUserStrikesAdmin);
+router.all('/api/v1/admin/users', authenticateAdminToken, adminPanelController.listUsers);
 router.all('/api/v1/config', adminPanelController.getPlatformConfig);
 
-router.get('/api/people', adminPanelController.listUsers);
-router.get('/api/people/analytics', adminPanelController.getUserAnalytics);
-router.get('/api/people/strikes', adminPanelController.listAllUserStrikesAdmin);
-router.get('/api/people/:id', adminPanelController.getUserById);
-router.get('/api/people/:id/orders', adminPanelController.getUserOrdersAdmin);
-router.get('/api/people/:id/payments', adminPanelController.getUserPaymentsAdmin);
-router.get('/api/people/:id/timeline', adminPanelController.getUserTimelineAdmin);
-router.get('/api/people/:id/addresses', adminPanelController.getUserAddressesAdmin);
-router.get('/api/people/:id/notifications', adminPanelController.getUserNotificationsAdmin);
-router.get('/api/people/:id/audit-logs', adminPanelController.getUserAuditLogsAdmin);
-router.get('/api/people/:id/strike', adminPanelController.getUserStrikesAdmin);
-router.get('/api/people/:id/strikes', adminPanelController.getUserStrikesAdmin);
-router.post('/api/people', adminPanelController.listUsers);
-router.post('/api/people/:id/flag', adminPanelController.flagUser);
-router.delete('/api/people/:id/flag', adminPanelController.unflagUser);
-router.delete('/api/people/:id/unflag', adminPanelController.unflagUser);
-router.post('/api/people/:id/strike', adminPanelController.strikeUser);
-router.delete('/api/people/:id/strike', adminPanelController.unstrikeUser);
-router.post('/api/people/:id/unstrike', adminPanelController.unstrikeUser);
-router.post('/api/people/:id/block', adminPanelController.updateUserStatus);
+router.get('/api/people', authenticateAdminToken, adminPanelController.listUsers);
+router.get('/api/people/analytics', authenticateAdminToken, adminPanelController.getUserAnalytics);
+router.get('/api/people/strikes', authenticateAdminToken, adminPanelController.listAllUserStrikesAdmin);
+router.get('/api/people/:id', authenticateAdminToken, adminPanelController.getUserById);
+router.get('/api/people/:id/orders', authenticateAdminToken, adminPanelController.getUserOrdersAdmin);
+router.get('/api/people/:id/payments', authenticateAdminToken, adminPanelController.getUserPaymentsAdmin);
+router.get('/api/people/:id/timeline', authenticateAdminToken, adminPanelController.getUserTimelineAdmin);
+router.get('/api/people/:id/addresses', authenticateAdminToken, adminPanelController.getUserAddressesAdmin);
+router.get('/api/people/:id/notifications', authenticateAdminToken, adminPanelController.getUserNotificationsAdmin);
+router.get('/api/people/:id/audit-logs', authenticateAdminToken, adminPanelController.getUserAuditLogsAdmin);
+router.get('/api/people/:id/strike', authenticateAdminToken, adminPanelController.getUserStrikesAdmin);
+router.get('/api/people/:id/strikes', authenticateAdminToken, adminPanelController.getUserStrikesAdmin);
+router.post('/api/people', authenticateAdminToken, adminPanelController.listUsers);
+router.post('/api/people/:id/flag', authenticateAdminToken, adminPanelController.flagUser);
+router.delete('/api/people/:id/flag', authenticateAdminToken, adminPanelController.unflagUser);
+router.delete('/api/people/:id/unflag', authenticateAdminToken, adminPanelController.unflagUser);
+router.post('/api/people/:id/strike', authenticateAdminToken, adminPanelController.strikeUser);
+router.delete('/api/people/:id/strike', authenticateAdminToken, adminPanelController.unstrikeUser);
+router.post('/api/people/:id/unstrike', authenticateAdminToken, adminPanelController.unstrikeUser);
+router.post('/api/people/:id/block', authenticateAdminToken, adminPanelController.updateUserStatus);
 // Unban / Unblock — resets status to ACTIVE + clears all strikes to 0
-router.post('/api/people/:id/unban', adminPanelController.unbanUser);
-router.post('/api/people/:id/unblock', adminPanelController.unbanUser);
-router.delete('/api/people/:id/ban', adminPanelController.unbanUser);
-router.put('/api/people/:id/status', adminPanelController.updateUserStatus);
-router.patch('/api/people/:id/status', adminPanelController.updateUserStatus);
-router.get(['/api/v1/admin/users/:id/strike', '/api/v1/admin/users/:id/strikes'], adminPanelController.getUserStrikesAdmin);
-router.post(['/api/v1/admin/users/:id/strike'], adminPanelController.strikeUser);
-router.delete(['/api/v1/admin/users/:id/strike'], adminPanelController.unstrikeUser);
-router.post(['/api/v1/admin/users/:id/unstrike'], adminPanelController.unstrikeUser);
+router.post('/api/people/:id/unban', authenticateAdminToken, adminPanelController.unbanUser);
+router.post('/api/people/:id/unblock', authenticateAdminToken, adminPanelController.unbanUser);
+router.delete('/api/people/:id/ban', authenticateAdminToken, adminPanelController.unbanUser);
+router.put('/api/people/:id/status', authenticateAdminToken, adminPanelController.updateUserStatus);
+router.patch('/api/people/:id/status', authenticateAdminToken, adminPanelController.updateUserStatus);
+router.get(['/api/v1/admin/users/:id/strike', '/api/v1/admin/users/:id/strikes'], authenticateAdminToken, adminPanelController.getUserStrikesAdmin);
+router.post(['/api/v1/admin/users/:id/strike'], authenticateAdminToken, adminPanelController.strikeUser);
+router.delete(['/api/v1/admin/users/:id/strike'], authenticateAdminToken, adminPanelController.unstrikeUser);
+router.post(['/api/v1/admin/users/:id/unstrike'], authenticateAdminToken, adminPanelController.unstrikeUser);
 // Unban v1 routes
-router.post(['/api/v1/admin/users/:id/unban', '/api/v1/admin/users/:id/unblock', '/api/admin/users/:id/unban'], adminPanelController.unbanUser);
-router.delete(['/api/v1/admin/users/:id/ban', '/api/admin/users/:id/ban'], adminPanelController.unbanUser);
-router.all(['/api/v1/admin/users/:id', '/api/v1/users/:id'], adminPanelController.getUserById);
-router.put(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
-router.patch(['/api/people/:id', '/api/v1/admin/users/:id'], adminPanelController.updateUserAdmin);
-router.delete('/api/people/:id', adminPanelController.deleteUser);
+router.post(['/api/v1/admin/users/:id/unban', '/api/v1/admin/users/:id/unblock', '/api/admin/users/:id/unban'], authenticateAdminToken, adminPanelController.unbanUser);
+router.delete(['/api/v1/admin/users/:id/ban', '/api/admin/users/:id/ban'], authenticateAdminToken, adminPanelController.unbanUser);
+router.all(['/api/v1/admin/users/:id', '/api/v1/users/:id'], authenticateAdminToken, adminPanelController.getUserById);
+router.put(['/api/people/:id', '/api/v1/admin/users/:id'], authenticateAdminToken, adminPanelController.updateUserAdmin);
+router.patch(['/api/people/:id', '/api/v1/admin/users/:id'], authenticateAdminToken, adminPanelController.updateUserAdmin);
+router.delete('/api/people/:id', authenticateAdminToken, adminPanelController.deleteUser);
 
-// Vendor Unban / Unblock & Strikes
-router.post(['/api/vendors/:id/unblock', '/api/vendors/:id/unban', '/api/v1/admin/vendors/:id/unban', '/api/v1/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unban'], adminPanelController.unbanVendor);
-router.delete(['/api/admin/vendors/:id/ban', '/api/admin/vendors/:id/block', '/api/v1/admin/vendors/:id/ban', '/api/v1/admin/vendors/:id/block'], adminPanelController.unbanVendor);
-router.get(['/api/vendors/:id/strike', '/api/vendors/:id/strikes', '/api/admin/vendors/:id/strike', '/api/admin/vendors/:id/strikes', '/api/v1/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strikes'], adminPanelController.getVendorStrikesAdmin);
-router.post(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], adminPanelController.strikeVendor);
-router.delete(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], adminPanelController.unstrikeVendor);
-router.post(['/api/vendors/:id/unstrike', '/api/admin/vendors/:id/unstrike', '/api/v1/admin/vendors/:id/unstrike'], adminPanelController.unstrikeVendor);
+// Vendor Unban / Unblock & Strikes (Admin Only)
+router.post(['/api/vendors/:id/unblock', '/api/vendors/:id/unban', '/api/v1/admin/vendors/:id/unban', '/api/v1/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unban'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unbanVendor);
+router.delete(['/api/admin/vendors/:id/ban', '/api/admin/vendors/:id/block', '/api/v1/admin/vendors/:id/ban', '/api/v1/admin/vendors/:id/block'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unbanVendor);
+router.get(['/api/vendors/:id/strike', '/api/vendors/:id/strikes', '/api/admin/vendors/:id/strike', '/api/admin/vendors/:id/strikes', '/api/v1/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strikes'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.getVendorStrikesAdmin);
+router.post(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.strikeVendor);
+router.delete(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
+router.post(['/api/vendors/:id/unstrike', '/api/admin/vendors/:id/unstrike', '/api/v1/admin/vendors/:id/unstrike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
 
 const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
 
@@ -283,21 +283,19 @@ router.get([
   '/api/admin/payments/cashfree-ledger',
   '/api/admin/payments/ledger',
   '/api/payments/ledger'
-], cashfreePaymentController.getAdminCashfreeLedger);
+], authenticateAdminToken, requirePower('SUBSCRIPTIONS'), cashfreePaymentController.getAdminCashfreeLedger);
 
-
-
-router.get('/api/payments/transactions', adminPanelController.getPaymentTransactions);
-router.get('/api/payments/revenue-dashboard', adminPanelController.getRevenueDashboard);
-router.post('/api/payments/refund', adminPanelController.processRefund);
-router.post('/api/payments/:id/refund', adminPanelController.processRefund);
-router.get('/api/payments/:id/receipt', adminPanelController.downloadPaymentReceipt);
-router.get('/api/payments/:id/invoice', adminPanelController.downloadPaymentInvoice);
+router.get('/api/payments/transactions', authenticateAdminToken, requirePower('SUBSCRIPTIONS'), adminPanelController.getPaymentTransactions);
+router.get('/api/payments/revenue-dashboard', authenticateAdminToken, requirePower('SUBSCRIPTIONS'), adminPanelController.getRevenueDashboard);
+router.post('/api/payments/refund', authenticateAdminToken, requirePower('SUBSCRIPTIONS'), adminPanelController.processRefund);
+router.post('/api/payments/:id/refund', authenticateAdminToken, requirePower('SUBSCRIPTIONS'), adminPanelController.processRefund);
+router.get('/api/payments/:id/receipt', authenticateAdminToken, adminPanelController.downloadPaymentReceipt);
+router.get('/api/payments/:id/invoice', authenticateAdminToken, adminPanelController.downloadPaymentInvoice);
 
 router.get('/api/promotions', adminPanelController.listPromotions);
-router.post('/api/promotions', adminPanelController.createPromotion);
-router.put('/api/promotions/:id', adminPanelController.updatePromotion);
-router.delete('/api/promotions/:id', adminPanelController.deletePromotion);
+router.post('/api/promotions', authenticateAdminToken, adminPanelController.createPromotion);
+router.put('/api/promotions/:id', authenticateAdminToken, adminPanelController.updatePromotion);
+router.delete('/api/promotions/:id', authenticateAdminToken, adminPanelController.deletePromotion);
 
 const supportController = require('../controllers/Support/supportController');
 const path = require('path');
@@ -313,66 +311,66 @@ const supportUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// ── Admin Panel Support Desk (adminMock) ─────────────────────────────────
-router.get(['/api/admin/support/tickets', '/api/support/tickets'], supportController.listAdminTickets);
-router.get(['/api/admin/support/tickets/overdue', '/api/support/tickets/overdue'], supportController.getOverdueTickets);
-router.get(['/api/admin/support/tickets/sla-summary', '/api/support/tickets/sla-summary'], supportController.getSlaSummary);
-router.get(['/api/admin/support/analytics', '/api/support/analytics'], supportController.getAnalytics);
-router.get(['/api/admin/support/sla', '/api/support/sla'], supportController.getSlaConfig);
-router.put(['/api/admin/support/sla', '/api/support/sla'], supportController.updateSlaConfig);
-router.get(['/api/admin/support/tags', '/api/support/tags'], supportController.getTags);
-router.post(['/api/admin/support/tags', '/api/support/tags'], supportController.createTag);
-router.delete(['/api/admin/support/tags/:tagId', '/api/support/tags/:tagId'], supportController.deleteTag);
+// ── Admin Panel Support Desk (adminMock - Admin Only) ─────────────────────────────────
+router.get(['/api/admin/support/tickets', '/api/support/tickets'], authenticateAdminToken, requirePower('SUPPORT'), supportController.listAdminTickets);
+router.get(['/api/admin/support/tickets/overdue', '/api/support/tickets/overdue'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getOverdueTickets);
+router.get(['/api/admin/support/tickets/sla-summary', '/api/support/tickets/sla-summary'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getSlaSummary);
+router.get(['/api/admin/support/analytics', '/api/support/analytics'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getAnalytics);
+router.get(['/api/admin/support/sla', '/api/support/sla'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getSlaConfig);
+router.put(['/api/admin/support/sla', '/api/support/sla'], authenticateAdminToken, requirePower('SUPPORT'), supportController.updateSlaConfig);
+router.get(['/api/admin/support/tags', '/api/support/tags'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getTags);
+router.post(['/api/admin/support/tags', '/api/support/tags'], authenticateAdminToken, requirePower('SUPPORT'), supportController.createTag);
+router.delete(['/api/admin/support/tags/:tagId', '/api/support/tags/:tagId'], authenticateAdminToken, requirePower('SUPPORT'), supportController.deleteTag);
 
-router.patch(['/api/admin/support/tickets/:ticketId/reset-sla', '/api/support/tickets/:ticketId/reset-sla', '/api/admin/support/tickets/:id/reset-sla', '/api/support/tickets/:id/reset-sla'], supportController.resetOrExtendSla);
-router.post(['/api/admin/support/tickets/:ticketId/reset-sla', '/api/support/tickets/:ticketId/reset-sla', '/api/admin/support/tickets/:id/reset-sla', '/api/support/tickets/:id/reset-sla'], supportController.resetOrExtendSla);
-router.get(['/api/admin/support/tickets/:ticketId', '/api/admin/support/tickets/:id', '/api/support/tickets/:ticketId', '/api/support/tickets/:id'], supportController.getTicketById);
-router.get(['/api/admin/support/tickets/:ticketId/messages', '/api/admin/support/tickets/:id/messages', '/api/support/tickets/:ticketId/messages', '/api/support/tickets/:id/messages'], supportController.getTicketMessages);
-router.post(['/api/admin/support/tickets/:ticketId/reply', '/api/admin/support/tickets/:id/reply', '/api/support/tickets/:ticketId/reply', '/api/support/tickets/:id/reply', '/api/support/tickets/:id/messages'], supportController.replyToTicket);
-router.post(['/api/admin/support/tickets/:ticketId/escalate', '/api/support/tickets/:ticketId/escalate', '/api/support/tickets/:id/escalate'], supportController.escalateTicket);
-router.post(['/api/admin/support/tickets/:ticketId/deescalate', '/api/support/tickets/:ticketId/deescalate', '/api/support/tickets/:id/deescalate'], supportController.deescalateTicket);
-router.post(['/api/admin/support/tickets/:ticketId/followers', '/api/support/tickets/:ticketId/followers', '/api/support/tickets/:id/followers'], supportController.manageFollowers);
-router.post(['/api/admin/support/tickets/:ticketId/merge', '/api/support/tickets/:ticketId/merge', '/api/support/tickets/:id/merge'], supportController.mergeTickets);
-router.post(['/api/admin/support/tickets/:ticketId/unmerge', '/api/support/tickets/:ticketId/unmerge', '/api/support/tickets/:id/unmerge'], supportController.unmergeTickets);
-router.patch(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/tickets/:id/status', '/api/support/tickets/:ticketId/status', '/api/support/tickets/:id/status'], supportController.updateTicketStatus);
-router.put(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/tickets/:id/status', '/api/support/tickets/:ticketId/status', '/api/support/tickets/:id/status'], supportController.updateTicketStatus);
-router.post(['/api/admin/support/tickets/:ticketId/attachments', '/api/support/tickets/:ticketId/attachments', '/api/support/tickets/:id/attachments'], supportUpload.single('file'), supportController.uploadAttachment);
+router.patch(['/api/admin/support/tickets/:ticketId/reset-sla', '/api/support/tickets/:ticketId/reset-sla', '/api/admin/support/tickets/:id/reset-sla', '/api/support/tickets/:id/reset-sla'], authenticateAdminToken, requirePower('SUPPORT'), supportController.resetOrExtendSla);
+router.post(['/api/admin/support/tickets/:ticketId/reset-sla', '/api/support/tickets/:ticketId/reset-sla', '/api/admin/support/tickets/:id/reset-sla', '/api/support/tickets/:id/reset-sla'], authenticateAdminToken, requirePower('SUPPORT'), supportController.resetOrExtendSla);
+router.get(['/api/admin/support/tickets/:ticketId', '/api/admin/support/tickets/:id', '/api/support/tickets/:ticketId', '/api/support/tickets/:id'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getTicketById);
+router.get(['/api/admin/support/tickets/:ticketId/messages', '/api/admin/support/tickets/:id/messages', '/api/support/tickets/:ticketId/messages', '/api/support/tickets/:id/messages'], authenticateAdminToken, requirePower('SUPPORT'), supportController.getTicketMessages);
+router.post(['/api/admin/support/tickets/:ticketId/reply', '/api/admin/support/tickets/:id/reply', '/api/support/tickets/:ticketId/reply', '/api/support/tickets/:id/reply', '/api/support/tickets/:id/messages'], authenticateAdminToken, requirePower('SUPPORT'), supportController.replyToTicket);
+router.post(['/api/admin/support/tickets/:ticketId/escalate', '/api/support/tickets/:ticketId/escalate', '/api/support/tickets/:id/escalate'], authenticateAdminToken, requirePower('SUPPORT'), supportController.escalateTicket);
+router.post(['/api/admin/support/tickets/:ticketId/deescalate', '/api/support/tickets/:ticketId/deescalate', '/api/support/tickets/:id/deescalate'], authenticateAdminToken, requirePower('SUPPORT'), supportController.deescalateTicket);
+router.post(['/api/admin/support/tickets/:ticketId/followers', '/api/support/tickets/:ticketId/followers', '/api/support/tickets/:id/followers'], authenticateAdminToken, requirePower('SUPPORT'), supportController.manageFollowers);
+router.post(['/api/admin/support/tickets/:ticketId/merge', '/api/support/tickets/:ticketId/merge', '/api/support/tickets/:id/merge'], authenticateAdminToken, requirePower('SUPPORT'), supportController.mergeTickets);
+router.post(['/api/admin/support/tickets/:ticketId/unmerge', '/api/support/tickets/:ticketId/unmerge', '/api/support/tickets/:id/unmerge'], authenticateAdminToken, requirePower('SUPPORT'), supportController.unmergeTickets);
+router.patch(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/tickets/:id/status', '/api/support/tickets/:ticketId/status', '/api/support/tickets/:id/status'], authenticateAdminToken, requirePower('SUPPORT'), supportController.updateTicketStatus);
+router.put(['/api/admin/support/tickets/:ticketId/status', '/api/admin/support/tickets/:id/status', '/api/support/tickets/:ticketId/status', '/api/support/tickets/:id/status'], authenticateAdminToken, requirePower('SUPPORT'), supportController.updateTicketStatus);
+router.post(['/api/admin/support/tickets/:ticketId/attachments', '/api/support/tickets/:ticketId/attachments', '/api/support/tickets/:id/attachments'], authenticateAdminToken, requirePower('SUPPORT'), supportUpload.single('file'), supportController.uploadAttachment);
 
-// ── Resident User Mobile App & Website (user-app) ────────────────────────
-router.post(['/api/user/tickets', '/api/users/tickets'], authenticateToken, supportController.createCustomerTicket);
-router.get(['/api/user/tickets', '/api/users/tickets'], authenticateToken, supportController.getUserTickets);
-router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply', '/api/users/tickets/:ticketId/reply', '/api/users/tickets/:id/reply'], authenticateToken, supportController.userReplyToTicket);
+// ── Resident User Mobile App & Website (user-app - User Only) ────────────────────────
+router.post(['/api/user/tickets', '/api/users/tickets'], authenticateToken, requireUser, supportController.createCustomerTicket);
+router.get(['/api/user/tickets', '/api/users/tickets'], authenticateToken, requireUser, supportController.getUserTickets);
+router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply', '/api/users/tickets/:ticketId/reply', '/api/users/tickets/:id/reply'], authenticateToken, requireUser, supportController.userReplyToTicket);
 
-// ── Merchant Vendor Mobile App & Portal (vendor-portal) ──────────────────
-router.post(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, supportController.createVendorTicket);
-router.get(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, supportController.getVendorTickets);
-router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId'], vendorPanelController.getVendorPurchases);
+// ── Merchant Vendor Mobile App & Portal (vendor-portal - Vendor Only) ──────────────────
+router.post(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, requireVendor, supportController.createVendorTicket);
+router.get(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, requireVendor, supportController.getVendorTickets);
+router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId'], authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
 
+// ── Executive & Telemetry Reports (Admin Only) ───────────────────────
+router.get('/api/reports/telemetry', authenticateAdminToken, adminPanelController.getExecutiveReports);
+router.get('/api/reports/executive', authenticateAdminToken, adminPanelController.getExecutiveReports);
+router.get('/api/reports/export', authenticateAdminToken, adminPanelController.exportReportData);
+router.post('/api/reports/export', authenticateAdminToken, adminPanelController.exportReportData);
 
+// ── Broadcast & Admin Notifications (Admin Only) ─────────────────────
+router.get('/api/notifications', authenticateAdminToken, adminPanelController.listNotifications);
+router.get('/api/notifications/history', authenticateAdminToken, adminPanelController.listNotifications);
+router.post('/api/notifications/broadcast', authenticateAdminToken, adminPanelController.broadcastNotification);
+router.patch('/api/notifications/read-all', authenticateAdminToken, adminPanelController.markAllNotificationsRead);
+router.post('/api/notifications/read-all', authenticateAdminToken, adminPanelController.markAllNotificationsRead);
 
+// ── Global Audit Ledger (Super Admin Only) ───────────────────────────
+router.get('/api/audit-logs', authenticateAdminToken, requireSuperAdmin, adminPanelController.listAuditLogs);
+router.get('/api/audit-logs/:id', authenticateAdminToken, requireSuperAdmin, adminPanelController.listAuditLogs);
+router.post('/api/audit-logs/export', authenticateAdminToken, requireSuperAdmin, adminPanelController.exportReportData);
 
-
-router.get('/api/reports/telemetry', adminPanelController.getExecutiveReports);
-router.get('/api/reports/executive', adminPanelController.getExecutiveReports);
-router.get('/api/reports/export', adminPanelController.exportReportData);
-router.post('/api/reports/export', adminPanelController.exportReportData);
-
-router.get('/api/notifications', adminPanelController.listNotifications);
-router.get('/api/notifications/history', adminPanelController.listNotifications);
-router.post('/api/notifications/broadcast', adminPanelController.broadcastNotification);
-router.patch('/api/notifications/read-all', adminPanelController.markAllNotificationsRead);
-router.post('/api/notifications/read-all', adminPanelController.markAllNotificationsRead);
-
-router.get('/api/audit-logs', adminPanelController.listAuditLogs);
-router.get('/api/audit-logs/:id', adminPanelController.listAuditLogs);
-router.post('/api/audit-logs/export', adminPanelController.exportReportData);
-
+// ── Platform Settings & System Configuration (Admin Only) ────────────
 router.get('/api/settings', adminPanelController.getPlatformConfig);
-router.put('/api/settings', adminPanelController.updateBrandingConfig);
-router.put('/api/settings/profile', adminPanelController.updateAdminProfile);
-router.post('/api/settings/change-password', adminPanelController.changeAdminPassword);
-router.get(['/api/email/status', '/api/test/email/status', '/api/settings/email/status'], adminPanelController.checkEmailStatus);
-router.post(['/api/email/send', '/api/emails/send', '/api/send-email', '/api/test/email/send', '/api/settings/email/send-test', '/api/email/send-test'], adminPanelController.sendTestEmail);
+router.put('/api/settings', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateBrandingConfig);
+router.put('/api/settings/profile', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateAdminProfile);
+router.post('/api/settings/change-password', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.changeAdminPassword);
+router.get(['/api/email/status', '/api/test/email/status', '/api/settings/email/status'], authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.checkEmailStatus);
+router.post(['/api/email/send', '/api/emails/send', '/api/send-email', '/api/test/email/send', '/api/settings/email/send-test', '/api/email/send-test'], authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.sendTestEmail);
 
 // Direct Email OTP Endpoints
 router.post(['/api/email/send-otp', '/api/email/otp/send', '/api/email/request-otp'], otpController.sendEmailOtp);
@@ -381,12 +379,13 @@ router.post(['/api/email/verify-otp', '/api/email/otp/verify'], otpController.ve
 // Direct Mobile OTP Endpoints
 router.post(['/api/mobile/send-otp', '/api/mobile/otp/send'], otpController.sendMobileOtp);
 router.post(['/api/mobile/verify-otp', '/api/mobile/otp/verify'], otpController.verifyMobileOtp);
-router.put('/api/settings/tax', adminPanelController.updateSettingsSection);
+router.put('/api/settings/tax', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateSettingsSection);
 router.get(['/api/settings/subscription-plans', '/api/subscription-plans'], adminPanelController.getSubscriptionPlansAdmin);
-router.put(['/api/settings/subscription-plans', '/api/subscription-plans'], adminPanelController.updateSettingsSection);
-router.put('/api/settings/system', adminPanelController.updateSettingsSection);
-router.put('/api/settings/notifications', adminPanelController.updateSettingsSection);
-router.put('/api/settings/branding', adminPanelController.updateSettingsSection);
+router.put(['/api/settings/subscription-plans', '/api/subscription-plans'], authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateSettingsSection);
+router.put('/api/settings/system', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateSettingsSection);
+router.put('/api/settings/notifications', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateSettingsSection);
+router.put('/api/settings/branding', authenticateAdminToken, requirePower('SETTINGS'), adminPanelController.updateSettingsSection);
+
 
 router.get('/api/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.listSubAdmins);
 router.post('/api/subadmins', authenticateAdminToken, requirePower('SUB_ADMINS'), subAdminsController.createSubAdmin);
@@ -418,9 +417,9 @@ router.post('/api/admin/audit-logs', authenticateAdminToken, subAdminsController
 router.get('/api/v1/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 router.get('/api/admin/audit-logs', authenticateAdminToken, requireSuperAdmin, subAdminsController.getAuditLogs);
 
-router.post('/api/upload', vendorPanelController.uploadImage);
-router.post('/api/upload-image', vendorPanelController.uploadImage);
-router.post('/api/upload-logo', vendorPanelController.uploadImage);
+router.post('/api/upload', authenticateToken, requireVendor, vendorPanelController.uploadImage);
+router.post('/api/upload-image', authenticateToken, requireVendor, vendorPanelController.uploadImage);
+router.post('/api/upload-logo', authenticateToken, requireVendor, vendorPanelController.uploadImage);
 
 
 // ── Generic /api/products and /api/items Catalog & Entity Lookup Endpoints ───
@@ -437,11 +436,12 @@ async function resolveItemVendorId(req, res, next) {
 router.get(['/api/products', '/api/items', '/products', '/items'], storefrontController.getItems);
 router.get(['/api/products/:id', '/api/items/:id', '/products/:id', '/items/:id'], storefrontController.getItemOrProductById);
 
-router.put(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId', '/items/:itemId'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
-router.patch(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId', '/items/:itemId'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItem);
-router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
-router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
-router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemImage);
+router.put(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId', '/items/:itemId'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
+router.patch(['/api/products/:itemId', '/api/items/:itemId', '/products/:itemId', '/items/:itemId'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItem);
+router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
+
 
 // ── Real-Time Inventory & Stock Management Endpoints ─────────────────────────
 router.post([
@@ -465,7 +465,7 @@ router.patch([
     '/api/products/:itemId/stock',
     '/items/:itemId/stock',
     '/products/:itemId/stock'
-], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemStock);
+], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
 
 router.put([
     '/api/vendorPanel/:vendorId/items/:itemId/stock',
@@ -474,7 +474,7 @@ router.put([
     '/api/products/:itemId/stock',
     '/items/:itemId/stock',
     '/products/:itemId/stock'
-], upload.any(), handleMulterError, resolveItemVendorId, vendorPanelController.updateItemStock);
+], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
 
 // ── Root Alias Forwarding for Frontend Clients omitting /api prefix ─────
 router.get(['/vendors', '/stores'], (req, res, next) => {

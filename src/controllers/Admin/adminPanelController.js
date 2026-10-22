@@ -197,7 +197,6 @@ async function login(req, res) {
       if (inputPass === configuredSecret) {
         const adminUser = {
           id: 1,
-          vendor_id: 1,
           email: 'admin@digilocal.com',
           name: 'Super Admin',
           role: 'admin',
@@ -265,8 +264,19 @@ async function refreshToken(req, res) {
 }
 
 async function getMe(req, res) {
-  return respond(res, 200, { id: 1, email: 'admin@digilocal.com', name: 'Super Admin', role: 'admin', powers: ['all'] }, 'Admin profile retrieved.');
+  if (!req.user || !['admin', 'super_admin', 'superadmin', 'sub_admin'].includes(String(req.user.role || '').toLowerCase())) {
+    return sendStandardError(res, 401, 'Unauthorized admin session.', 'UNAUTHORIZED');
+  }
+  return respond(res, 200, {
+    id: req.user.id || 1,
+    email: req.user.email || 'admin@digilocal.com',
+    name: req.user.name || 'Administrator',
+    role: req.user.role || 'admin',
+    powers: req.user.powers || ['ALL'],
+    allowed_delegation_powers: req.user.allowed_delegation_powers || req.user.powers || ['ALL']
+  }, 'Admin profile retrieved.');
 }
+
 
 async function logout(req, res) {
   return respond(res, 200, {}, 'Admin logged out successfully. Session invalidated.');
