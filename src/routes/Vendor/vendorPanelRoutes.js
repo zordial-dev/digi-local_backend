@@ -99,6 +99,13 @@ router.post('/:vendorId/reviews', authenticateToken, requireVendorOwner, ratingC
 router.post('/ratings/:ratingId/reply', authenticateToken, requireVendor, ratingController.replyToRating);
 router.post('/reviews/:ratingId/reply', authenticateToken, requireVendor, ratingController.replyToRating);
 
+// Direct vendor subscription status check (Vendor Only)
+const subscriptionController = require('../../controllers/Subscription/subscriptionController');
+router.get(['/subscription/status', '/subscription-status'], authenticateToken, requireVendor, (req, res) => {
+    req.params.vendorId = String(req.user?.vendor_id || req.user?.id);
+    return subscriptionController.getVendorSubscriptionStatus(req, res);
+});
+
 // Direct vendor status check (Vendor Only)
 router.get('/status', authenticateToken, requireVendor, vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', authenticateToken, requireVendorOwner, vendorAuthController.getVendorStatus);

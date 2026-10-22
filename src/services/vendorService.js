@@ -115,9 +115,12 @@ class VendorService {
       };
     });
 
-    // Fetch subscription and payments
+    // Fetch subscription and payments (prioritize ACTIVE subscriptions with latest end_date)
     const subRes = await query(
-      `SELECT * FROM subscriptions WHERE vendor_id = ? ORDER BY subscription_id DESC LIMIT 1`,
+      `SELECT * FROM subscriptions 
+       WHERE vendor_id = ? 
+       ORDER BY CASE WHEN UPPER(status) = 'ACTIVE' THEN 1 ELSE 2 END, end_date DESC, subscription_id DESC 
+       LIMIT 1`,
       [actualVendorId]
     ).catch(() => ({ rows: [] }));
 
@@ -189,12 +192,33 @@ class VendorService {
     if (vendor.shop_image) vendor.shop_image = normalizeImageUrl(vendor.shop_image);
     vendor.logo_url = vendor.logo || vendor.shop_image || null;
 
+    const latestSub = subRes.rows && subRes.rows[0] ? subRes.rows[0] : null;
+    let daysRemaining = 0;
+    let isSubActive = false;
+    if (latestSub && String(latestSub.status).toUpperCase() === 'ACTIVE' && latestSub.end_date) {
+      const end = new Date(latestSub.end_date).getTime();
+      const diff = end - Date.now();
+      daysRemaining = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+      isSubActive = daysRemaining > 0;
+    }
+
+    vendor.subscription_status = isSubActive ? 'ACTIVE' : (latestSub ? latestSub.status : 'NONE');
+    vendor.subscription_end_date = latestSub?.end_date || null;
+    vendor.days_remaining = daysRemaining;
+    vendor.subscription_tier = vendor.subscription_tier || 'Annual Merchant Plan';
+
+    if (latestSub) {
+      latestSub.days_remaining = daysRemaining;
+      latestSub.days_left = daysRemaining;
+      latestSub.is_expired = !isSubActive;
+    }
+
     return {
       vendor,
       items: normalizedItems,
       orders,
       enquiries,
-      subscription: subRes.rows[0] || null,
+      subscription: latestSub,
       payments: payRes.rows || []
     };
   }

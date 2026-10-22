@@ -671,7 +671,7 @@ class SubscriptionService {
     }
     const vendor = vendorRes.rows[0];
 
-    // Fetch latest subscription record
+    // Fetch latest subscription record (prioritizes active subscription with latest end_date)
     const subRes = await query(
       `SELECT s.subscription_id, s.plan_id, s.plan_name, 
               TO_CHAR(s.start_date, 'YYYY-MM-DD') as start_date, 
@@ -683,7 +683,7 @@ class SubscriptionService {
        FROM subscriptions s
        LEFT JOIN plans p ON s.plan_id = p.plan_id
        WHERE s.vendor_id = ?
-       ORDER BY s.subscription_id DESC LIMIT 1`,
+       ORDER BY CASE WHEN UPPER(s.status) = 'ACTIVE' THEN 1 ELSE 2 END, s.end_date DESC, s.subscription_id DESC LIMIT 1`,
       [vId]
     );
 

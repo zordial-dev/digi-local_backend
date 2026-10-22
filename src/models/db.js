@@ -1001,8 +1001,13 @@ async function closeDb() {
   }
 }
 
+function setPool(pool) {
+  pgPool = pool;
+}
+
 module.exports = {
   initDb,
+  setPool,
   query,
   withTransaction,
   closeDb,
