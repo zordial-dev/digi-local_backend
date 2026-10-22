@@ -975,6 +975,8 @@ async function loginVendorWithOtp(req, res) {
 
     return res.status(200).json({
       success: true,
+      verified: true,
+      valid: true,
       message: 'Vendor login successful',
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
@@ -983,13 +985,16 @@ async function loginVendorWithOtp(req, res) {
       public_id: vendorPublicId,
       status: statusLower,
       vendor: {
+        ...v,
         vendor_id: Number(v.vendor_id),
         public_id: vendorPublicId,
         store_name: v.store_name,
         vendor_name: v.vendor_name,
         email: v.email,
         phone_number: v.phone_number,
-        status: statusLower
+        status: statusLower,
+        role: 'vendor',
+        isVendor: true
       }
     });
   } catch (err) {

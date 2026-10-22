@@ -95,7 +95,13 @@ function injectVendorRole(req, res, next) {
 
 // Dedicated Mobile OTP Endpoints
 router.post(['/mobile/send-otp', '/mobile/send'], injectVendorRole, otpController.sendMobileOtp);
-router.post(['/mobile/verify-otp', '/mobile/verify'], injectVendorRole, otpController.verifyMobileOtp);
+router.post(['/mobile/verify-otp', '/mobile/verify'], injectVendorRole, (req, res, next) => {
+  const isRegister = req.body?.purpose === 'register' || req.body?.mode === 'register' || req.body?.intent === 'register';
+  if (isRegister) {
+    return otpController.verifyMobileOtp(req, res, next);
+  }
+  return vendorAuthController.loginVendorWithOtp(req, res, next);
+});
 
 // Dedicated Email OTP Endpoints
 router.post(['/email/send-otp', '/email/send'], injectVendorRole, otpController.sendEmailOtp);
@@ -128,7 +134,13 @@ router.post('/user-register', vendorAuthController.handleUserRegisterCheck);
 router.post('/refresh', vendorAuthController.refreshToken);
 router.post('/logout', vendorAuthController.logoutVendor);
 router.post('/forgot-password', validateRequest(forgotPasswordSchema), vendorAuthController.forgotPassword);
-router.post(['/verify-otp', '/otp-verify'], otpController.verifyOtp);
+router.post(['/verify-otp', '/otp-verify'], (req, res, next) => {
+  const isRegister = req.body?.purpose === 'register' || req.body?.mode === 'register' || req.body?.intent === 'register';
+  if (isRegister) {
+    return otpController.verifyOtp(req, res, next);
+  }
+  return vendorAuthController.loginVendorWithOtp(req, res, next);
+});
 router.post('/reset-password', validateRequest(resetPasswordSchema), vendorAuthController.resetPassword);
 
 // FCM / Push Token Static Endpoints (Vendor Only)
