@@ -832,25 +832,43 @@ async function sendVendorOtp(req, res) {
     const digitsOnly = cleanTarget.replace(/\D/g, '');
     const last10 = digitsOnly.slice(-10);
 
-    // Check if vendor exists (unless register mode)
-    const mode = (req.body?.purpose || req.body?.mode || '').toLowerCase();
-    const isRegister = mode === 'register' || mode === 'signup';
+    // Check if vendor exists
+    const mode = (req.body?.purpose || req.body?.mode || req.body?.intent || req.body?.action || '').toLowerCase();
+    const isRegister = mode === 'register' || mode === 'signup' || mode === 'check_register';
 
     const vendorRes = await query(
-      `SELECT vendor_id, store_name, status FROM vendors 
-       WHERE phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?)`,
-      [cleanTarget, digitsOnly, last10, `%${last10}`]
+      `SELECT vendor_id, store_name, status, phone_number FROM vendors 
+       WHERE phone_number = ? 
+          OR phone_number = ? 
+          OR (LENGTH(?) >= 10 AND phone_number LIKE ?) 
+          OR (LENGTH(?) >= 10 AND RIGHT(REGEXP_REPLACE(phone_number, '\\D', '', 'g'), 10) = ?)`,
+      [cleanTarget, digitsOnly, last10, `%${last10}`, last10, last10]
     );
 
-    if (!isRegister && (!vendorRes.rows || vendorRes.rows.length === 0)) {
-      return res.status(404).json({
-        success: false,
-        exists: false,
-        is_registered: false,
-        code: 'VENDOR_NOT_FOUND',
-        error: 'No vendor store account found with this phone number. Please register first.',
-        message: 'No vendor store account found with this phone number. Please register first.'
-      });
+    if (isRegister) {
+      if (vendorRes.rows && vendorRes.rows.length > 0) {
+        const existingV = vendorRes.rows[0];
+        console.log(`⚠️ [VENDOR REGISTER OTP BLOCKED] Mobile number "${cleanTarget}" is already registered (Vendor #${existingV.vendor_id}, Store: "${existingV.store_name}"). Disallowing registration OTP.`);
+        return res.status(400).json({
+          success: false,
+          exists: true,
+          is_registered: true,
+          code: 'VENDOR_ALREADY_EXISTS',
+          error: 'A vendor store account with this mobile number already exists. Please log in instead.',
+          message: 'A vendor store account with this mobile number already exists. Please log in instead.'
+        });
+      }
+    } else {
+      if (!vendorRes.rows || vendorRes.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          exists: false,
+          is_registered: false,
+          code: 'VENDOR_NOT_FOUND',
+          error: 'No vendor store account found with this phone number. Please register first.',
+          message: 'No vendor store account found with this phone number. Please register first.'
+        });
+      }
     }
 
     const otpLength = Number(req.body?.otp_length || req.body?.otpLength || 6);

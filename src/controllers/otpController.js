@@ -19,8 +19,13 @@ async function findAccountByPhone(phone, targetRole = null) {
 
   if (!targetRole || targetRole === 'vendor') {
     const vendorRes = await query(
-      `SELECT * FROM vendors WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR phone_number LIKE ?`,
-      [cleanTarget, cleanedDigits, last10, `%${last10}`]
+      `SELECT * FROM vendors 
+       WHERE phone_number = ? 
+          OR phone_number = ? 
+          OR phone_number = ? 
+          OR phone_number LIKE ? 
+          OR (LENGTH(?) >= 10 AND RIGHT(REGEXP_REPLACE(phone_number, '\\D', '', 'g'), 10) = ?)`,
+      [cleanTarget, cleanedDigits, last10, `%${last10}`, last10, last10]
     ).catch(() => ({ rows: [] }));
     if (vendorRes.rows && vendorRes.rows.length > 0) {
       vendor = vendorRes.rows[0];
@@ -29,8 +34,13 @@ async function findAccountByPhone(phone, targetRole = null) {
 
   if (!targetRole || targetRole === 'user') {
     const userRes = await query(
-      `SELECT * FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
-      [cleanTarget, cleanedDigits, last10, `%${last10}`]
+      `SELECT * FROM users 
+       WHERE phone = ? 
+          OR phone = ? 
+          OR phone = ? 
+          OR phone LIKE ? 
+          OR (LENGTH(?) >= 10 AND RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 10) = ?)`,
+      [cleanTarget, cleanedDigits, last10, `%${last10}`, last10, last10]
     ).catch(() => ({ rows: [] }));
     if (userRes.rows && userRes.rows.length > 0) {
       user = userRes.rows[0];
@@ -138,11 +148,15 @@ const sendMobileOtpController = async (req, res) => {
 
     if (isRegistrationIntent) {
       if (accountExists) {
+        const label = vendor ? 'vendor store account' : 'account';
+        console.log(`⚠️ [REGISTRATION OTP BLOCKED] Phone "${cleanTarget}" already has a registered ${label}. Disallowing registration OTP.`);
         return res.status(400).json({
           success: false,
           exists: true,
-          error: 'An account with this mobile number already exists. Please log in instead.',
-          message: 'An account with this mobile number already exists. Please log in instead.'
+          is_registered: true,
+          code: vendor ? 'VENDOR_ALREADY_EXISTS' : 'ALREADY_REGISTERED',
+          error: `A ${label} with this mobile number already exists. Please log in instead.`,
+          message: `A ${label} with this mobile number already exists. Please log in instead.`
         });
       }
     } else {
