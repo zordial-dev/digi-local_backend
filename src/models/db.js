@@ -691,10 +691,13 @@ async function setupTablesPg() {
       start_date DATE NOT NULL,
       end_date DATE NOT NULL,
       usage_limit INT DEFAULT 1,
+      times_used INT DEFAULT 0,
       status VARCHAR(20) DEFAULT 'unused' CHECK (status IN ('unused', 'used')),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `).catch(() => { });
+
+  await pgPool.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS times_used INT DEFAULT 0;`).catch(() => { });
 
   // Ensure subscriptions table columns
   const subscriptionColumns = [

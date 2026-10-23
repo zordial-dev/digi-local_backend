@@ -90,10 +90,11 @@ class SubscriptionService {
       SELECT id, coupon_code, vendor_id, discount, type, 
              TO_CHAR(start_date, 'YYYY-MM-DD') as start_date, 
              TO_CHAR(end_date, 'YYYY-MM-DD') as end_date, 
-             usage_limit, status, created_at
+             usage_limit, COALESCE(times_used, 0) as times_used, status, created_at
       FROM coupons
       WHERE (vendor_id = ? OR vendor_id IS NULL)
         AND LOWER(status) = 'unused'
+        AND COALESCE(times_used, 0) < usage_limit
         AND start_date <= ?::date
         AND end_date >= ?::date
       ORDER BY id DESC
@@ -143,9 +144,12 @@ class SubscriptionService {
 
     const coupon = couponRes.rows[0];
 
-    // 3. Validate status
-    if (String(coupon.status).toLowerCase() !== 'unused') {
-      throw new Error(`Coupon "${cleanCode}" has already been used.`);
+    // 3. Validate status & usage limit
+    const timesUsed = Number(coupon.times_used || 0);
+    const usageLimit = Number(coupon.usage_limit || 1);
+
+    if (String(coupon.status).toLowerCase() === 'used' || timesUsed >= usageLimit) {
+      throw new Error(`Coupon "${cleanCode}" has reached its maximum usage limit (${usageLimit} redemption${usageLimit > 1 ? 's' : ''}).`);
     }
 
     // 4. Validate vendor ownership if vendor-specific
@@ -193,6 +197,9 @@ class SubscriptionService {
       duration_days: plan.duration_days || 365,
       start_date: couponStartDate,
       end_date: couponEndDate,
+      usage_limit: usageLimit,
+      times_used: timesUsed,
+      remaining_uses: Math.max(0, usageLimit - timesUsed),
       message: `Coupon "${cleanCode}" applied successfully! You saved ₹${discountAmount.toFixed(2)}.`
     };
   }
@@ -274,10 +281,13 @@ class SubscriptionService {
     const endDateStr = endDateObj.toISOString().split('T')[0];
 
     return await withTransaction(async (txQuery) => {
-      // 1. Mark coupon as 'used' if applied
+      // 1. Atomically increment times_used and transition status if limit reached
       if (appliedCoupon && appliedCoupon.coupon_id) {
         await txQuery(
-          `UPDATE coupons SET status = 'used' WHERE id = ?`,
+          `UPDATE coupons 
+           SET times_used = COALESCE(times_used, 0) + 1,
+               status = CASE WHEN COALESCE(times_used, 0) + 1 >= usage_limit THEN 'used' ELSE 'unused' END
+           WHERE id = ?`,
           [appliedCoupon.coupon_id]
         );
       }
@@ -568,10 +578,13 @@ class SubscriptionService {
     const endDateStr = endDateObj.toISOString().split('T')[0];
 
     return await withTransaction(async (txQuery) => {
-      // Mark coupon used if applicable
+      // Atomically increment times_used and transition status if limit reached
       if (activeCouponCode) {
         await txQuery(
-          `UPDATE coupons SET status = 'used' WHERE UPPER(coupon_code) = ? AND (vendor_id = ? OR vendor_id IS NULL)`,
+          `UPDATE coupons 
+           SET times_used = COALESCE(times_used, 0) + 1,
+               status = CASE WHEN COALESCE(times_used, 0) + 1 >= usage_limit THEN 'used' ELSE 'unused' END
+           WHERE UPPER(coupon_code) = ? AND (vendor_id = ? OR vendor_id IS NULL)`,
           [activeCouponCode.toUpperCase(), vId]
         ).catch(() => {});
       }
@@ -820,8 +833,8 @@ class SubscriptionService {
     }
 
     const res = await query(
-      `INSERT INTO coupons (coupon_code, vendor_id, discount, type, start_date, end_date, usage_limit, status)
-       VALUES (?, ?, ?, ?, ?::date, ?::date, ?, 'unused')
+      `INSERT INTO coupons (coupon_code, vendor_id, discount, type, start_date, end_date, usage_limit, times_used, status)
+       VALUES (?, ?, ?, ?, ?::date, ?::date, ?, 0, 'unused')
        RETURNING *`,
       [code, vendor_id || null, parseFloat(discount), cleanType, startDateStr, endDateStr, usage_limit || 1]
     );

@@ -197,8 +197,8 @@ async function createPaymentSession(payload = {}, options = {}) {
         customer_phone: String(cust.customer_phone || cust.phone || '9876543210')
       },
       order_meta: {
-        return_url: payload.order_meta?.return_url || payload.return_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
-        notify_url: payload.order_meta?.notify_url || payload.notify_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+        return_url: payload.order_meta?.return_url || payload.return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
+        notify_url: payload.order_meta?.notify_url || payload.notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
         payment_methods: payload.order_meta?.payment_methods || 'cc,dc,upi,nb,app,paylater'
       },
       order_note: payload.order_note || payload.note || 'DigiLocal Order Payment'
@@ -301,8 +301,8 @@ async function createUserToVendorPaymentSession(params = {}, options = {}) {
       customer_phone: String(customer_phone || '9876543210')
     },
     order_meta: {
-      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
-      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/payments/cashfree/webhook`
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`
     },
     order_tags: {
       vendor_id: String(vendor_id || ''),
@@ -354,8 +354,8 @@ async function createVendorDirectPaymentSession(params = {}, options = {}) {
       customer_phone: String(customer_phone || '9876543210')
     },
     order_meta: {
-      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/payments/cashfree/direct-return?order_id={order_id}`,
-      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/payments/cashfree/webhook`
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/payments/cashfree/direct-return?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`
     },
     order_tags: {
       vendor_id: String(vendor_id || ''),
@@ -400,8 +400,8 @@ async function createVendorRegistrationPayment(vendorDetails = {}, options = {})
       customer_phone: String(vendorDetails.phone_number || vendorDetails.phone || '9876543210')
     },
     order_meta: {
-      return_url: vendorDetails.return_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/vendors/cashfree/callback?order_id={order_id}`,
-      notify_url: vendorDetails.notify_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/vendors/cashfree/webhook`
+      return_url: vendorDetails.return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/vendors/cashfree/callback?order_id={order_id}`,
+      notify_url: vendorDetails.notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/vendors/cashfree/webhook`
     },
     order_tags: {
       vendor_id: String(vendorDetails.vendor_id || ''),
@@ -452,8 +452,8 @@ async function createSubscriptionPaymentSession(params = {}, options = {}) {
       customer_phone: String(phone_number || '9876543210')
     },
     order_meta: {
-      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
-      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digilocal.in').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
       payment_methods: 'cc,dc,upi,nb,app,paylater'
     },
     order_tags: {
