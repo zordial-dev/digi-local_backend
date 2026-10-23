@@ -574,27 +574,48 @@ router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (
 // ── Payment Return / Callback Helper ──────────────────────────────────────────
 router.get(['/payments/cashfree/return', '/payments/cashfree/direct-return', '/vendor/subscription/verify'], (req, res) => {
     const orderId = req.query.order_id || req.query.orderId || '';
+    const redirectUrl = req.query.redirect_url || req.query.return_url || '';
     res.setHeader('Content-Type', 'text/html');
     res.send(`
 <!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Payment Completed - DigiLocal</title>
+  <title>Payment Successful - DigiLocal</title>
   <style>
-    body { font-family: sans-serif; background: #FAF9F6; color: #211A19; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
-    .card { background: #FFFFFF; padding: 32px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 380px; }
-    h2 { color: #10B981; margin: 0 0 12px 0; font-size: 22px; }
-    p { color: #57534E; font-size: 15px; line-height: 1.5; margin: 0 0 20px 0; }
-    .btn { background: #541D26; color: #FFFFFF; padding: 12px 24px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-block; cursor: pointer; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #FAF9F6; color: #211A19; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
+    .card { background: #FFFFFF; padding: 36px 28px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 380px; width: 100%; box-sizing: border-box; }
+    .icon { font-size: 48px; margin-bottom: 12px; }
+    h2 { color: #15803D; margin: 0 0 10px 0; font-size: 22px; font-weight: 700; }
+    p { color: #57534E; font-size: 14px; line-height: 1.5; margin: 0 0 24px 0; }
+    .btn { background: #541D26; color: #FFFFFF; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; display: inline-block; cursor: pointer; border: none; font-size: 15px; width: 100%; box-sizing: border-box; }
+    .order-ref { font-family: monospace; font-size: 11px; color: #A8A29E; margin-top: 16px; word-break: break-all; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>✅ Payment Processed!</h2>
-    <p>Your transaction has been recorded. You can now return to the DigiLocal app.</p>
-    <a class="btn" href="javascript:window.close();">Done</a>
+    <div class="icon">✅</div>
+    <h2>Payment Successful!</h2>
+    <p>Your subscription payment has been processed. Redirecting back to your DigiLocal app...</p>
+    <a class="btn" id="returnBtn" href="${redirectUrl || 'digilocalvendor://subscription'}">Return to DigiLocal App</a>
+    <div class="order-ref">Order: ${orderId}</div>
   </div>
+  <script>
+    (function() {
+      var target = "${redirectUrl || 'digilocalvendor://subscription'}";
+      setTimeout(function() {
+        try {
+          if (window.opener) {
+            window.close();
+          } else {
+            window.location.href = target;
+          }
+        } catch(e) {
+          window.location.href = target;
+        }
+      }, 1000);
+    })();
+  </script>
 </body>
 </html>`);
 });

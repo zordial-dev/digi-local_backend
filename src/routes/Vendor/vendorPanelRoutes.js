@@ -230,6 +230,9 @@ router.patch(['/:vendorId/settings', '/:vendorId/profile', '/:vendorId'], upload
 // PUT /api/vendorPanel/:vendorId/coverage
 router.put('/:vendorId/coverage', authenticateToken, requireVendorOwner, vendorPanelController.updateVendorCoverage);
 
+// DELETE /api/vendorPanel/:vendorId, /:vendorId/account, or /account - Delete vendor store & account
+router.delete(['/:vendorId', '/:vendorId/store', '/:vendorId/account', '/account'], authenticateToken, requireVendorOwner, vendorPanelController.deleteStore);
+
 // Subscription & Coupons Endpoints (Vendor Owner Only)
 router.get('/:vendorId/subscription-status', authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
 router.get('/:vendorId/coupons', authenticateToken, requireVendorOwner, subscriptionController.getCoupons.bind(subscriptionController));
