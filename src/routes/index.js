@@ -424,13 +424,13 @@ router.post('/api/upload-logo', authenticateToken, requireVendor, vendorPanelCon
 
 // ── Generic /api/products and /api/items Catalog & Entity Lookup Endpoints ───
 async function resolveItemVendorId(req, res, next) {
-    if (!req.params.vendorId && req.params.itemId) {
-        const itemRow = await query('SELECT vendor_id FROM items WHERE item_id = ?', [req.params.itemId]).catch(() => ({ rows: [] }));
-        if (itemRow.rows && itemRow.rows[0]) {
-            req.params.vendorId = itemRow.rows[0].vendor_id;
-        }
+  if (!req.params.vendorId && req.params.itemId) {
+    const itemRow = await query('SELECT vendor_id FROM items WHERE item_id = ?', [req.params.itemId]).catch(() => ({ rows: [] }));
+    if (itemRow.rows && itemRow.rows[0]) {
+      req.params.vendorId = itemRow.rows[0].vendor_id;
     }
-    next();
+  }
+  next();
 }
 
 router.get(['/api/products', '/api/items', '/products', '/items'], storefrontController.getItems);
@@ -445,61 +445,61 @@ router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/ap
 
 // ── Real-Time Inventory & Stock Management Endpoints ─────────────────────────
 router.post([
-    '/api/orders/check-stock',
-    '/api/orders/validate-cart',
-    '/api/cart/check-stock',
-    '/api/cart/validate'
+  '/api/orders/check-stock',
+  '/api/orders/validate-cart',
+  '/api/cart/check-stock',
+  '/api/cart/validate'
 ], ordersController.validateCartStock);
 
 router.get([
-    '/api/items/:id/stock',
-    '/api/products/:id/stock',
-    '/items/:id/stock',
-    '/products/:id/stock'
+  '/api/items/:id/stock',
+  '/api/products/:id/stock',
+  '/items/:id/stock',
+  '/products/:id/stock'
 ], storefrontController.getItemStock);
 
 router.patch([
-    '/api/vendorPanel/:vendorId/items/:itemId/stock',
-    '/api/vendors/:vendorId/items/:itemId/stock',
-    '/api/items/:itemId/stock',
-    '/api/products/:itemId/stock',
-    '/items/:itemId/stock',
-    '/products/:itemId/stock'
+  '/api/vendorPanel/:vendorId/items/:itemId/stock',
+  '/api/vendors/:vendorId/items/:itemId/stock',
+  '/api/items/:itemId/stock',
+  '/api/products/:itemId/stock',
+  '/items/:itemId/stock',
+  '/products/:itemId/stock'
 ], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
 
 router.put([
-    '/api/vendorPanel/:vendorId/items/:itemId/stock',
-    '/api/vendors/:vendorId/items/:itemId/stock',
-    '/api/items/:itemId/stock',
-    '/api/products/:itemId/stock',
-    '/items/:itemId/stock',
-    '/products/:itemId/stock'
+  '/api/vendorPanel/:vendorId/items/:itemId/stock',
+  '/api/vendors/:vendorId/items/:itemId/stock',
+  '/api/items/:itemId/stock',
+  '/api/products/:itemId/stock',
+  '/items/:itemId/stock',
+  '/products/:itemId/stock'
 ], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
 
 // ── Root Alias Forwarding for Frontend Clients omitting /api prefix ─────
 router.get(['/vendors', '/stores'], (req, res, next) => {
-    req.url = '/api/vendors' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
-    router.handle(req, res, next);
+  req.url = '/api/vendors' + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+  router.handle(req, res, next);
 });
 router.get(['/vendors/:vendorId', '/stores/:vendorId'], (req, res, next) => {
-    req.url = `/api/vendors/${req.params.vendorId}` + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
-    router.handle(req, res, next);
+  req.url = `/api/vendors/${req.params.vendorId}` + (req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '');
+  router.handle(req, res, next);
 });
 
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
 
 // ── Cashfree Hosted Checkout Web Bridge (Zero-Crash Native & Web Checkout) ────
 router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (req, res) => {
-    const sessionId = req.query.session_id || req.query.payment_session_id;
-    const isMock = req.query.mock === 'true' || sessionId?.startsWith('CF_ORD_') || sessionId?.startsWith('SUB_');
-    const env = (req.query.env || process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase() === 'SANDBOX' ? 'sandbox' : 'production';
+  const sessionId = req.query.session_id || req.query.payment_session_id;
+  const isMock = req.query.mock === 'true' || sessionId?.startsWith('CF_ORD_') || sessionId?.startsWith('SUB_');
+  const env = (req.query.env || process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase() === 'SANDBOX' ? 'sandbox' : 'production';
 
-    if (!sessionId) {
-        return res.status(400).send('<div style="font-family:sans-serif;padding:30px;text-align:center;"><h2>Missing Payment Session</h2><p>Please initiate payment again from the app.</p></div>');
-    }
+  if (!sessionId) {
+    return res.status(400).send('<div style="font-family:sans-serif;padding:30px;text-align:center;"><h2>Missing Payment Session</h2><p>Please initiate payment again from the app.</p></div>');
+  }
 
-    if (isMock) {
-        return res.send(`
+  if (isMock) {
+    return res.send(`
 <!DOCTYPE html>
 <html>
 <head>
@@ -521,9 +521,9 @@ router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (
   </div>
 </body>
 </html>`);
-    }
+  }
 
-    const html = `
+  const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -567,16 +567,16 @@ router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (
   </script>
 </body>
 </html>`;
-    res.setHeader('Content-Type', 'text/html');
-    res.send(html);
+  res.setHeader('Content-Type', 'text/html');
+  res.send(html);
 });
 
 // ── Payment Return / Callback Helper ──────────────────────────────────────────
 router.get(['/payments/cashfree/return', '/payments/cashfree/direct-return', '/vendor/subscription/verify'], (req, res) => {
-    const orderId = req.query.order_id || req.query.orderId || '';
-    const redirectUrl = req.query.redirect_url || req.query.return_url || '';
-    res.setHeader('Content-Type', 'text/html');
-    res.send(`
+  const orderId = req.query.order_id || req.query.orderId || '';
+  const redirectUrl = req.query.redirect_url || req.query.return_url || '';
+  res.setHeader('Content-Type', 'text/html');
+  res.send(`
 <!DOCTYPE html>
 <html>
 <head>
