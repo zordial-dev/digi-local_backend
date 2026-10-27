@@ -14,17 +14,62 @@ const verificationCache = new Map();
 let cachedAuthToken = null;
 let authTokenExpiresAt = 0;
 
+/**
+ * Masks phone number to preserve privacy in logs (e.g., "******1234")
+ */
+function maskPhone(phone) {
+  if (!phone) return 'unknown';
+  const str = String(phone).replace(/\D/g, '');
+  if (str.length <= 4) return '****';
+  return `${'*'.repeat(Math.max(0, str.length - 4))}${str.slice(-4)}`;
+}
+
 function getBaseUrl() {
   return (process.env.MESSAGECENTRAL_BASE_URL || 'https://cpaas.messagecentral.com').replace(/\/+$/, '');
 }
 
+/**
+ * Retrieves the static auth token configured in environment variables,
+ * sanitizing any internal whitespace, newlines, or carriage returns.
+ */
+function getStaticAuthToken() {
+  const raw = process.env.MESSAGECENTRAL_AUTH_TOKEN ||
+    process.env.MESSAGE_CENTRAL_AUTH_TOKEN ||
+    '';
+  return String(raw).replace(/\s+/g, '');
+}
+
+/**
+ * Retrieves the Customer ID from environment variables, or automatically
+ * derives it from the JWT subject claim (`sub`) of the static auth token.
+ */
 function getCustomerId() {
-  return String(
+  const envId = String(
     process.env.MESSAGECENTRAL_CUSTOMER_ID ||
     process.env.MESSAGE_CENTRAL_CUSTOMER_ID ||
     process.env.CUSTOMER_ID ||
     ''
   ).trim();
+
+  if (envId) return envId;
+
+  // Auto-derive from JWT token payload (sub claim) if not explicitly set
+  try {
+    const token = getStaticAuthToken();
+    if (token && token.includes('.')) {
+      const parts = token.split('.');
+      if (parts.length >= 2) {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+        if (payload && payload.sub) {
+          return String(payload.sub).trim();
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore decode error and fallback
+  }
+
+  return '';
 }
 
 function getAccountKey() {
@@ -36,12 +81,48 @@ function getAccountKey() {
   ).trim();
 }
 
-function getStaticAuthToken() {
-  return String(
-    process.env.MESSAGECENTRAL_AUTH_TOKEN ||
-    process.env.MESSAGE_CENTRAL_AUTH_TOKEN ||
-    ''
-  ).trim();
+/**
+ * Custom Error for SMS Authentication Failures (Invalid or expired credentials)
+ */
+class SmsAuthError extends Error {
+  constructor(message = 'SMS service authentication failed.', providerCode = 401) {
+    super('SMS service is temporarily unavailable.');
+    this.name = 'SmsAuthError';
+    this.isAuthError = true;
+    this.statusCode = 503;
+    this.errorCode = 'SMS_SERVICE_UNAVAILABLE';
+    this.providerCode = Number(providerCode) || 401;
+    this.internalDetails = message;
+  }
+}
+
+/**
+ * Custom Error for SMS Rate Limiting
+ */
+class SmsRateLimitError extends Error {
+  constructor(message = 'Too many OTP requests. Please wait before requesting another OTP.', retryAfter = 60, providerCode = 429) {
+    super(message);
+    this.name = 'SmsRateLimitError';
+    this.isRateLimited = true;
+    this.statusCode = 429;
+    this.errorCode = 'SMS_RATE_LIMITED';
+    this.retryAfter = Number(retryAfter) || 60;
+    this.providerCode = Number(providerCode) || 429;
+  }
+}
+
+/**
+ * Custom Error for Upstream Gateway Timeouts
+ */
+class SmsTimeoutError extends Error {
+  constructor(message = 'SMS gateway request timed out. Please try again.', providerCode = 504) {
+    super(message);
+    this.name = 'SmsTimeoutError';
+    this.isTimeout = true;
+    this.statusCode = 504;
+    this.errorCode = 'SMS_GATEWAY_TIMEOUT';
+    this.providerCode = Number(providerCode) || 504;
+  }
 }
 
 /**
@@ -55,6 +136,7 @@ class SmsCreditExhaustedError extends Error {
     this.statusCode = 503;
     this.errorCode = 'SMS_SERVICE_UNAVAILABLE';
     this.providerCode = Number(providerCode) || 508;
+    this.internalDetails = message;
   }
 }
 
@@ -62,13 +144,14 @@ class SmsCreditExhaustedError extends Error {
  * Custom Error for Generic SMS Gateway Errors
  */
 class SmsGatewayError extends Error {
-  constructor(message = 'SMS service is temporarily unavailable.', providerCode = null) {
-    super(message);
+  constructor(message = 'SMS gateway error occurred while sending OTP.', providerCode = null) {
+    super('SMS gateway error occurred while sending OTP.');
     this.name = 'SmsGatewayError';
     this.isGatewayError = true;
     this.statusCode = 502;
-    this.errorCode = 'SMS_SERVICE_UNAVAILABLE';
+    this.errorCode = 'SMS_GATEWAY_ERROR';
     this.providerCode = providerCode ? Number(providerCode) : null;
+    this.internalDetails = message;
   }
 }
 
@@ -116,10 +199,89 @@ function isCreditExhaustedError(errOrData) {
 }
 
 /**
- * Formats standard error response payload for controllers
+ * Classifies any upstream error into an appropriate typed SmsError.
+ */
+function classifyUpstreamError(err) {
+  if (!err) return new SmsGatewayError('Unknown error occurred');
+
+  if (err instanceof SmsAuthError ||
+      err instanceof SmsRateLimitError ||
+      err instanceof SmsTimeoutError ||
+      err instanceof SmsCreditExhaustedError ||
+      err instanceof SmsGatewayError) {
+    return err;
+  }
+
+  if (isCreditExhaustedError(err)) {
+    return new SmsCreditExhaustedError(err.message, err.responseCode || err.response?.status || 508);
+  }
+
+  const httpStatus = err.response?.status;
+  const resData = err.response?.data || {};
+  const providerCode = resData.responseCode || resData.data?.responseCode || httpStatus;
+  const rawMsg = resData.message || resData.data?.errorMessage || resData.error || err.message || '';
+
+  // Network / Gateway timeout
+  if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT' || String(err.message).toLowerCase().includes('timeout')) {
+    return new SmsTimeoutError('SMS gateway request timed out. Please try again.', providerCode || 504);
+  }
+
+  // Authentication error (401 / 403)
+  if (httpStatus === 401 || httpStatus === 403 || String(providerCode) === '401' || String(providerCode) === '403') {
+    return new SmsAuthError(rawMsg || 'Authentication failed', providerCode || 401);
+  }
+
+  // Rate limit (429)
+  if (httpStatus === 429 || String(providerCode) === '429' || String(rawMsg).toLowerCase().includes('rate limit')) {
+    return new SmsRateLimitError('Too many OTP requests. Please wait before trying again.', 60, providerCode || 429);
+  }
+
+  // 506 REQUEST_ALREADY_EXISTS
+  if (String(providerCode) === '506' || String(rawMsg).includes('REQUEST_ALREADY_EXISTS')) {
+    return new SmsRateLimitError('An active OTP has already been sent to this number. Please wait before requesting another OTP.', resData.data?.timeout || 60, 506);
+  }
+
+  return new SmsGatewayError(rawMsg || 'SMS gateway service error.', providerCode || httpStatus || 502);
+}
+
+/**
+ * Formats standard error response payload for controllers.
+ * Never exposes raw tokens, secrets, or internal stack traces to clients.
  */
 function formatSmsErrorResponse(error) {
-  if (error.isCreditExhausted || error.errorCode === 'SMS_CREDITS_EXHAUSTED' || error.errorCode === 'SMS_SERVICE_UNAVAILABLE' || error.name === 'SmsCreditExhaustedError') {
+  // 1. Rate Limiting (429)
+  if (error instanceof SmsRateLimitError || error.isRateLimited || error.statusCode === 429 || error.errorCode === 'SMS_RATE_LIMITED') {
+    return {
+      statusCode: 429,
+      body: {
+        success: false,
+        error_code: 'SMS_RATE_LIMITED',
+        error: error.message || 'Too many OTP requests. Please wait before requesting another OTP.',
+        message: error.message || 'Too many OTP requests. Please wait before requesting another OTP.',
+        retry_after: error.retryAfter || 60,
+        channel: 'mobile_sms',
+        provider: 'message_central'
+      }
+    };
+  }
+
+  // 2. Upstream Timeout (504)
+  if (error instanceof SmsTimeoutError || error.isTimeout || error.code === 'ECONNABORTED' || error.statusCode === 504 || error.errorCode === 'SMS_GATEWAY_TIMEOUT') {
+    return {
+      statusCode: 504,
+      body: {
+        success: false,
+        error_code: 'SMS_GATEWAY_TIMEOUT',
+        error: 'SMS service request timed out. Please try again.',
+        message: 'SMS service request timed out. Please try again.',
+        channel: 'mobile_sms',
+        provider: 'message_central'
+      }
+    };
+  }
+
+  // 3. Provider Authentication / Missing Configuration (503)
+  if (error instanceof SmsAuthError || error.isAuthError || error.errorCode === 'SMS_AUTH_ERROR' || error.statusCode === 401 || error.statusCode === 403) {
     return {
       statusCode: 503,
       body: {
@@ -133,9 +295,10 @@ function formatSmsErrorResponse(error) {
     };
   }
 
-  if (error.isGatewayError || error.errorCode === 'SMS_GATEWAY_ERROR' || error.name === 'SmsGatewayError') {
+  // 4. Provider Credit Exhaustion / Temporary Outage (503)
+  if (error instanceof SmsCreditExhaustedError || error.isCreditExhausted || error.errorCode === 'SMS_CREDITS_EXHAUSTED' || error.errorCode === 'SMS_SERVICE_UNAVAILABLE' || error.name === 'SmsCreditExhaustedError') {
     return {
-      statusCode: 502,
+      statusCode: 503,
       body: {
         success: false,
         error_code: 'SMS_SERVICE_UNAVAILABLE',
@@ -147,24 +310,42 @@ function formatSmsErrorResponse(error) {
     };
   }
 
-  if (error.statusCode === 400) {
+  // 5. Bad request / invalid input (400)
+  if (error.statusCode === 400 || error.name === 'ValidationError') {
     return {
       statusCode: 400,
       body: {
         success: false,
-        error: error.message || 'Invalid request',
-        message: error.message || 'Invalid request'
+        error_code: 'INVALID_REQUEST',
+        error: error.message || 'Invalid request parameters.',
+        message: error.message || 'Invalid request parameters.'
       }
     };
   }
 
+  // 6. Upstream Gateway Error (502)
+  if (error instanceof SmsGatewayError || error.isGatewayError || error.errorCode === 'SMS_GATEWAY_ERROR') {
+    return {
+      statusCode: 502,
+      body: {
+        success: false,
+        error_code: 'SMS_GATEWAY_ERROR',
+        error: 'SMS service encountered an upstream gateway error.',
+        message: 'SMS service encountered an upstream gateway error.',
+        channel: 'mobile_sms',
+        provider: 'message_central'
+      }
+    };
+  }
+
+  // 7. General internal fallback (500)
   return {
     statusCode: 500,
     body: {
       success: false,
       error_code: 'INTERNAL_SERVER_ERROR',
-      error: error.message || 'Failed to send mobile OTP',
-      message: error.message || 'Failed to send mobile OTP'
+      error: 'Failed to process mobile OTP request.',
+      message: 'Failed to process mobile OTP request.'
     }
   };
 }
@@ -194,7 +375,7 @@ function formatPhone(phone, countryCode = '91') {
  * Tokens are cached in memory until expiration.
  */
 async function getAuthToken() {
-  // 1. Static token defined in .env
+  // 1. Static token defined in environment (with whitespace sanitized)
   const staticToken = getStaticAuthToken();
   if (staticToken) {
     return staticToken;
@@ -209,7 +390,7 @@ async function getAuthToken() {
   const rawKey = getAccountKey();
 
   if (!customerId || !rawKey) {
-    throw new Error('Message Central credentials missing. Please set MESSAGECENTRAL_CUSTOMER_ID and MESSAGECENTRAL_KEY in your .env file.');
+    throw new SmsAuthError('Message Central credentials missing. Please set MESSAGECENTRAL_CUSTOMER_ID and MESSAGECENTRAL_KEY in your environment.', 401);
   }
 
   // Encode key to Base64 as required by Message Central API
@@ -226,20 +407,22 @@ async function getAuthToken() {
 
     const token = response.data?.token || response.data?.data?.token || response.data?.authToken;
     if (!token) {
-      throw new Error(`Failed to retrieve auth token: ${response.data?.message || 'Empty token received'}`);
+      throw new SmsAuthError(`Failed to retrieve auth token: ${response.data?.message || 'Empty token received'}`, 401);
     }
 
-    cachedAuthToken = token;
-    // Cache for 23 hours (tokens are usually valid for 24h)
+    const cleanToken = String(token).replace(/\s+/g, '');
+    cachedAuthToken = cleanToken;
     authTokenExpiresAt = Date.now() + 23 * 60 * 60 * 1000;
     console.log('🔑 [MESSAGE CENTRAL] Auth token retrieved and cached successfully.');
-    return token;
+    return cleanToken;
   } catch (err) {
-    console.error('❌ [MESSAGE CENTRAL AUTH ERROR]:', err.response?.data || err.message);
+    console.error('❌ [MESSAGE CENTRAL AUTH ERROR]:', err.response?.data?.message || err.message);
     if (isCreditExhaustedError(err)) {
       throw new SmsCreditExhaustedError('insufficient credits', 508);
     }
-    throw new SmsGatewayError(`Message Central authentication failed: ${err.response?.data?.message || err.message}`, err.response?.status);
+    const classified = classifyUpstreamError(err);
+    if (classified instanceof SmsCreditExhaustedError) throw classified;
+    throw new SmsAuthError(`Message Central authentication failed: ${err.response?.data?.message || err.message}`, err.response?.status || 401);
   }
 }
 
@@ -264,30 +447,82 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
   const activeFlow = flowType || process.env.MESSAGECENTRAL_FLOW_TYPE || 'SMS';
   const activeOtpLength = Number(otpLength || 6);
 
+  const correlationId = `mc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const maskedPhone = maskPhone(mobileNumber);
+
   try {
     const token = await getAuthToken();
     const sendUrl = `${baseUrl}/verification/v3/send?countryCode=${cc}&customerId=${encodeURIComponent(customerId)}&flowType=${activeFlow}&mobileNumber=${mobileNumber}&otpLength=${activeOtpLength}`;
 
-    console.log(`📤 [MESSAGE CENTRAL] Sending ${activeOtpLength}-digit OTP via ${activeFlow} to +${cc} ${mobileNumber}...`);
+    console.log(`📤 [MESSAGE CENTRAL] [${correlationId}] Sending ${activeOtpLength}-digit OTP via ${activeFlow} to +${cc} ${maskedPhone}...`);
 
-    const response = await axios.post(
-      sendUrl,
-      {
-        countryCode: cc,
-        customerId,
-        flowType: activeFlow,
-        mobileNumber,
-        otpLength: activeOtpLength
-      },
-      {
-        headers: {
-          authToken: token,
-          'Content-Type': 'application/json',
-          accept: '*/*'
-        },
-        timeout: 15000
+    let response;
+    let attempts = 0;
+    const maxAttempts = 2;
+
+    while (attempts < maxAttempts) {
+      attempts++;
+      try {
+        response = await axios.post(
+          sendUrl,
+          {
+            countryCode: cc,
+            customerId,
+            flowType: activeFlow,
+            mobileNumber,
+            otpLength: activeOtpLength
+          },
+          {
+            headers: {
+              authToken: token,
+              'Content-Type': 'application/json',
+              accept: '*/*'
+            },
+            timeout: 10000
+          }
+        );
+        break; // Request succeeded, exit retry loop
+      } catch (postErr) {
+        const postData = postErr.response?.data || {};
+        const code = postData.responseCode || postData.data?.responseCode;
+        const msg = String(postData.message || postData.data?.errorMessage || '');
+
+        // If 506 REQUEST_ALREADY_EXISTS, Message Central indicates an OTP is already in flight
+        if (code === 506 || msg.includes('REQUEST_ALREADY_EXISTS')) {
+          const activeVerId = postData.data?.verificationId || postData.verificationId;
+          const activeTimeout = postData.data?.timeout || 60;
+          console.log(`ℹ️ [MESSAGE CENTRAL] [${correlationId}] OTP session already active for +${cc} ${maskedPhone} (VerificationId: ${activeVerId}).`);
+          if (activeVerId) {
+            verificationCache.set(mobileNumber, {
+              verificationId: activeVerId,
+              countryCode: cc,
+              createdAt: Date.now()
+            });
+          }
+          return {
+            success: true,
+            provider: 'message_central',
+            verificationId: activeVerId,
+            mobile: mobileNumber,
+            countryCode: cc,
+            timeout: activeTimeout,
+            already_exists: true,
+            message: 'OTP has already been sent to this number and is currently active.',
+            raw: postData
+          };
+        }
+
+        // Bounded retry ONLY on transient network connection drop or 503 before OTP creation
+        const isNetworkOr503 = (postErr.code === 'ECONNRESET' || postErr.code === 'ETIMEDOUT' || postErr.response?.status === 503);
+        if (attempts < maxAttempts && isNetworkOr503) {
+          console.warn(`⚠️ [MESSAGE CENTRAL] [${correlationId}] Transient network error, retrying once in 500ms...`);
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+
+        throw postErr;
       }
-    );
+    }
 
     const resData = response.data || {};
     const innerData = resData.data || {};
@@ -321,7 +556,7 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
       }, 10 * 60 * 1000);
     }
 
-    console.log(`✅ [MESSAGE CENTRAL] OTP sent successfully to +${cc} ${mobileNumber}. VerificationId: ${verificationId}`);
+    console.log(`✅ [MESSAGE CENTRAL] [${correlationId}] OTP sent successfully to +${cc} ${maskedPhone}. VerificationId: ${verificationId}`);
 
     return {
       success: true,
@@ -338,16 +573,9 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
       throw err;
     }
 
-    if (isCreditExhaustedError(err)) {
-      const code = err.response?.data?.responseCode || err.response?.data?.data?.responseCode || 508;
-      const rawMsg = err.response?.data?.message || err.response?.data?.data?.errorMessage || err.message;
-      console.warn(`⚠️ [MESSAGE CENTRAL OUT OF CREDITS]: Code ${code} - ${rawMsg}`);
-      throw new SmsCreditExhaustedError(rawMsg, code);
-    }
-
     // In staging / local dev, allow simulation ONLY if explicitly enabled via environment variable
     if (process.env.MOCK_SMS_OTP === 'true' || process.env.ALLOW_OTP_SIMULATION === 'true') {
-      console.warn(`⚠️ [MESSAGE CENTRAL SIMULATION ACTIVE] Generating simulated OTP session for +${cc} ${mobileNumber}.`);
+      console.warn(`⚠️ [MESSAGE CENTRAL SIMULATION ACTIVE] Generating simulated OTP session for +${cc} ${maskedPhone}.`);
       const fallbackVerId = `MC_SIM_${Date.now()}`;
       verificationCache.set(mobileNumber, {
         verificationId: fallbackVerId,
@@ -367,9 +595,9 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
       };
     }
 
-    const errMsg = err.response?.data?.message || err.response?.data?.data?.errorMessage || err.message;
-    console.error('❌ [MESSAGE CENTRAL ERROR]:', err.response?.data || err.message);
-    throw new SmsGatewayError(errMsg, err.response?.status);
+    const classified = classifyUpstreamError(err);
+    console.error(`❌ [MESSAGE CENTRAL ERROR] [${correlationId}] Failed for +${cc} ${maskedPhone}: Category=${classified.name}, Status=${classified.statusCode}, ProviderCode=${classified.providerCode}`);
+    throw classified;
   }
 }
 
@@ -383,14 +611,17 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
 async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) {
   const { mobileNumber, countryCode: cc } = formatPhone(phone, countryCode);
   const cleanOtp = String(otp || '').trim();
+  const maskedPhone = maskPhone(mobileNumber);
 
   if (!cleanOtp) {
-    throw new Error('OTP code is required for verification.');
+    const err = new Error('OTP code is required for verification.');
+    err.statusCode = 400;
+    throw err;
   }
 
-  // 🌟 Universal Master OTP Bypass for Staging/Testing (999999, 123456, 1234)
+  // Universal Master OTP Bypass for Staging/Testing
   if (['999999', '123456', '1234'].includes(cleanOtp)) {
-    console.log(`✅ [MASTER OTP ALLOWED] ${mobileNumber} verified with Master OTP "${cleanOtp}".`);
+    console.log(`✅ [MASTER OTP ALLOWED] ${maskedPhone} verified with Master OTP.`);
     verificationCache.delete(mobileNumber);
     return {
       success: true,
@@ -412,7 +643,9 @@ async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) 
   }
 
   if (!targetVerId) {
-    throw new Error('No active OTP request found for this mobile number, or the verification session has expired. Please request a new OTP.');
+    const err = new Error('No active OTP request found for this mobile number, or the verification session has expired. Please request a new OTP.');
+    err.statusCode = 400;
+    throw err;
   }
 
   const baseUrl = getBaseUrl();
@@ -420,7 +653,7 @@ async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) 
 
   const validateUrl = `${baseUrl}/verification/v3/validateOtp?verificationId=${encodeURIComponent(targetVerId)}&code=${encodeURIComponent(cleanOtp)}&flowType=SMS`;
 
-  console.log(`🔍 [MESSAGE CENTRAL] Validating OTP for +${cc} ${mobileNumber} (VerificationId: ${targetVerId})...`);
+  console.log(`🔍 [MESSAGE CENTRAL] Validating OTP for +${cc} ${maskedPhone}...`);
 
   try {
     const response = await axios.get(validateUrl, {
@@ -428,7 +661,7 @@ async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) 
         authToken: token,
         accept: '*/*'
       },
-      timeout: 15000
+      timeout: 10000
     });
 
     const resData = response.data || {};
@@ -443,14 +676,16 @@ async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) 
 
     if (!isSuccess) {
       const failReason = innerData.errorMessage || resData.message || 'Incorrect OTP code entered.';
-      console.warn(`⚠️ [MESSAGE CENTRAL] Verification failed for +${cc} ${mobileNumber}: ${failReason}`);
-      throw new Error(failReason);
+      console.warn(`⚠️ [MESSAGE CENTRAL] Verification failed for +${cc} ${maskedPhone}: ${failReason}`);
+      const err = new Error(failReason);
+      err.statusCode = 400;
+      throw err;
     }
 
-    // Clean up cache on successful verification
+    // Clean up cache immediately on successful verification to prevent reuse
     verificationCache.delete(mobileNumber);
 
-    console.log(`🎉 [MESSAGE CENTRAL] OTP successfully verified for +${cc} ${mobileNumber}`);
+    console.log(`🎉 [MESSAGE CENTRAL] OTP successfully verified for +${cc} ${maskedPhone}`);
 
     return {
       success: true,
@@ -462,12 +697,14 @@ async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) 
       raw: resData
     };
   } catch (err) {
-    if (err.message && !err.response) {
+    if (err.statusCode === 400 || (err.message && !err.response)) {
       throw err;
     }
     const errMsg = err.response?.data?.message || err.response?.data?.data?.errorMessage || err.message;
-    console.error('❌ [MESSAGE CENTRAL VALIDATION ERROR]:', err.response?.data || err.message);
-    throw new Error(`OTP validation failed: ${errMsg}`);
+    console.error(`❌ [MESSAGE CENTRAL VALIDATION ERROR] for +${cc} ${maskedPhone}:`, errMsg);
+    const wrapErr = new Error(`OTP validation failed: ${errMsg}`);
+    wrapErr.statusCode = 400;
+    throw wrapErr;
   }
 }
 
@@ -475,9 +712,17 @@ module.exports = {
   sendOTP,
   verifyOTP,
   getAuthToken,
+  getCustomerId,
+  getStaticAuthToken,
   formatPhone,
+  maskPhone,
   formatSmsErrorResponse,
   isCreditExhaustedError,
+  classifyUpstreamError,
+  SmsAuthError,
+  SmsRateLimitError,
+  SmsTimeoutError,
   SmsCreditExhaustedError,
-  SmsGatewayError
+  SmsGatewayError,
+  _verificationCache: verificationCache
 };

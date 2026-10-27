@@ -1,7 +1,11 @@
-require('dotenv').config();
+const path = require('path');
+const dotenv = require('dotenv');
+dotenv.config();
+if (!process.env.DATABASE_URL && !process.env.MESSAGECENTRAL_AUTH_TOKEN) {
+  dotenv.config({ path: path.join(__dirname, 'src', 'controllers', 'Vendor', '.env') });
+}
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const fs = require('fs');
 const { initDb, closeDb, query } = require('./src/models/db');
 const { validateEnv } = require('./src/config/env');

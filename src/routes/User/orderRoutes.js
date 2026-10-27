@@ -23,6 +23,10 @@ router.get('/vendor/:vendorId', authenticateToken, requireVendorOwner, ordersCon
 router.post('/check-stock', ordersController.validateCartStock);
 router.post('/validate-cart', ordersController.validateCartStock);
 
+// Payment Eligibility Check (Public / Resident Checkout)
+router.get('/payment-eligibility', ordersController.getPaymentEligibility);
+router.post('/payment-eligibility', ordersController.getPaymentEligibility);
+
 // D3. Create New Order (User Only)
 router.post('/', authenticateToken, requireUser, ordersController.createOrder);
 
