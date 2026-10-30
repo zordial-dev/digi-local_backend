@@ -345,27 +345,6 @@ async function sendOTP(phone, countryCode = '91', flowType = 'SMS', otpLength = 
       throw new SmsCreditExhaustedError(rawMsg, code);
     }
 
-    // In staging / local dev, allow simulation ONLY if explicitly enabled via environment variable
-    if (process.env.MOCK_SMS_OTP === 'true' || process.env.ALLOW_OTP_SIMULATION === 'true') {
-      console.warn(`⚠️ [MESSAGE CENTRAL SIMULATION ACTIVE] Generating simulated OTP session for +${cc} ${mobileNumber}.`);
-      const fallbackVerId = `MC_SIM_${Date.now()}`;
-      verificationCache.set(mobileNumber, {
-        verificationId: fallbackVerId,
-        countryCode: cc,
-        createdAt: Date.now()
-      });
-
-      return {
-        success: true,
-        provider: 'message_central',
-        verificationId: fallbackVerId,
-        mobile: mobileNumber,
-        countryCode: cc,
-        timeout: 60,
-        message: 'OTP sent successfully (Testing fallback active: enter 999999 or 123456)',
-        is_fallback: true
-      };
-    }
 
     const errMsg = err.response?.data?.message || err.response?.data?.data?.errorMessage || err.message;
     console.error('❌ [MESSAGE CENTRAL ERROR]:', err.response?.data || err.message);
@@ -388,19 +367,6 @@ async function verifyOTP(phone, otp, countryCode = '91', verificationId = null) 
     throw new Error('OTP code is required for verification.');
   }
 
-  // 🌟 Universal Master OTP Bypass for Staging/Testing (999999, 123456, 1234)
-  if (['999999', '123456', '1234'].includes(cleanOtp)) {
-    console.log(`✅ [MASTER OTP ALLOWED] ${mobileNumber} verified with Master OTP "${cleanOtp}".`);
-    verificationCache.delete(mobileNumber);
-    return {
-      success: true,
-      valid: true,
-      provider: 'message_central',
-      mobile: mobileNumber,
-      message: 'OTP verified successfully (Master OTP)',
-      verificationStatus: 'VERIFICATION_COMPLETED'
-    };
-  }
 
   // Resolve verificationId from parameter or server cache
   let targetVerId = verificationId;
