@@ -1,6 +1,7 @@
 const { query } = require('../../models/db');
 const { performance } = require('perf_hooks');
 const { normalizeImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../../utils/imageUtils');
+const { maskAccountNumber, getVendorPaymentEligibility } = require('../../services/paymentEligibilityService');
 
 /**
  * GET /api/societies/:societyId/vendors - List ACTIVE vendors in a society
@@ -71,8 +72,13 @@ async function getSocietyVendorsStorefront(req, res) {
         const formattedRows = (result.rows || []).map(v => {
             const rawImg = v.logo || v.shop_image || null;
             const finalImg = rawImg ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImg) : rawImg) : null;
+            const eligibility = getVendorPaymentEligibility(v);
             return {
                 ...v,
+                account_number: maskAccountNumber(v.account_number),
+                bank_account_number: maskAccountNumber(v.bank_account_number || v.account_number),
+                payment_eligibility: eligibility,
+                is_online_eligible: eligibility.is_online_eligible,
                 logo: finalImg,
                 shop_image: finalImg,
                 logo_url: finalImg
@@ -131,6 +137,9 @@ async function getVendorStorefront(req, res) {
         const vendor = vendorResult.rows[0];
         delete vendor.password;
         delete vendor.password_hash;
+        const vendorEligibility = getVendorPaymentEligibility(vendor);
+        vendor.account_number = maskAccountNumber(vendor.account_number);
+        vendor.bank_account_number = maskAccountNumber(vendor.bank_account_number || vendor.account_number);
 
         // Verify active subscription (hide expired shops from user portal)
         const subCheck = await query(
@@ -268,7 +277,11 @@ async function getVendorStorefront(req, res) {
             logo: finalImage,
             logo_url: finalImage,
             status: String(vendor.status || 'ACTIVE').toLowerCase(),
-            is_servicable: true
+            is_servicable: true,
+            account_number: maskAccountNumber(vendor.account_number),
+            bank_account_number: maskAccountNumber(vendor.bank_account_number || vendor.account_number),
+            payment_eligibility: vendorEligibility,
+            is_online_eligible: vendorEligibility.is_online_eligible
         };
 
         return res.status(200).json({

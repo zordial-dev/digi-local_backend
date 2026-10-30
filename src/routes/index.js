@@ -215,7 +215,23 @@ router.post(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v
 router.delete(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
 router.post(['/api/vendors/:id/unstrike', '/api/admin/vendors/:id/unstrike', '/api/v1/admin/vendors/:id/unstrike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
 
-const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
+// ── Payment Eligibility Routes (Website & Mobile App Checkout) ─
+router.get([
+  '/api/payments/eligibility',
+  '/api/payments/cashfree/eligibility',
+  '/api/orders/payment-eligibility'
+], ordersController.getPaymentEligibility);
+
+router.post([
+  '/api/payments/eligibility',
+  '/api/payments/cashfree/eligibility',
+  '/api/orders/payment-eligibility'
+], ordersController.getPaymentEligibility);
+
+router.get([
+  '/api/vendors/:vendorId/payment-eligibility',
+  '/api/vendorPanel/:vendorId/payment-eligibility'
+], ordersController.getPaymentEligibility);
 
 // ── Cashfree Payment Gateway Routes (PG v3) ───────────────────
 router.post([

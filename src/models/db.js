@@ -754,20 +754,19 @@ async function setupTablesPg() {
     WHERE public_id IS NULL OR public_id = ''
   `).catch(() => {});
 
-  // Backfill existing vendors missing bank fields with dummy data, and enforce NOT NULL (no default value)
-  await pgPool.query(`
-    UPDATE vendors 
-    SET account_number = COALESCE(NULLIF(account_number, ''), NULLIF(bank_account_number, ''), 'abc'),
-        bank_account_number = COALESCE(NULLIF(bank_account_number, ''), NULLIF(account_number, ''), 'abc'),
-        ifsc_code = COALESCE(NULLIF(ifsc_code, ''), '1234')
-    WHERE account_number IS NULL OR account_number = '' OR ifsc_code IS NULL OR ifsc_code = '';
-  `).catch(() => {});
+  // Ensure vendor bank fields are optional and drop NOT NULL constraints
+  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN account_number DROP NOT NULL`).catch(() => {});
+  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN bank_account_number DROP NOT NULL`).catch(() => {});
+  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN ifsc_code DROP NOT NULL`).catch(() => {});
   await pgPool.query(`ALTER TABLE vendors ALTER COLUMN account_number DROP DEFAULT`).catch(() => {});
   await pgPool.query(`ALTER TABLE vendors ALTER COLUMN bank_account_number DROP DEFAULT`).catch(() => {});
   await pgPool.query(`ALTER TABLE vendors ALTER COLUMN ifsc_code DROP DEFAULT`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN account_number SET NOT NULL`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN bank_account_number SET NOT NULL`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN ifsc_code SET NOT NULL`).catch(() => {});
+  // Clean up historical placeholder dummy values ('abc', '1234') to NULL so eligibility accurately reflects reality
+  await pgPool.query(`
+    UPDATE vendors 
+    SET account_number = NULL, bank_account_number = NULL, ifsc_code = NULL
+    WHERE account_number IN ('abc', '1234') OR ifsc_code IN ('1234', 'abc');
+  `).catch(() => {});
 }
 
 /**
