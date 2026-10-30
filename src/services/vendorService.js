@@ -159,6 +159,10 @@ class VendorService {
     });
 
     // Normalize vendor classification and zone coverage attributes
+    vendor.merchant_id = Number(vendor.vendor_id);
+    vendor.merchant_name = vendor.vendor_name || vendor.owner_name || '';
+    vendor.merchant_id = Number(vendor.vendor_id);
+    vendor.merchant_name = vendor.vendor_name || vendor.owner_name || '';
     vendor.shop_id = String(vendor.vendor_id);
     vendor.id = String(vendor.vendor_id);
     vendor.public_id = vendor.public_id || ('vnd@' + String(vendor.vendor_id).padStart(4, '0'));
@@ -215,6 +219,7 @@ class VendorService {
 
     return {
       vendor,
+      merchant: vendor,
       items: normalizedItems,
       orders,
       enquiries,

@@ -47,11 +47,15 @@ router.get('/api/users/:userId/enquiries', authenticateToken, requireUserOwner, 
 router.patch('/api/enquiries/:enquiryId', authenticateToken, requireVendor, enquiryController.updateEnquiryStatus);
 router.put('/api/enquiries/:enquiryId', authenticateToken, requireVendor, enquiryController.updateEnquiryStatus);
 router.patch('/api/vendors/:vendorId/enquiries/:enquiryId', authenticateToken, requireVendorOwner, enquiryController.updateEnquiryStatus);
+router.post('/api/merchants/enquiries', authenticateToken, requireUser, enquiryController.createEnquiry);
+router.post('/api/merchants/:vendorId/enquiries', authenticateToken, requireUser, enquiryController.createEnquiry);
+router.get('/api/merchants/:vendorId/enquiries', authenticateToken, requireVendorOwner, enquiryController.getVendorEnquiries);
+router.patch('/api/merchants/:vendorId/enquiries/:enquiryId', authenticateToken, requireVendorOwner, enquiryController.updateEnquiryStatus);
 
 // ── Service Vendor Services Direct & Global Routes ───────────
 router.get(['/api/services', '/services'], serviceController.getAllServices);
-router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.addService);
-router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services'], serviceController.getVendorServices);
+router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services', '/api/merchants/:vendorId/services', '/api/merchant/:vendorId/services'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.addService);
+router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services', '/api/merchants/:vendorId/services', '/api/merchant/:vendorId/services'], serviceController.getVendorServices);
 router.get(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.getServiceById);
 router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
 router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
@@ -75,10 +79,14 @@ router.use('/api/otp', otpRoutes);                 // Message Central Mobile/Web
 router.use('/api/societies', societyRoutes);       // Society management
 router.use('/api/vendors', vendorAuthRoutes);        // Vendor auth & Admin Vendor Spec
 router.use('/api/vendor', vendorAuthRoutes);         // Singular Vendor alias
+router.use('/api/merchants', vendorAuthRoutes);      // Merchant alias
+router.use('/api/merchant', vendorAuthRoutes);       // Singular Merchant alias
 router.use('/api/stores', vendorAuthRoutes);         // Stores alias for website storefront
 router.use('/api/users', userRoutes);               // Resident user auth & profile
 router.use('/api/orders', orderRoutes);             // Customer orders & status pipeline
 router.use('/api/vendorPanel', vendorPanelRoutes);  // Vendor dashboard & inventory
+router.use('/api/merchantPanel', vendorPanelRoutes); // Merchant dashboard & inventory alias
+router.use('/api/merchantPanel', vendorPanelRoutes); // Merchant dashboard & inventory alias
 router.use(['/api/admin', '/api/admin/panel'], adminRoutes);               // Admin portal
 router.use('/api/auth', authRoutes);                 // Admin Auth & Profile
 router.use('/api/sub-admins', subAdminsRoutes);      // Sub-Admins & RBAC
@@ -99,6 +107,9 @@ router.get([
   '/api/vendorPanel/:vendorId/subscription-status',
   '/api/vendors/:vendorId/subscription-status',
   '/api/vendor/:vendorId/subscription-status',
+  '/api/merchantPanel/:vendorId/subscription-status',
+  '/api/merchants/:vendorId/subscription-status',
+  '/api/merchant/:vendorId/subscription-status',
   '/api/subscriptions/status/:vendorId',
   '/api/subscriptions/:vendorId/status'
 ], authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
@@ -110,6 +121,12 @@ router.post([
   '/api/vendors/:vendorId/renew',
   '/api/vendor/:vendorId/subscribe',
   '/api/vendor/:vendorId/renew',
+  '/api/merchantPanel/:vendorId/subscribe',
+  '/api/merchantPanel/:vendorId/renew',
+  '/api/merchants/:vendorId/subscribe',
+  '/api/merchants/:vendorId/renew',
+  '/api/merchant/:vendorId/subscribe',
+  '/api/merchant/:vendorId/renew',
   '/api/subscriptions/subscribe',
   '/api/subscriptions/:vendorId/subscribe',
   '/api/subscriptions/:vendorId/renew'
@@ -123,6 +140,8 @@ router.post([
   '/api/subscriptions/:vendorId/pay',
   '/api/vendorPanel/:vendorId/subscription-session',
   '/api/vendorPanel/:vendorId/create-payment-session',
+  '/api/merchantPanel/:vendorId/subscription-session',
+  '/api/merchantPanel/:vendorId/create-payment-session',
   '/api/payments/cashfree/subscription-session',
   '/api/payments/cashfree/create-subscription-session'
 ], authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
@@ -134,6 +153,8 @@ router.post([
   '/api/subscriptions/:vendorId/verify',
   '/api/vendorPanel/:vendorId/verify-subscription',
   '/api/vendorPanel/:vendorId/verify-payment',
+  '/api/merchantPanel/:vendorId/verify-subscription',
+  '/api/merchantPanel/:vendorId/verify-payment',
   '/api/payments/cashfree/verify-subscription',
   '/api/payments/cashfree/verify-subscription-payment'
 ], authenticateToken, requireVendorOwner, subscriptionController.verifyPayment.bind(subscriptionController));
@@ -142,6 +163,8 @@ router.post([
 router.get('/api/categories', storefrontController.getCategories);
 router.get('/api/vendors/categories', storefrontController.getCategories);
 router.get('/api/stores/categories', storefrontController.getCategories);
+router.get('/api/merchants/categories', storefrontController.getCategories);
+router.get('/api/merchant/categories', storefrontController.getCategories);
 router.get('/api/platform/config', adminPanelController.getPlatformConfig);
 router.get('/api/platform/settings', adminPanelController.getPlatformConfig);
 
@@ -162,6 +185,7 @@ router.put('/api/admin/cms/contacts', authenticateAdminToken, requirePower('SETT
 router.get('/api/dashboard', authenticateAdminToken, adminPanelController.getDashboardData);
 router.get('/api/admin/dashboard', authenticateAdminToken, adminPanelController.getDashboardData);
 router.get('/api/vendors/:id/payments', authenticateAdminToken, requirePower('VENDORS'), adminPanelController.getVendorPayments);
+router.get('/api/merchants/:id/payments', authenticateAdminToken, requirePower('MERCHANTS'), adminPanelController.getVendorPayments);
 
 router.all('/api/v1/auth/login', adminPanelController.login);
 router.all('/api/v1/auth/me', authenticateAdminToken, adminPanelController.getMe);
@@ -208,12 +232,12 @@ router.patch(['/api/people/:id', '/api/v1/admin/users/:id'], authenticateAdminTo
 router.delete('/api/people/:id', authenticateAdminToken, adminPanelController.deleteUser);
 
 // Vendor Unban / Unblock & Strikes (Admin Only)
-router.post(['/api/vendors/:id/unblock', '/api/vendors/:id/unban', '/api/v1/admin/vendors/:id/unban', '/api/v1/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unban'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unbanVendor);
+router.post(['/api/vendors/:id/unblock', '/api/vendors/:id/unban', '/api/v1/admin/vendors/:id/unban', '/api/v1/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unblock', '/api/admin/vendors/:id/unban', '/api/merchants/:id/unblock', '/api/merchants/:id/unban', '/api/admin/merchants/:id/unblock', '/api/admin/merchants/:id/unban'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unbanVendor);
 router.delete(['/api/admin/vendors/:id/ban', '/api/admin/vendors/:id/block', '/api/v1/admin/vendors/:id/ban', '/api/v1/admin/vendors/:id/block'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unbanVendor);
-router.get(['/api/vendors/:id/strike', '/api/vendors/:id/strikes', '/api/admin/vendors/:id/strike', '/api/admin/vendors/:id/strikes', '/api/v1/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strikes'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.getVendorStrikesAdmin);
-router.post(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.strikeVendor);
-router.delete(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
-router.post(['/api/vendors/:id/unstrike', '/api/admin/vendors/:id/unstrike', '/api/v1/admin/vendors/:id/unstrike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
+router.get(['/api/vendors/:id/strike', '/api/vendors/:id/strikes', '/api/admin/vendors/:id/strike', '/api/admin/vendors/:id/strikes', '/api/v1/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strikes', '/api/merchants/:id/strike', '/api/merchants/:id/strikes', '/api/admin/merchants/:id/strike', '/api/admin/merchants/:id/strikes'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.getVendorStrikesAdmin);
+router.post(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike', '/api/merchants/:id/strike', '/api/admin/merchants/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.strikeVendor);
+router.delete(['/api/vendors/:id/strike', '/api/admin/vendors/:id/strike', '/api/v1/admin/vendors/:id/strike', '/api/merchants/:id/strike', '/api/admin/merchants/:id/strike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
+router.post(['/api/vendors/:id/unstrike', '/api/admin/vendors/:id/unstrike', '/api/v1/admin/vendors/:id/unstrike', '/api/merchants/:id/unstrike', '/api/admin/merchants/:id/unstrike'], authenticateAdminToken, requirePower('VENDORS'), adminPanelController.unstrikeVendor);
 
 const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
 
@@ -236,7 +260,9 @@ router.post([
 
 router.post([
   '/api/payments/pay-vendor-direct',
-  '/api/payments/cashfree/pay-vendor-direct'
+  '/api/payments/cashfree/pay-vendor-direct',
+  '/api/payments/pay-merchant-direct',
+  '/api/payments/cashfree/pay-merchant-direct'
 ], cashfreePaymentController.payVendorDirect);
 
 router.post([
@@ -276,7 +302,10 @@ router.put([
 router.get([
   '/api/vendors/:vendorId/cashfree-payments',
   '/api/vendor/:vendorId/cashfree-payments',
-  '/api/vendors/:vendorId/payments'
+  '/api/vendors/:vendorId/payments',
+  '/api/merchants/:vendorId/cashfree-payments',
+  '/api/merchant/:vendorId/cashfree-payments',
+  '/api/merchants/:vendorId/payments'
 ], cashfreePaymentController.getVendorCashfreePayments);
 
 router.get([
@@ -344,7 +373,13 @@ router.post(['/api/user/tickets/:ticketId/reply', '/api/user/tickets/:id/reply',
 // ── Merchant Vendor Mobile App & Portal (vendor-portal - Vendor Only) ──────────────────
 router.post(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, requireVendor, supportController.createVendorTicket);
 router.get(['/api/vendor/tickets', '/api/vendors/tickets'], authenticateToken, requireVendor, supportController.getVendorTickets);
-router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId'], authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
+router.post(['/api/merchant/tickets', '/api/merchants/tickets'], authenticateToken, requireVendor, supportController.createVendorTicket);
+router.get(['/api/merchant/tickets', '/api/merchants/tickets'], authenticateToken, requireVendor, supportController.getVendorTickets);
+router.get(['/api/vendor/:vendorId/purchases', '/api/vendors/:vendorId/purchases', '/api/vendorPanel/:vendorId/purchases', '/api/vendor/:vendorId/my-orders', '/api/vendors/:vendorId/my-orders', '/api/orders/vendor-purchases/:vendorId',
+  '/api/merchant/:vendorId/purchases',
+  '/api/merchants/:vendorId/purchases',
+  '/api/merchantPanel/:vendorId/purchases',
+  '/api/orders/merchant-purchases/:vendorId'], authenticateToken, requireVendorOwner, vendorPanelController.getVendorPurchases);
 
 // ── Executive & Telemetry Reports (Admin Only) ───────────────────────
 router.get('/api/reports/telemetry', authenticateAdminToken, adminPanelController.getExecutiveReports);

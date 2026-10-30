@@ -132,6 +132,7 @@ async function getUserOrders(req, res) {
         customer_name: ord.customer_name || ord.user_name || 'Customer',
         phone: ord.customer_phone || ord.phone || ord.user_phone || '',
         user_phone: ord.customer_phone || ord.phone || ord.user_phone || '',
+        merchant_id: Number(ord.vendor_id),
         vendor_id: Number(ord.vendor_id),
         store_name: ord.store_name || '',
         store_logo: ord.store_logo || '',
@@ -198,7 +199,7 @@ async function getUserOrders(req, res) {
  */
 async function getVendorOrders(req, res) {
   try {
-    const { vendorId } = req.params;
+    const vendorId = req.params.merchantId || req.params.vendorId;
 
     const ordersRes = await query(
       `SELECT o.order_id, o.user_id,
@@ -291,7 +292,7 @@ async function getVendorOrders(req, res) {
 async function createOrder(req, res) {
   try {
     const user_id = req.body.user_id || req.body.userId;
-    const vendor_id = req.body.vendor_id || req.body.vendorId;
+    const vendor_id = req.body.merchant_id || req.body.merchantId || req.body.vendor_id || req.body.vendorId;
     const society_id = req.body.society_id || req.body.societyId;
     const total_amount = req.body.total_amount || req.body.totalAmount || req.body.total;
     const delivery_address = req.body.delivery_address || req.body.deliveryAddress || req.body.address || req.body.full_address || req.body.shipping_address;
@@ -461,6 +462,28 @@ async function createOrder(req, res) {
 
     const rawMethod = String(req.body.payment_method || req.body.paymentMethod || req.body.payment_mode || 'COD').trim().toUpperCase();
     const isCashfree = rawMethod === 'CASHFREE' || rawMethod === 'ONLINE' || rawMethod === 'ONLINE_PAYMENT' || rawMethod === 'CARD' || rawMethod === 'UPI';
+
+    if (isCashfree) {
+      const vBankCheck = await query(
+        `SELECT vendor_id, store_name, vendor_name, account_number, ifsc_code FROM vendors WHERE vendor_id = ?`,
+        [vendor_id]
+      ).catch(() => ({ rows: [] }));
+
+      const vBankRow = vBankCheck.rows && vBankCheck.rows[0];
+      const hasBank = Boolean(vBankRow && String(vBankRow.account_number || '').trim() && String(vBankRow.ifsc_code || '').trim());
+
+      if (!hasBank) {
+        return res.status(400).json({
+          success: false,
+          error: `Online payment is not available for store "${vBankRow?.store_name || 'this merchant'}". This store currently accepts Cash on Delivery (COD) only.`,
+          message: `Online payment is not available for store "${vBankRow?.store_name || 'this merchant'}". This store currently accepts Cash on Delivery (COD) only.`,
+          code: 'ONLINE_PAYMENT_UNAVAILABLE',
+          allowed_payment_methods: ['COD'],
+          online_payment_available: false
+        });
+      }
+    }
+
     const paymentMethod = isCashfree ? 'CASHFREE' : 'COD';
     const paymentStatus = 'PENDING';
     const orderStatus = 'PLACED';
@@ -674,6 +697,8 @@ async function createOrder(req, res) {
         : 'Order placed successfully via Cash on Delivery.',
       order_id: orderId,
       total_amount: numTotal,
+      merchant_id: Number(vendor_id),
+      vendor_id: Number(vendor_id),
       status: orderStatus,
       payment_method: paymentMethod,
       payment_status: paymentStatus,
@@ -694,6 +719,7 @@ async function createOrder(req, res) {
       created_at: createdAt,
       order: {
         order_id: orderId,
+        merchant_id: Number(vendor_id),
         vendor_id: Number(vendor_id),
         user_id: resolvedUserId || (req.user?.id ? String(req.user.id) : ''),
         customer_name: finalCustomerName,
@@ -1524,7 +1550,7 @@ async function getOrdersByQuery(req, res) {
 async function validateCartStock(req, res) {
   try {
     const items = req.body.items || req.body.order_items || req.body.cart_items;
-    const vendor_id = req.body.vendor_id || req.body.vendorId;
+    const vendor_id = req.body.merchant_id || req.body.merchantId || req.body.vendor_id || req.body.vendorId;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({
@@ -1578,6 +1604,8 @@ async function validateCartStock(req, res) {
 
       validationResults.push({
         item_id: Number(dbItem.item_id),
+        merchant_id: Number(dbItem.vendor_id),
+        vendor_id: Number(dbItem.vendor_id),
         item_name: dbItem.item_name,
         price: Number(dbItem.price || 0),
         requested_quantity: requestedQty,

@@ -156,24 +156,29 @@ function verifyJwt(token, secret) {
  * Generates an Access Token (24h) and Refresh Token (7d) pair.
  */
 function generateTokens(vendorOrUser, targetRole = null) {
-  const role = String(targetRole || vendorOrUser.role || (vendorOrUser.email?.includes('admin') ? 'admin' : 'vendor')).toLowerCase();
-  const isAdmin = ['admin', 'super_admin', 'superadmin', 'sub_admin'].includes(role);
-  const isVendor = role === 'vendor';
-  const isUser = (role === 'user' || role === 'customer') && !isVendor && !isAdmin;
+  const rawRole = String(targetRole || vendorOrUser.role || (vendorOrUser.email?.includes('admin') ? 'admin' : 'vendor')).toLowerCase();
+  const isAdmin = ['admin', 'super_admin', 'superadmin', 'sub_admin'].includes(rawRole);
+  const isVendor = rawRole === 'vendor' || rawRole === 'merchant';
+  const isMerchant = isVendor;
+  const isUser = (rawRole === 'user' || rawRole === 'customer') && !isVendor && !isAdmin;
+  const role = isVendor ? (rawRole === 'merchant' ? 'merchant' : 'vendor') : rawRole;
 
+  const vId = vendorOrUser.vendor_id || vendorOrUser.merchant_id || vendorOrUser.id;
   const payload = {
-    id: vendorOrUser.vendor_id || vendorOrUser.id || vendorOrUser.user_id,
+    id: vId || vendorOrUser.user_id,
     email: vendorOrUser.email,
-    name: vendorOrUser.vendor_name || vendorOrUser.customer_name || vendorOrUser.name || (isAdmin ? 'Admin' : (isVendor ? 'Vendor' : 'User')),
+    name: vendorOrUser.vendor_name || vendorOrUser.merchant_name || vendorOrUser.customer_name || vendorOrUser.name || (isAdmin ? 'Admin' : (isVendor ? 'Merchant' : 'User')),
     role: role,
-    roles: isAdmin ? [role, 'admin'] : (isVendor ? ['vendor'] : ['user']),
+    roles: isAdmin ? [role, 'admin'] : (isVendor ? ['merchant', 'vendor'] : ['user']),
     isVendor: isVendor,
+    isMerchant: isMerchant,
     isUser: isUser,
     isAdmin: isAdmin
   };
 
   if (isVendor) {
-    payload.vendor_id = vendorOrUser.vendor_id || vendorOrUser.id;
+    payload.vendor_id = vId;
+    payload.merchant_id = vId;
     if (vendorOrUser.public_id) payload.public_id = vendorOrUser.public_id;
   } else if (isAdmin) {
     if (vendorOrUser.powers) {

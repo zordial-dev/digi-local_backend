@@ -47,7 +47,7 @@ async function authenticateAdminToken(req, res, next) {
 
         let powers = [];
         if (role === 'super_admin' || role === 'superadmin' || role === 'admin') {
-            powers = ['ALL', 'SOCIETIES', 'VENDORS', 'SUBSCRIPTIONS', 'SUPPORT', 'SETTINGS', 'SUB_ADMINS'];
+            powers = ['ALL', 'SOCIETIES', 'VENDORS', 'MERCHANTS', 'SUBSCRIPTIONS', 'SUPPORT', 'SETTINGS', 'SUB_ADMINS'];
         } else if (Array.isArray(decoded.powers)) {
             powers = decoded.powers.map(p => String(p).toUpperCase());
         }
@@ -85,7 +85,8 @@ function requirePower(powerName) {
         }
 
         const targetPower = String(powerName || '').toUpperCase();
-        if (Array.isArray(req.user.powers) && (req.user.powers.includes('ALL') || req.user.powers.includes(targetPower))) {
+        const effectivePowers = targetPower === 'MERCHANTS' ? ['MERCHANTS', 'VENDORS'] : (targetPower === 'VENDORS' ? ['VENDORS', 'MERCHANTS'] : [targetPower]);
+        if (Array.isArray(req.user.powers) && (req.user.powers.includes('ALL') || effectivePowers.some(p => req.user.powers.includes(p)))) {
             return next();
         }
 

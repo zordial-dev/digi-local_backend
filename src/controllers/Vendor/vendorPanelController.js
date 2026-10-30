@@ -772,6 +772,11 @@ async function updatePaymentDetails(req, res) {
         const currentVendor = existing.rows[0];
         await recordVendorFieldChanges(vendorId, currentVendor, body);
 
+        const newAcc = account_number || currentVendor.account_number;
+        const newIfsc = ifsc_code || currentVendor.ifsc_code;
+        const hasBankNow = Boolean(String(newAcc || '').trim() && String(newIfsc || '').trim());
+        const updatedMethods = JSON.stringify(hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD']);
+
         await query(
             `UPDATE vendors SET 
         account_number = COALESCE(NULLIF(?, ''), account_number),
@@ -780,23 +785,31 @@ async function updatePaymentDetails(req, res) {
         bank_name = COALESCE(NULLIF(?, ''), bank_name),
         account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
         upi_id = COALESCE(NULLIF(?, ''), upi_id),
-        qr_code = COALESCE(NULLIF(?, ''), qr_code)
+        qr_code = COALESCE(NULLIF(?, ''), qr_code),
+        accepted_payment_methods = ?
       WHERE vendor_id = ?`,
-            [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, vendorId]
+            [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, updatedMethods, vendorId]
         );
 
         return res.status(200).json({
             success: true,
             message: 'Bank account and payment details updated successfully.',
+            has_bank_details: hasBankNow,
+            online_payment_available: hasBankNow,
+            accepted_payment_methods: hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD'],
+            payment_methods: hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD'],
             data: {
                 vendor_id: Number(vendorId),
-                account_number,
-                ifsc_code,
+                account_number: newAcc,
+                ifsc_code: newIfsc,
                 bank_name,
                 account_holder_name,
                 upi_id,
                 qr_code,
-                qr_code_url: qr_code
+                qr_code_url: qr_code,
+                has_bank_details: hasBankNow,
+                online_payment_available: hasBankNow,
+                accepted_payment_methods: hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD']
             }
         });
     } catch (err) {

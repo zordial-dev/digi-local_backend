@@ -148,9 +148,9 @@ CREATE TABLE IF NOT EXISTS vendors (
     selected_zones JSONB DEFAULT '[]',
     vendor_type VARCHAR(20) DEFAULT 'product',
     can_add_items BOOLEAN DEFAULT TRUE,
-    account_number VARCHAR(50) NOT NULL,
-    bank_account_number VARCHAR(50) NOT NULL,
-    ifsc_code VARCHAR(20) NOT NULL,
+    account_number VARCHAR(50),
+    bank_account_number VARCHAR(50),
+    ifsc_code VARCHAR(20),
     bank_name VARCHAR(100),
     account_holder_name VARCHAR(255),
     upi_id VARCHAR(100),
@@ -172,6 +172,9 @@ CREATE TABLE IF NOT EXISTS vendors (
     resubmitted_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Merchant View Alias for Zero-Downtime Migration
+CREATE OR REPLACE VIEW merchants AS SELECT * FROM vendors;
 
 CREATE TABLE IF NOT EXISTS vendor_strikes (
     strike_id BIGSERIAL PRIMARY KEY,
