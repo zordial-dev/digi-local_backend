@@ -174,6 +174,7 @@ async function getVendorStorefront(req, res) {
             return {
                 ...i,
                 item_id: Number(i.item_id),
+                merchant_id: Number(i.vendor_id),
                 vendor_id: Number(i.vendor_id),
                 price: Number(i.price || 0),
                 unit_price: Number(i.price || 0),
@@ -205,6 +206,7 @@ async function getVendorStorefront(req, res) {
                 return {
                     service_id: Number(s.service_id),
                     id: Number(s.service_id),
+                    merchant_id: Number(s.vendor_id),
                     vendor_id: Number(s.vendor_id),
                     service_name: s.service_name,
                     name: s.service_name,
@@ -243,14 +245,23 @@ async function getVendorStorefront(req, res) {
         vendor.shop_image = finalImage;
         vendor.logo_url = finalImage;
 
+        const hasBankDetails = Boolean(String(vendor.account_number || vendor.bank_account_number || '').trim() && String(vendor.ifsc_code || '').trim());
+        const acceptedPaymentMethods = hasBankDetails ? ['COD', 'ONLINE', 'UPI'] : ['COD'];
+
         const cleanVendorObj = {
             ...vendor,
+            has_bank_details: hasBankDetails,
+            online_payment_available: hasBankDetails,
+            accepted_payment_methods: acceptedPaymentMethods,
+            payment_methods: acceptedPaymentMethods,
+            merchant_id: Number(vendor.vendor_id),
             vendor_id: Number(vendor.vendor_id),
             public_id: vendor.public_id || (vendor.vendor_id ? ('vnd@' + String(vendor.vendor_id).padStart(4, '0')) : ''),
             shop_id: String(vendor.vendor_id),
             id: Number(vendor.vendor_id),
 
             store_name: vendor.store_name || vendor.shop_name || 'DigiLocal Partner Store',
+            merchant_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
             vendor_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
             owner_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
             email: vendor.email || '',
@@ -287,8 +298,10 @@ async function getVendorStorefront(req, res) {
         return res.status(200).json({
             success: true,
             ...cleanVendorObj,
+            merchant: cleanVendorObj,
             vendor: cleanVendorObj,
             data: {
+                merchant: cleanVendorObj,
                 vendor: cleanVendorObj,
                 items: itemsList,
                 services: servicesList
@@ -434,8 +447,16 @@ async function searchVendorsLocationAware(req, res) {
         const formattedVendors = vendors.map(v => {
             const rawImg = v.logo || v.shop_image || null;
             const finalImg = rawImg ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImg) : rawImg) : null;
+            const hasBankDetails = Boolean(String(v.account_number || v.bank_account_number || '').trim() && String(v.ifsc_code || '').trim());
+            const acceptedPaymentMethods = hasBankDetails ? ['COD', 'ONLINE', 'UPI'] : ['COD'];
             return {
                 ...v,
+                has_bank_details: hasBankDetails,
+                online_payment_available: hasBankDetails,
+                accepted_payment_methods: acceptedPaymentMethods,
+                payment_methods: acceptedPaymentMethods,
+                merchant_id: Number(v.vendor_id),
+                merchant_name: v.vendor_name || '',
                 vendor_id: Number(v.vendor_id),
                 society_id: Number(v.society_id),
                 logo: finalImg,

@@ -121,7 +121,7 @@ function requireVendor(req, res, next) {
 
   const roleLower = String(req.user.role || '').toLowerCase();
   const isAdmin = ADMIN_ROLES.includes(roleLower);
-  const isVendor = roleLower === 'vendor' || req.user.isVendor === true;
+  const isVendor = roleLower === 'vendor' || roleLower === 'merchant' || req.user.isVendor === true || req.user.isMerchant === true;
 
   if (!isVendor && !isAdmin) {
     return res.status(403).json({
@@ -145,7 +145,7 @@ function requireUser(req, res, next) {
 
   const roleLower = String(req.user.role || '').toLowerCase();
   const isAdmin = ADMIN_ROLES.includes(roleLower);
-  const isUser = (roleLower === 'user' || roleLower === 'customer' || req.user.isUser === true) && roleLower !== 'vendor';
+  const isUser = (roleLower === 'user' || roleLower === 'customer' || req.user.isUser === true) && roleLower !== 'vendor' && roleLower !== 'merchant';
 
   if (!isUser && !isAdmin) {
     return res.status(403).json({
@@ -168,7 +168,7 @@ function requireVendorOwner(req, res, next) {
 
   const roleLower = String(req.user.role || '').toLowerCase();
   const isAdmin = ADMIN_ROLES.includes(roleLower);
-  const isVendor = (roleLower === 'vendor' || req.user.isVendor === true);
+  const isVendor = (roleLower === 'vendor' || roleLower === 'merchant' || req.user.isVendor === true || req.user.isMerchant === true);
 
   if (!isVendor && !isAdmin) {
     return res.status(403).json({ success: false, error: 'Forbidden: Vendor access required. Users cannot access vendor panel.' });
@@ -180,9 +180,9 @@ function requireVendorOwner(req, res, next) {
   }
 
   // Vendor ownership verification
-  const targetVendorId = req.params.vendorId || req.body?.vendor_id || req.query?.vendor_id;
+  const targetVendorId = req.params.merchantId || req.params.vendorId || req.body?.merchant_id || req.body?.vendor_id || req.query?.merchant_id || req.query?.vendor_id;
   if (targetVendorId) {
-    const uVendorId = String(req.user.vendor_id || req.user.id || '').trim();
+    const uVendorId = String(req.user.merchant_id || req.user.vendor_id || req.user.id || '').trim();
     const uPublicId = String(req.user.public_id || '').trim();
     const targetStr = String(targetVendorId).trim();
 
@@ -254,5 +254,7 @@ module.exports = {
   requireVendor,
   requireUser,
   requireVendorOwner,
-  requireUserOwner
+  requireUserOwner,
+  requireMerchant: requireVendor,
+  requireMerchantOwner: requireVendorOwner
 };

@@ -839,26 +839,23 @@ async function updatePaymentDetails(req, res) {
         const upi_id = body.upi_id !== undefined ? String(body.upi_id || '').trim() : (body.upi !== undefined ? String(body.upi || '').trim() : currentVendor.upi_id);
         const qr_code = body.qr_code !== undefined ? String(body.qr_code || '').trim() : (body.qr_code_url !== undefined ? String(body.qr_code_url || '').trim() : currentVendor.qr_code);
 
+        const newAcc = account_number || currentVendor.account_number;
+        const newIfsc = ifsc_code || currentVendor.ifsc_code;
+        const hasBankNow = Boolean(String(newAcc || '').trim() && String(newIfsc || '').trim());
+        const updatedMethods = JSON.stringify(hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD']);
+
         await query(
             `UPDATE vendors SET 
-                account_number = ?,
-                bank_account_number = ?,
-                ifsc_code = ?,
-                bank_name = ?,
-                account_holder_name = ?,
-                upi_id = ?,
-                qr_code = ?
-             WHERE vendor_id = ?`,
-            [
-                finalAccountNumber || null,
-                finalAccountNumber || null,
-                finalIfscCode || null,
-                finalBankName || null,
-                finalHolderName || null,
-                upi_id || null,
-                qr_code || null,
-                actualVendorId
-            ]
+        account_number = COALESCE(NULLIF(?, ''), account_number),
+        bank_account_number = COALESCE(NULLIF(?, ''), bank_account_number),
+        ifsc_code = COALESCE(NULLIF(?, ''), ifsc_code),
+        bank_name = COALESCE(NULLIF(?, ''), bank_name),
+        account_holder_name = COALESCE(NULLIF(?, ''), account_holder_name),
+        upi_id = COALESCE(NULLIF(?, ''), upi_id),
+        qr_code = COALESCE(NULLIF(?, ''), qr_code),
+        accepted_payment_methods = ?
+      WHERE vendor_id = ?`,
+            [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, updatedMethods, vendorId]
         );
 
         // Recalculate live payment eligibility immediately after update
@@ -867,23 +864,22 @@ async function updatePaymentDetails(req, res) {
         return res.status(200).json({
             success: true,
             message: 'Bank account and payment details updated successfully.',
-            payment_eligibility: eligibility,
-            is_online_eligible: eligibility.is_online_eligible,
-            eligible_methods: eligibility.eligible_methods,
-            default_method: eligibility.default_method,
+            has_bank_details: hasBankNow,
+            online_payment_available: hasBankNow,
+            accepted_payment_methods: hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD'],
+            payment_methods: hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD'],
             data: {
-                vendor_id: actualVendorId,
-                account_number: maskAccountNumber(finalAccountNumber),
-                ifsc_code: finalIfscCode || null,
-                bank_name: finalBankName || null,
-                account_holder_name: finalHolderName || null,
-                upi_id: upi_id || null,
-                qr_code: qr_code || null,
-                qr_code_url: qr_code || null,
-                is_online_eligible: eligibility.is_online_eligible,
-                eligible_payment_methods: eligibility.eligible_methods,
-                default_payment_method: eligibility.default_method,
-                payment_eligibility: eligibility
+                vendor_id: Number(vendorId),
+                account_number: newAcc,
+                ifsc_code: newIfsc,
+                bank_name,
+                account_holder_name,
+                upi_id,
+                qr_code,
+                qr_code_url: qr_code,
+                has_bank_details: hasBankNow,
+                online_payment_available: hasBankNow,
+                accepted_payment_methods: hasBankNow ? ['COD', 'ONLINE', 'UPI'] : ['COD']
             }
         });
     } catch (err) {

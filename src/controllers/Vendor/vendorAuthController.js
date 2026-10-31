@@ -27,7 +27,7 @@ async function registerVendor(req, res) {
     ).trim();
 
     const vendor_name = String(
-      body.vendor_name || body.owner_name || body.ownerName ||
+      body.merchant_name || body.merchantName || body.vendor_name || body.owner_name || body.ownerName ||
       body.vendorName || body.name || body.owner || ''
     ).trim();
 
@@ -104,9 +104,23 @@ async function registerVendor(req, res) {
     if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
     if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
 
-    // Store GSTIN & PAN exactly as provided (both are optional; no fallback/dummy values)
+    // Bank account details are optional during registration.
+    // If IFSC code is provided, validate its 11-character format.
+    if (ifsc_code) {
+      const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+      if (!ifscRegex.test(ifsc_code)) {
+        return res.status(400).json({ error: 'Invalid IFSC code format. An IFSC code must be exactly 11 characters (e.g., SBIN0000001).' });
+      }
+    }
+
+    // Store GSTIN & PAN exactly as provided (both are completely optional; vendor can register without either)
     let gstin = String(body.gstin || body.gst_number || body.gstNumber || body.gst || '').trim().toUpperCase();
     let pan_number = String(body.pan_number || body.pan || body.panNumber || '').trim().toUpperCase();
+
+    // Auto-extract 10-char PAN if a 15-char GSTIN is provided and PAN was not explicitly provided
+    if (gstin && gstin.length === 15 && !pan_number) {
+      pan_number = gstin.substring(2, 12);
+    }
 
     // Check if vendor already exists
     const cleanPhone = phone_number.replace(/\D/g, '').slice(-10);
@@ -189,7 +203,10 @@ async function registerVendor(req, res) {
     const vendor_type = rawVendorType === 'service' ? 'service' : 'product';
     const can_add_items = vendor_type === 'product';
 
-    const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || ['UPI', 'COD']);
+    // When bank details are omitted, vendor store defaults to COD only. Online payment activates once bank details are added.
+    const hasBankDetails = Boolean(account_number && ifsc_code);
+    const defaultPaymentMethods = hasBankDetails ? ['COD', 'ONLINE', 'UPI'] : ['COD'];
+    const accepted_payment_methods = JSON.stringify(body.accepted_payment_methods || body.payment_methods || defaultPaymentMethods);
 
     const kolkataISTNow = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Kolkata' }).replace(' ', 'T');
 
@@ -273,13 +290,17 @@ async function registerVendor(req, res) {
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
+      merchant_id: vendor_id,
       vendor_id,
       public_id: finalPublicId,
-      is_online_eligible: isOnlineEligible,
-      eligible_methods: eligiblePaymentMethods,
-      eligible_payment_methods: eligiblePaymentMethods,
-      default_payment_method: 'COD',
-      default_method: 'COD',
+      merchant: {
+        merchant_id: vendor_id,
+        vendor_id,
+        public_id: finalPublicId,
+        store_name,
+        merchant_name: vendor_name,
+        vendor_name
+      },
       vendor: {
         vendor_id,
         public_id: finalPublicId,
@@ -339,7 +360,7 @@ async function getVendorStatus(req, res) {
     const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
     let vendorId = (authVendorId && !isAdmin)
       ? authVendorId
-      : (req.params.vendorId || req.params.id || authVendorId || req.query.vendorId || req.query.vendor_id);
+      : (req.params.merchantId || req.params.merchant_id || req.params.vendorId || req.params.id || authVendorId || req.query.merchantId || req.query.merchant_id || req.query.vendorId || req.query.vendor_id);
 
     if (!vendorId) return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
 
@@ -405,6 +426,7 @@ async function getVendorStatus(req, res) {
     }
 
     return res.status(200).json({
+      merchant_id: Number(v.vendor_id),
       vendor_id: Number(v.vendor_id),
       public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
       status: currentStatus,
@@ -606,23 +628,29 @@ async function loginVendor(req, res) {
       }).catch(err => console.warn('[Vendor Login Email Warning]:', err.message));
     }
 
+    const vendorData = {
+      merchant_id: Number(v.vendor_id),
+      vendor_id: Number(v.vendor_id),
+      public_id: vendorPublicId,
+      store_name: v.store_name,
+      merchant_name: v.vendor_name,
+      vendor_name: v.vendor_name,
+      email: v.email,
+      phone_number: v.phone_number,
+      status: statusLower
+    };
+
     return res.status(200).json({
       success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
+      merchant_id: Number(v.vendor_id),
       vendor_id: Number(v.vendor_id),
       public_id: vendorPublicId,
       status: statusLower,
-      vendor: {
-        vendor_id: Number(v.vendor_id),
-        public_id: vendorPublicId,
-        store_name: v.store_name,
-        vendor_name: v.vendor_name,
-        email: v.email,
-        phone_number: v.phone_number,
-        status: statusLower
-      }
+      merchant: vendorData,
+      vendor: vendorData
     });
   } catch (err) {
     console.error('Error during vendor login:', err);
@@ -1022,29 +1050,36 @@ async function loginVendorWithOtp(req, res) {
       }).catch(err => console.warn('[Vendor OTP Login Email Warning]:', err.message));
     }
 
+    const vendorOtpData = {
+      ...v,
+      merchant_id: Number(v.vendor_id),
+      vendor_id: Number(v.vendor_id),
+      public_id: vendorPublicId,
+      store_name: v.store_name,
+      merchant_name: v.vendor_name,
+      vendor_name: v.vendor_name,
+      email: v.email,
+      phone_number: v.phone_number,
+      status: statusLower,
+      role: 'merchant',
+      isMerchant: true,
+      isVendor: true
+    };
+
     return res.status(200).json({
       success: true,
       verified: true,
       valid: true,
-      message: 'Vendor login successful',
+      message: 'Merchant login successful',
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
+      merchant_id: Number(v.vendor_id),
       vendor_id: Number(v.vendor_id),
       public_id: vendorPublicId,
       status: statusLower,
-      vendor: {
-        ...v,
-        vendor_id: Number(v.vendor_id),
-        public_id: vendorPublicId,
-        store_name: v.store_name,
-        vendor_name: v.vendor_name,
-        email: v.email,
-        phone_number: v.phone_number,
-        status: statusLower,
-        role: 'vendor',
-        isVendor: true
-      }
+      merchant: vendorOtpData,
+      vendor: vendorOtpData
     });
   } catch (err) {
     console.error('Error in loginVendorWithOtp:', err);

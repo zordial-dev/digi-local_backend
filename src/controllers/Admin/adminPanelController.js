@@ -125,10 +125,21 @@ function serializeVendorForAdmin(v) {
   const rawWhatsapp = v.whatsapp_number || rawPhone;
   const digitsWhatsapp = get10DigitPhone(rawWhatsapp);
 
+  const hasBankDetails = Boolean(String(v.account_number || v.bank_account_number || '').trim() && String(v.ifsc_code || '').trim());
+  const acceptedPaymentMethods = hasBankDetails ? ['COD', 'ONLINE', 'UPI'] : ['COD'];
+
   return {
+    has_bank_details: hasBankDetails,
+    online_payment_available: hasBankDetails,
+    accepted_payment_methods: acceptedPaymentMethods,
+    payment_methods: acceptedPaymentMethods,
+    merchant_id: Number(v.vendor_id),
+    merchant_id: Number(v.vendor_id),
     vendor_id: Number(v.vendor_id),
     public_id: v.public_id || (v.vendor_id ? ('vnd@' + String(v.vendor_id).padStart(4, '0')) : ''),
     id: Number(v.vendor_id),
+    merchant_name: v.vendor_name || v.owner_name || '',
+    merchant_name: v.vendor_name || v.owner_name || '',
     vendor_name: v.vendor_name || v.owner_name || '',
     owner_name: v.owner_name || v.vendor_name || '',
     store_name: v.store_name || v.shop_name || '',

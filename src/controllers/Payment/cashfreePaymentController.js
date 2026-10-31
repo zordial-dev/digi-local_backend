@@ -31,7 +31,7 @@ async function createOrderPaymentSession(req, res) {
 
     let targetOrderId = order_id;
     let targetAmount = Number(amount || 0);
-    let targetVendorId = vendor_id;
+    let targetVendorId = vendor_id || req.body.merchant_id || req.body.merchantId || req.body.vendorId;
     let targetCustomerName = customer_name;
     let targetCustomerPhone = customer_phone;
     let targetCustomerEmail = customer_email;
@@ -69,15 +69,27 @@ async function createOrderPaymentSession(req, res) {
       });
     }
 
-    // 2. Fetch vendor info if vendor_id is available
-    if (targetVendorId && storeName === 'DigiLocal Merchant') {
+    // 2. Fetch vendor info and verify bank account details
+    if (targetVendorId) {
       const vRes = await query(
-        `SELECT store_name, vendor_name FROM vendors WHERE vendor_id = ? OR public_id = ?`,
+        `SELECT store_name, vendor_name, account_number, ifsc_code FROM vendors WHERE vendor_id = ? OR public_id = ?`,
         [Number(targetVendorId) || -1, String(targetVendorId)]
       ).catch(() => ({ rows: [] }));
 
       if (vRes.rows && vRes.rows.length > 0) {
-        storeName = vRes.rows[0].store_name || vRes.rows[0].vendor_name || storeName;
+        const vRow = vRes.rows[0];
+        storeName = vRow.store_name || vRow.vendor_name || storeName;
+        const hasBank = Boolean(String(vRow.account_number || '').trim() && String(vRow.ifsc_code || '').trim());
+        if (!hasBank) {
+          return res.status(400).json({
+            success: false,
+            error: `Online payment session cannot be created: Merchant "${storeName}" has not configured bank account details. Only Cash on Delivery (COD) is supported for this store.`,
+            message: `Online payment session cannot be created: Merchant "${storeName}" has not configured bank account details. Only Cash on Delivery (COD) is supported for this store.`,
+            code: 'ONLINE_PAYMENT_UNAVAILABLE',
+            allowed_payment_methods: ['COD'],
+            online_payment_available: false
+          });
+        }
       }
     }
 
@@ -325,10 +337,11 @@ async function payVendorDirect(req, res) {
       notify_url
     } = req.body;
 
-    if (!vendor_id) {
+    const targetVendor = vendor_id || req.body.merchant_id || req.body.merchantId || req.body.vendorId;
+    if (!targetVendor) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required field: vendor_id'
+        error: 'Missing required field: merchant_id or vendor_id'
       });
     }
 
@@ -341,9 +354,9 @@ async function payVendorDirect(req, res) {
     }
 
     // 1. Verify vendor exists
-    const isNumeric = !isNaN(Number(vendor_id)) && vendor_id !== null;
+    const isNumeric = !isNaN(Number(targetVendor)) && targetVendor !== null;
     const vendorRes = await query(
-      `SELECT vendor_id, vendor_name, store_name, phone_number, upi_id
+      `SELECT vendor_id, vendor_name, store_name, phone_number, upi_id, account_number, ifsc_code
        FROM vendors 
        WHERE vendor_id = ? OR public_id = ?`,
       [isNumeric ? Number(vendor_id) : -1, String(vendor_id)]
@@ -361,6 +374,17 @@ async function payVendorDirect(req, res) {
     }
 
     const vendor = vendorRes.rows[0];
+    const hasBankDirect = Boolean(String(vendor.account_number || '').trim() && String(vendor.ifsc_code || '').trim());
+    if (!hasBankDirect) {
+      return res.status(400).json({
+        success: false,
+        error: `Direct online payment is unavailable: Merchant "${vendor.store_name}" has not configured bank account details.`,
+        message: `Direct online payment is unavailable: Merchant "${vendor.store_name}" has not configured bank account details.`,
+        code: 'ONLINE_PAYMENT_UNAVAILABLE',
+        allowed_payment_methods: ['COD'],
+        online_payment_available: false
+      });
+    }
 
     // 1b. Check if vendor is eligible for online payments
     const vendorEligibility = await getVendorPaymentEligibility(vendor.vendor_id);
@@ -741,7 +765,7 @@ async function cashfreeWebhook(req, res) {
  */
 async function getVendorCashfreePayments(req, res) {
   try {
-    const { vendorId } = req.params;
+    const vendorId = req.params.merchantId || req.params.vendorId;
     const limit = parseInt(req.query.limit || '50', 10);
     const offset = parseInt(req.query.offset || '0', 10);
     const status = req.query.status || 'ALL';

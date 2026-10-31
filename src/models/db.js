@@ -754,19 +754,15 @@ async function setupTablesPg() {
     WHERE public_id IS NULL OR public_id = ''
   `).catch(() => {});
 
-  // Ensure vendor bank fields are optional and drop NOT NULL constraints
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN account_number DROP NOT NULL`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN bank_account_number DROP NOT NULL`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN ifsc_code DROP NOT NULL`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN account_number DROP DEFAULT`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN bank_account_number DROP DEFAULT`).catch(() => {});
-  await pgPool.query(`ALTER TABLE vendors ALTER COLUMN ifsc_code DROP DEFAULT`).catch(() => {});
-  // Clean up historical placeholder dummy values ('abc', '1234') to NULL so eligibility accurately reflects reality
-  await pgPool.query(`
-    UPDATE vendors 
-    SET account_number = NULL, bank_account_number = NULL, ifsc_code = NULL
-    WHERE account_number IN ('abc', '1234') OR ifsc_code IN ('1234', 'abc');
-  `).catch(() => {});
+  // Allow bank account fields to be optional/nullable
+  await pgPool.query('ALTER TABLE vendors ALTER COLUMN account_number DROP NOT NULL').catch(() => {});
+  await pgPool.query('ALTER TABLE vendors ALTER COLUMN bank_account_number DROP NOT NULL').catch(() => {});
+  await pgPool.query('ALTER TABLE vendors ALTER COLUMN ifsc_code DROP NOT NULL').catch(() => {});
+  await pgPool.query('ALTER TABLE vendors ALTER COLUMN account_number DROP DEFAULT').catch(() => {});
+  await pgPool.query('ALTER TABLE vendors ALTER COLUMN bank_account_number DROP DEFAULT').catch(() => {});
+  await pgPool.query('ALTER TABLE vendors ALTER COLUMN ifsc_code DROP DEFAULT').catch(() => {});
+  // Ensure merchants view alias exists for zero-downtime vendor-to-merchant migration
+  await pgPool.query('CREATE OR REPLACE VIEW merchants AS SELECT * FROM vendors').catch(() => {});
 }
 
 /**

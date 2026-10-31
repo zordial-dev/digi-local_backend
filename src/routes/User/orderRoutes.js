@@ -4,7 +4,7 @@ const ordersController = require('../../controllers/User/ordersController');
 const { authenticateToken, requireRole, requireUser, requireUserOwner, requireVendorOwner, requireAuth } = require('../../middleware/auth');
 
 // Guard: Only vendors and administrators can alter order progress pipeline
-const requireVendorOrAdmin = requireRole('vendor', 'admin', 'super_admin', 'superadmin', 'sub_admin');
+const requireVendorOrAdmin = requireRole('vendor', 'merchant', 'admin', 'super_admin', 'superadmin', 'sub_admin');
 
 // GET /api/orders (Query Params: phone, user_id, vendor_id)
 router.get('/', authenticateToken, requireAuth, ordersController.getOrdersByQuery);
@@ -18,6 +18,8 @@ router.get('/user/:userId', authenticateToken, requireUserOwner, ordersControlle
 
 // D2. Fetch Vendor Store Orders (Vendor Owner Only)
 router.get('/vendor/:vendorId', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
+router.get('/merchant/:vendorId', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
+router.get('/merchant/:merchantId', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
 
 // Validate Cart Stock & Availability before checkout (Public / Cart Check)
 router.post('/check-stock', ordersController.validateCartStock);
@@ -40,6 +42,9 @@ router.patch('/vendor/:vendorId/orders/:id/status', authenticateToken, requireVe
 router.put('/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
 router.post('/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
 router.patch('/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
+router.put('/merchant/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
+router.post('/merchant/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
+router.patch('/merchant/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
 
 
 // Dedicated Refund Status API for Order
