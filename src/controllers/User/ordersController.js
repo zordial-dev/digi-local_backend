@@ -2,6 +2,10 @@ const { query } = require('../../models/db');
 const { formatISTISO, formatISTReadable, formatISTTimeOnly } = require('../../utils/time');
 const cashfreeService = require('../../services/cashfreeService');
 const notificationService = require('../../services/notificationService');
+const {
+  checkOrderPaymentEligibility,
+  getVendorPaymentEligibility
+} = require('../../services/paymentEligibilityService');
 
 /**
  * D1. Fetch Resident User Orders (Strictly Filtered by User ID)
@@ -1623,16 +1627,57 @@ async function validateCartStock(req, res) {
       });
     }
 
+    // Evaluate cart payment eligibility for checkout UI
+    const targetVendorId = req.body.vendor_id || req.body.vendorId || validationResults[0]?.vendor_id || null;
+    const cartEligibility = await checkOrderPaymentEligibility({
+      vendor_id: targetVendorId,
+      items: validationResults
+    }).catch(() => null);
+
     return res.status(200).json({
       success: true,
       can_fulfill: allCanFulfill,
       valid: allCanFulfill,
       message: allCanFulfill ? 'All items are in stock and available for order' : 'Some items exceed available stock or are out of stock',
+      payment_eligibility: cartEligibility,
+      is_online_eligible: Boolean(cartEligibility?.is_online_eligible),
+      eligible_methods: cartEligibility?.eligible_methods || ['COD'],
+      default_payment_method: cartEligibility?.default_method || 'COD',
       items: validationResults
     });
   } catch (err) {
     console.error('Error validating cart stock:', err);
     return res.status(500).json({ success: false, error: 'Failed to validate stock', message: err.message });
+  }
+}
+
+/**
+ * GET /api/orders/payment-eligibility or POST /api/orders/payment-eligibility
+ * Unified checkout payment eligibility check for Website and Mobile App
+ */
+async function getPaymentEligibility(req, res) {
+  try {
+    const vendor_id = req.query.vendor_id || req.query.vendorId || req.params.vendorId || req.body?.vendor_id || req.body?.vendorId;
+    const items = req.body?.items || [];
+    const order_id = req.query.order_id || req.query.orderId || req.body?.order_id || req.body?.orderId;
+
+    if (!vendor_id && items.length === 0 && !order_id) {
+      return res.status(400).json({
+        success: false,
+        error: 'vendor_id or items array is required to check payment eligibility',
+        code: 'MISSING_ELIGIBILITY_PARAMS'
+      });
+    }
+
+    const eligibility = await checkOrderPaymentEligibility({ vendor_id, items, order_id });
+    return res.status(200).json({
+      success: true,
+      data: eligibility,
+      ...eligibility
+    });
+  } catch (err) {
+    console.error('Error checking payment eligibility:', err);
+    return res.status(500).json({ success: false, error: 'Failed to check payment eligibility: ' + err.message });
   }
 }
 
@@ -1647,5 +1692,6 @@ module.exports = {
   notifyOrderVendor,
   validateCartStock,
   getOrderRefundStatus,
-  getUserRefunds
+  getUserRefunds,
+  getPaymentEligibility
 };

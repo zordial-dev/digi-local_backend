@@ -3,6 +3,11 @@ const { hashPassword, comparePassword, generateTokens } = require('../../utils/a
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
 const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResponse } = require('../../services/messageCentralService');
 const { generateUniquePublicId } = require('../../utils/idGenerator');
+const {
+  validateBankDetailsPayload,
+  maskAccountNumber,
+  getVendorPaymentEligibility
+} = require('../../services/paymentEligibilityService');
 
 /**
  * POST /api/vendors/register
@@ -64,13 +69,26 @@ async function registerVendor(req, res) {
       body.shop_image || body.logo || body.shop_images?.[0] || body.images?.[0] || body.shopImage || ''
     ).trim();
 
-    const account_number = String(
-      body.account_number || body.bank_account_number || body.accountNumber || body.bank_account || ''
-    ).trim();
+    // Optional Bank Details Validation
+    const bankValidation = validateBankDetailsPayload({
+      account_number: body.account_number || body.bank_account_number || body.accountNumber || body.bank_account || '',
+      ifsc_code: body.ifsc_code || body.ifsc || body.ifscCode || body.ifsc_number || '',
+      account_holder_name: body.account_holder_name || body.accountHolderName || '',
+      bank_name: body.bank_name || body.bankName || body.bank || ''
+    });
 
-    const ifsc_code = String(
-      body.ifsc_code || body.ifsc || body.ifscCode || body.ifsc_number || ''
-    ).trim().toUpperCase();
+    if (bankValidation.hasBankDetails && !bankValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        error: bankValidation.errors[0],
+        errors: bankValidation.errors,
+        code: 'INVALID_BANK_DETAILS',
+        error_code: 'INVALID_BANK_DETAILS'
+      });
+    }
+
+    const account_number = bankValidation.normalized.account_number;
+    const ifsc_code = bankValidation.normalized.ifsc_code;
 
     // Mandatory Validations
     if (!vendor_name) return res.status(400).json({ error: 'Vendor / owner_name is required for registration.' });
@@ -124,8 +142,8 @@ async function registerVendor(req, res) {
 
     // Optional Fields
     const category = String(body.category || body.business_category || body.businessCategory || 'General').trim();
-    const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
-    const account_holder_name = String(body.account_holder_name || body.accountHolderName || vendor_name || '').trim();
+    const bank_name = bankValidation.normalized.bank_name || String(body.bank_name || body.bankName || body.bank || '').trim();
+    const account_holder_name = bankValidation.normalized.account_holder_name || String(body.account_holder_name || body.accountHolderName || (bankValidation.hasBankDetails ? vendor_name : '')).trim();
     const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
     const qr_code = String(body.qr_code || body.qr_code_url || body.upi_qr_code || body.qrCodeUrl || '').trim();
 
@@ -264,7 +282,11 @@ async function registerVendor(req, res) {
     const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
 
+    const isOnlineEligible = Boolean(bankValidation.hasBankDetails && bankValidation.isValid);
+    const eligiblePaymentMethods = isOnlineEligible ? ['COD', 'ONLINE'] : ['COD'];
+
     return res.status(201).json({
+      success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
@@ -300,11 +322,17 @@ async function registerVendor(req, res) {
         pincode: vendorPincode,
         gstin,
         pan_number,
-        account_holder_name,
+        account_holder_name: account_holder_name || null,
+        account_number: maskAccountNumber(account_number),
+        ifsc_code: ifsc_code || null,
+        bank_name: bank_name || null,
+        is_online_eligible: isOnlineEligible,
+        eligible_payment_methods: eligiblePaymentMethods,
+        default_payment_method: 'COD',
         upi_id,
         qr_code: qr_code,
         whatsapp_number,
-        accepted_payment_methods: body.accepted_payment_methods || ['UPI', 'COD'],
+        accepted_payment_methods: body.accepted_payment_methods || eligiblePaymentMethods,
         vendor_type,
         can_add_items,
         status: 'PENDING'

@@ -2,6 +2,11 @@ const vendorService = require('../../services/vendorService');
 const { query } = require('../../models/db');
 const { normalizeImageUrl, resolveImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../../utils/imageUtils');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
+const {
+    validateBankDetailsPayload,
+    maskAccountNumber,
+    getVendorPaymentEligibility
+} = require('../../services/paymentEligibilityService');
 
 const fs = require('fs');
 const path = require('path');
@@ -750,27 +755,89 @@ async function updateVendorCoverage(req, res) {
 
 async function updatePaymentDetails(req, res) {
     try {
-        const vendorId = req.params.vendorId || req.user?.vendorId || req.body.vendor_id || req.body.vendorId;
+        const authVendorId = req.user?.vendor_id || req.user?.id || req.user?.vendorId;
+        const requestedId = req.params.vendorId || req.body.vendor_id || req.body.vendorId || authVendorId;
         const body = req.body || {};
 
-        const account_number = String(body.account_number || body.bank_account_number || body.accountNumber || '').trim();
-        const ifsc_code = String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim().toUpperCase();
-        const bank_name = String(body.bank_name || body.bankName || body.bank || '').trim();
-        const account_holder_name = String(body.account_holder_name || body.accountHolderName || '').trim();
-        const upi_id = String(body.upi_id || body.upiId || body.upi || '').trim();
-        const qr_code = String(body.qr_code || body.qr_code_url || body.qrCodeUrl || body.upi_qr_code || '').trim();
-
-        if (!vendorId) {
+        if (!requestedId) {
             return res.status(400).json({ error: 'Vendor ID is required to update payment details.' });
         }
 
-        const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ?`, [vendorId]);
+        // IDOR Authorization verification
+        const isAdmin = ['admin', 'super_admin', 'sub_admin'].includes(String(req.user?.role || '').toLowerCase());
+        if (authVendorId && !isAdmin && String(authVendorId) !== String(requestedId)) {
+            return res.status(403).json({
+                success: false,
+                error: 'Forbidden: You do not have permission to modify another vendor\'s payment details (IDOR Protection)',
+                code: 'VENDOR_IDOR_VIOLATION',
+                error_code: 'FORBIDDEN_VENDOR_ACCESS'
+            });
+        }
+
+        const existing = await query(`SELECT * FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`, [requestedId, String(requestedId)]);
         if (!existing.rows || existing.rows.length === 0) {
-            return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
+            return res.status(404).json({ error: `Vendor ID "${requestedId}" not found.` });
         }
 
         const currentVendor = existing.rows[0];
-        await recordVendorFieldChanges(vendorId, currentVendor, body);
+        const actualVendorId = Number(currentVendor.vendor_id);
+        await recordVendorFieldChanges(actualVendorId, currentVendor, body);
+
+        const hasAccountInBody = body.account_number !== undefined || body.bank_account_number !== undefined || body.accountNumber !== undefined;
+        const hasIfscInBody = body.ifsc_code !== undefined || body.ifsc !== undefined || body.ifscCode !== undefined;
+        const hasHolderInBody = body.account_holder_name !== undefined || body.accountHolderName !== undefined;
+        const hasBankNameInBody = body.bank_name !== undefined || body.bankName !== undefined;
+
+        let finalAccountNumber = currentVendor.account_number;
+        let finalIfscCode = currentVendor.ifsc_code;
+        let finalBankName = currentVendor.bank_name;
+        let finalHolderName = currentVendor.account_holder_name;
+
+        // Check if vendor is explicitly clearing / removing bank details
+        const isClearingBank = (
+            (hasAccountInBody && !String(body.account_number || body.bank_account_number || body.accountNumber || '').trim()) &&
+            (hasIfscInBody && !String(body.ifsc_code || body.ifsc || body.ifscCode || '').trim())
+        );
+
+        if (isClearingBank) {
+            finalAccountNumber = null;
+            finalIfscCode = null;
+            finalBankName = null;
+            finalHolderName = null;
+        } else if (hasAccountInBody || hasIfscInBody) {
+            const rawAccount = body.account_number !== undefined ? body.account_number : (body.bank_account_number !== undefined ? body.bank_account_number : (body.accountNumber !== undefined ? body.accountNumber : currentVendor.account_number));
+            const rawIfsc = body.ifsc_code !== undefined ? body.ifsc_code : (body.ifsc !== undefined ? body.ifsc : (body.ifscCode !== undefined ? body.ifscCode : currentVendor.ifsc_code));
+            const rawHolder = body.account_holder_name !== undefined ? body.account_holder_name : (body.accountHolderName !== undefined ? body.accountHolderName : currentVendor.account_holder_name);
+            const rawBank = body.bank_name !== undefined ? body.bank_name : (body.bankName !== undefined ? body.bankName : currentVendor.bank_name);
+
+            const validation = validateBankDetailsPayload({
+                account_number: rawAccount,
+                ifsc_code: rawIfsc,
+                account_holder_name: rawHolder,
+                bank_name: rawBank
+            });
+
+            if (validation.hasBankDetails && !validation.isValid) {
+                return res.status(400).json({
+                    success: false,
+                    error: validation.errors[0],
+                    errors: validation.errors,
+                    code: 'INVALID_BANK_DETAILS',
+                    error_code: 'INVALID_BANK_DETAILS'
+                });
+            }
+
+            finalAccountNumber = validation.normalized.account_number;
+            finalIfscCode = validation.normalized.ifsc_code;
+            finalBankName = validation.normalized.bank_name || currentVendor.bank_name;
+            finalHolderName = validation.normalized.account_holder_name || currentVendor.account_holder_name || currentVendor.vendor_name;
+        } else {
+            if (hasHolderInBody) finalHolderName = String(body.account_holder_name || body.accountHolderName || '').trim() || null;
+            if (hasBankNameInBody) finalBankName = String(body.bank_name || body.bankName || '').trim() || null;
+        }
+
+        const upi_id = body.upi_id !== undefined ? String(body.upi_id || '').trim() : (body.upi !== undefined ? String(body.upi || '').trim() : currentVendor.upi_id);
+        const qr_code = body.qr_code !== undefined ? String(body.qr_code || '').trim() : (body.qr_code_url !== undefined ? String(body.qr_code_url || '').trim() : currentVendor.qr_code);
 
         const newAcc = account_number || currentVendor.account_number;
         const newIfsc = ifsc_code || currentVendor.ifsc_code;
@@ -790,6 +857,9 @@ async function updatePaymentDetails(req, res) {
       WHERE vendor_id = ?`,
             [account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, updatedMethods, vendorId]
         );
+
+        // Recalculate live payment eligibility immediately after update
+        const eligibility = await getVendorPaymentEligibility(actualVendorId);
 
         return res.status(200).json({
             success: true,

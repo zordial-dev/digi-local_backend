@@ -63,3 +63,6 @@ public/uploads/*
 coverage/
 .nyc_output/
 .antigravity/
+docs/
+
+.gitignore

@@ -2,6 +2,7 @@ const { query } = require('../../models/db');
 const cashfreeService = require('../../services/cashfreeService');
 const notificationService = require('../../services/notificationService');
 const subscriptionService = require('../../services/subscriptionService');
+const { checkOrderPaymentEligibility, getVendorPaymentEligibility } = require('../../services/paymentEligibilityService');
 
 /**
  * Cashfree Payment Controller
@@ -89,6 +90,23 @@ async function createOrderPaymentSession(req, res) {
             online_payment_available: false
           });
         }
+      }
+    }
+
+    // 2b. Payment Eligibility Guard: Validate that vendor/order is eligible for online payment
+    if (targetVendorId || order_id) {
+      const eligibility = await checkOrderPaymentEligibility({
+        vendor_id: targetVendorId,
+        order_id: order_id
+      });
+
+      if (!eligibility.is_online_eligible) {
+        return res.status(400).json({
+          success: false,
+          error_code: 'PAYMENT_METHOD_NOT_ELIGIBLE',
+          error: eligibility.reason || 'Online payment is not available for this vendor/order. Please use Cash on Delivery (COD).',
+          payment_eligibility: eligibility
+        });
       }
     }
 
@@ -365,6 +383,17 @@ async function payVendorDirect(req, res) {
         code: 'ONLINE_PAYMENT_UNAVAILABLE',
         allowed_payment_methods: ['COD'],
         online_payment_available: false
+      });
+    }
+
+    // 1b. Check if vendor is eligible for online payments
+    const vendorEligibility = await getVendorPaymentEligibility(vendor.vendor_id);
+    if (!vendorEligibility.is_online_eligible) {
+      return res.status(400).json({
+        success: false,
+        error_code: 'PAYMENT_METHOD_NOT_ELIGIBLE',
+        error: vendorEligibility.reason || 'Online payment is not available for this vendor because valid bank details are not configured.',
+        payment_eligibility: vendorEligibility
       });
     }
 

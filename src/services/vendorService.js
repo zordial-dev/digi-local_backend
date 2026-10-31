@@ -3,6 +3,11 @@ const paymentService = require('./paymentService');
 const { normalizeImageUrl, DEFAULT_PRODUCT_SERVICE_IMAGE } = require('../utils/imageUtils');
 const { recordVendorFieldChanges } = require('./vendorDiffService');
 const { formatISTISO, formatISTReadable } = require('../utils/time');
+const {
+  validateBankDetailsPayload,
+  maskAccountNumber,
+  getVendorPaymentEligibility
+} = require('./paymentEligibilityService');
 
 /**
  * Service handling Vendor Profile, Store Settings, Subscription Renewals, and Dashboard Data.
@@ -177,9 +182,17 @@ class VendorService {
     vendor.state = vendor.state || '';
     vendor.pincode = vendor.pincode || '';
     vendor.bank_name = vendor.bank_name || '';
-    vendor.account_number = vendor.account_number || vendor.bank_account_number || '';
     vendor.ifsc_code = vendor.ifsc_code || '';
     vendor.account_holder_name = vendor.account_holder_name || '';
+
+    // Calculate live payment eligibility and mask account numbers
+    const eligibility = await getVendorPaymentEligibility(vendor);
+    vendor.is_online_eligible = eligibility.is_online_eligible;
+    vendor.eligible_payment_methods = eligibility.eligible_methods;
+    vendor.default_payment_method = eligibility.default_method;
+    vendor.payment_eligibility = eligibility;
+    vendor.account_number = maskAccountNumber(vendor.account_number || vendor.bank_account_number);
+    vendor.bank_account_number = vendor.account_number;
     vendor.gstin = String(vendor.gstin || vendor.gst_number || '').trim().toUpperCase();
     vendor.gst_number = vendor.gstin;
     vendor.pan_number = String(vendor.pan_number || '').trim().toUpperCase();
@@ -270,6 +283,18 @@ class VendorService {
     const finalUpiId = String(upi_id || pd.upi_id || pd.upiId || pd.upi || '').trim();
     const finalQrCode = String(qr_code || qr_code_url || pd.qr_code || pd.qr_code_url || pd.qrCodeUrl || pd.upi_qr_code || '').trim();
     const finalWhatsappNumber = String(whatsapp_number || '').trim();
+
+    if (finalAccountNumber || finalIfscCode) {
+      const bankVal = validateBankDetailsPayload({
+        account_number: finalAccountNumber,
+        ifsc_code: finalIfscCode,
+        account_holder_name: finalAccountHolderName,
+        bank_name: finalBankName
+      });
+      if (bankVal.hasBankDetails && !bankVal.isValid) {
+        throw new Error(bankVal.errors[0]);
+      }
+    }
 
     let finalGst = String(gst_number || gstin || gst || gstNumber || td.gstin || td.gst_number || td.gst || bd.gstin || bd.gst_number || '').trim().toUpperCase();
     let finalPan = String(pan_number || pan || panNumber || td.pan_number || td.pan || bd.pan_number || bd.pan || '').trim().toUpperCase();
@@ -457,8 +482,15 @@ class VendorService {
     updatedVendor.gst_number = updatedVendor.gstin;
     updatedVendor.pan_number = String(updatedVendor.pan_number || '').trim().toUpperCase();
     if (updatedVendor.logo) updatedVendor.logo = normalizeImageUrl(updatedVendor.logo);
-    if (updatedVendor.shop_image) updatedVendor.shop_image = normalizeImageUrl(updatedVendor.shop_image);
     const finalLogo = updatedVendor.logo || (logoUrl ? normalizeImageUrl(logoUrl) : null);
+
+    const updateEligibility = await getVendorPaymentEligibility(updatedVendor);
+    updatedVendor.is_online_eligible = updateEligibility.is_online_eligible;
+    updatedVendor.eligible_payment_methods = updateEligibility.eligible_methods;
+    updatedVendor.default_payment_method = updateEligibility.default_method;
+    updatedVendor.payment_eligibility = updateEligibility;
+    updatedVendor.account_number = maskAccountNumber(updatedVendor.account_number);
+    updatedVendor.bank_account_number = updatedVendor.account_number;
 
     return { logo: finalLogo, vendor: updatedVendor };
   }
