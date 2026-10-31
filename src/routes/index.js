@@ -26,6 +26,7 @@ const serviceController = require('../controllers/Vendor/serviceController');
 const subAdminsController = require('../controllers/Admin/subAdminsController');
 const vendorPanelController = require('../controllers/Vendor/vendorPanelController');
 const vendorAuthController = require('../controllers/Vendor/vendorAuthController');
+const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
 const { authenticateToken, requireVendor, requireVendorOwner, requireUser, requireUserOwner } = require('../middleware/auth');
 const { upload, handleMulterError } = require('../middleware/upload');
