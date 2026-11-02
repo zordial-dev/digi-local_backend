@@ -246,6 +246,57 @@ function requireUserOwner(req, res, next) {
   next();
 }
 
+/**
+ * Merchant / Vendor Token Verification Middleware.
+ * Strictly verifies JWT bearer token for merchant / vendor access.
+ * Rejects with 401 if missing/invalid, 403 if role is not merchant/vendor/admin.
+ */
+function verifyMerchantToken(req, res, next) {
+  const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+  const token = (authHeader && authHeader.startsWith('Bearer '))
+    ? authHeader.split(' ')[1]
+    : (req.headers['x-access-token'] || req.query.token || req.body?.token);
+
+  if (!token) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Merchant authentication token missing'
+    });
+  }
+
+  const payload = verifyJwt(token, authConfig.jwt.secret);
+  if (!payload) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Invalid or expired merchant access token'
+    });
+  }
+
+  req.user = payload;
+
+  const roleLower = String(payload.role || '').toLowerCase();
+  const roles = Array.isArray(payload.roles) ? payload.roles.map(r => String(r).toLowerCase()) : [];
+  const isAdmin = ADMIN_ROLES.includes(roleLower) || roles.some(r => ADMIN_ROLES.includes(r));
+  const isMerchant = roleLower === 'vendor' || roleLower === 'merchant' || payload.isVendor === true || payload.isMerchant === true || roles.includes('merchant') || roles.includes('vendor');
+
+  if (!isMerchant && !isAdmin) {
+    return res.status(403).json({
+      success: false,
+      error: 'Forbidden: Merchant access required. Customer accounts cannot access merchant endpoints.'
+    });
+  }
+
+  const merchantId = payload.merchant_id || payload.vendor_id || payload.id;
+  if (merchantId) {
+    req.user.merchant_id = Number(merchantId) || merchantId;
+    req.user.vendor_id = Number(merchantId) || merchantId;
+    req.merchantId = Number(merchantId) || merchantId;
+    req.vendorId = Number(merchantId) || merchantId;
+  }
+
+  next();
+}
+
 module.exports = {
   authenticateToken,
   requireAuth,
@@ -255,6 +306,8 @@ module.exports = {
   requireUser,
   requireVendorOwner,
   requireUserOwner,
+  verifyMerchantToken,
+  verifyVendorToken: verifyMerchantToken,
   requireMerchant: requireVendor,
   requireMerchantOwner: requireVendorOwner
 };

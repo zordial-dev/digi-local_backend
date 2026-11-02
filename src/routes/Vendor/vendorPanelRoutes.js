@@ -5,7 +5,7 @@ const multer = require('multer');
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
 const vendorAuthController = require('../../controllers/Vendor/vendorAuthController');
 const serviceController = require('../../controllers/Vendor/serviceController');
-const { authenticateToken, requireVendor, requireVendorOwner } = require('../../middleware/auth');
+const { authenticateToken, requireVendor, requireVendorOwner, verifyMerchantToken } = require('../../middleware/auth');
 const { validateRequest } = require('../../middleware/validate');
 const { addItemSchema, updateSettingsSchema } = require('../../schemas/vendorSchema');
 
@@ -107,7 +107,15 @@ router.get(['/subscription/status', '/subscription-status'], authenticateToken, 
 });
 
 // Direct vendor status check (Vendor Only)
-router.get('/status', authenticateToken, requireVendor, vendorAuthController.getVendorStatus);
+router.options('/status', (req, res) => {
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, X-Platform-Client, X-Request-ID, X-Idempotency-Key');
+  return res.sendStatus(204);
+});
+router.get('/status', verifyMerchantToken, vendorAuthController.getVendorStatus);
 router.get('/:vendorId/status', authenticateToken, requireVendorOwner, vendorAuthController.getVendorStatus);
 
 const ordersController = require('../../controllers/User/ordersController');

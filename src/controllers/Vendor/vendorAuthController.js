@@ -346,14 +346,14 @@ async function registerVendor(req, res) {
 
 async function getVendorStatus(req, res) {
   try {
-    let authVendorId = req.user?.vendor_id || req.user?.id;
+    let authVendorId = req.user?.merchant_id || req.user?.vendor_id || req.user?.id;
     if (!authVendorId && req.headers['authorization']) {
       try {
         const token = req.headers['authorization'].replace('Bearer ', '').trim();
         const { verifyJwt } = require('../../utils/auth');
         const authConfig = require('../../config/auth');
         const payload = verifyJwt(token, authConfig.jwt.secret);
-        if (payload) authVendorId = payload.vendor_id || payload.id;
+        if (payload) authVendorId = payload.merchant_id || payload.vendor_id || payload.id;
       } catch (_) { }
     }
 
@@ -362,7 +362,7 @@ async function getVendorStatus(req, res) {
       ? authVendorId
       : (req.params.merchantId || req.params.merchant_id || req.params.vendorId || req.params.id || authVendorId || req.query.merchantId || req.query.merchant_id || req.query.vendorId || req.query.vendor_id);
 
-    if (!vendorId) return res.status(400).json({ error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
+    if (!vendorId) return res.status(400).json({ success: false, error: 'Vendor ID or Authorization Bearer token is required to fetch status.' });
 
     const result = await query(
       `SELECT vendor_id, public_id, store_name, vendor_name, area, city, status, hold_reason, hold_email_subject, has_resubmitted, resubmitted_at, created_at FROM vendors WHERE vendor_id = ? OR public_id = ? OR CAST(vendor_id AS TEXT) = ?`,
@@ -370,7 +370,7 @@ async function getVendorStatus(req, res) {
     );
 
     if (!result.rows || result.rows.length === 0) {
-      return res.status(404).json({ error: `Vendor ID "${vendorId}" not found.` });
+      return res.status(404).json({ success: false, error: `Vendor ID "${vendorId}" not found.` });
     }
 
     const v = result.rows[0];
@@ -381,11 +381,23 @@ async function getVendorStatus(req, res) {
     const isOnHold = statusLower === 'hold' || statusLower === 'on_hold';
     const isBlocked = statusLower === 'blocked';
 
-    let currentStatus = 'pending';
-    if (isApproved) currentStatus = 'accepted';
-    else if (isBlocked) currentStatus = 'blocked';
-    else if (isRejected) currentStatus = 'rejected';
-    else if (isOnHold) currentStatus = 'on_hold';
+    let normalizedStatus = 'pending';
+    let approvalStatus = 'pending';
+    if (isApproved) {
+      normalizedStatus = 'active';
+      approvalStatus = 'approved';
+    } else if (isBlocked) {
+      normalizedStatus = 'blocked';
+      approvalStatus = 'blocked';
+    } else if (isRejected) {
+      normalizedStatus = 'rejected';
+      approvalStatus = 'rejected';
+    } else if (isOnHold) {
+      normalizedStatus = 'on_hold';
+      approvalStatus = 'on_hold';
+    }
+
+    const isActive = isApproved;
 
     let message = 'Your application request will be processed soon.';
     let recommended_ui_text = 'Your registration request is under review by admin. Verification will be completed soon.';
@@ -393,9 +405,12 @@ async function getVendorStatus(req, res) {
     if (isBlocked) {
       return res.status(403).json({
         success: false,
+        merchant_id: Number(v.vendor_id),
         vendor_id: Number(v.vendor_id),
         public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
         status: 'blocked',
+        approval_status: 'blocked',
+        is_active: false,
         code: 'VENDOR_BLOCKED',
         is_blocked: true,
         is_accepted: false,
@@ -426,10 +441,13 @@ async function getVendorStatus(req, res) {
     }
 
     return res.status(200).json({
+      success: true,
       merchant_id: Number(v.vendor_id),
       vendor_id: Number(v.vendor_id),
+      status: normalizedStatus,
+      approval_status: approvalStatus,
+      is_active: isActive,
       public_id: v.public_id || ('vnd@' + String(v.vendor_id).padStart(4, '0')),
-      status: currentStatus,
       is_accepted: isApproved,
       is_pending: isPending,
       is_rejected: isRejected,
@@ -443,7 +461,7 @@ async function getVendorStatus(req, res) {
       recommended_ui_text
     });
   } catch (err) {
-    return res.status(500).json({ error: 'Failed to fetch vendor status.' });
+    return res.status(500).json({ success: false, error: 'Failed to fetch vendor status.' });
   }
 }
 
