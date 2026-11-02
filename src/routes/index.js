@@ -28,7 +28,7 @@ const vendorPanelController = require('../controllers/Vendor/vendorPanelControll
 const vendorAuthController = require('../controllers/Vendor/vendorAuthController');
 const cashfreePaymentController = require('../controllers/Payment/cashfreePaymentController');
 const { authenticateAdminToken, requirePower, requireSuperAdmin } = require('../middleware/adminAuth');
-const { authenticateToken, requireVendor, requireVendorOwner, requireUser, requireUserOwner } = require('../middleware/auth');
+const { authenticateToken, requireVendor, requireVendorOwner, requireUser, requireUserOwner, verifyMerchantToken } = require('../middleware/auth');
 const { upload, handleMulterError } = require('../middleware/upload');
 const { query } = require('../models/db');
 
@@ -83,6 +83,37 @@ router.use('/api/vendor', vendorAuthRoutes);         // Singular Vendor alias
 router.use('/api/merchants', vendorAuthRoutes);      // Merchant alias
 router.use('/api/merchant', vendorAuthRoutes);       // Singular Merchant alias
 router.use('/api/stores', vendorAuthRoutes);         // Stores alias for website storefront
+
+// ── Merchant & Vendor Status Direct Registration & Preflight CORS ────
+router.options([
+  '/api/merchants/status',
+  '/api/merchants/*',
+  '/api/merchants',
+  '/api/merchant/status',
+  '/api/merchant/*',
+  '/api/merchant',
+  '/api/vendors/status',
+  '/api/vendors/*',
+  '/api/vendors',
+  '/api/vendor/status',
+  '/api/vendor/*',
+  '/api/vendor'
+], (req, res) => {
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, X-Platform-Client, X-Request-ID, X-Idempotency-Key, Cache-Control, Pragma, Expires, X-Requested-With, x-vendor-id, x-user-id');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  return res.sendStatus(204);
+});
+
+router.get([
+  '/api/merchants/status',
+  '/api/vendors/status',
+  '/api/merchant/status',
+  '/api/vendor/status'
+], verifyMerchantToken, vendorAuthController.getVendorStatus);
 router.use('/api/users', userRoutes);               // Resident user auth & profile
 router.use('/api/orders', orderRoutes);             // Customer orders & status pipeline
 router.use('/api/vendorPanel', vendorPanelRoutes);  // Vendor dashboard & inventory

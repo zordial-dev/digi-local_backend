@@ -28,16 +28,49 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ── OWASP Security & CORS Configuration ──────────────────────
+const allowedCorsHeaders = [
+    'Content-Type',
+    'Authorization',
+    'X-Platform-Client',
+    'X-Request-ID',
+    'X-Idempotency-Key',
+    'Accept',
+    'Access-Control-Request-Private-Network',
+    'Cache-Control',
+    'Pragma',
+    'Expires',
+    'X-Requested-With',
+    'x-vendor-id',
+    'x-user-id'
+];
+
 app.use(cors({
     origin: true,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Platform-Client', 'X-Request-ID', 'X-Idempotency-Key', 'Accept', 'Access-Control-Request-Private-Network', 'Cache-Control', 'Pragma', 'Expires', 'X-Requested-With', 'x-vendor-id', 'x-user-id']
+    allowedHeaders: allowedCorsHeaders
 }));
+
+app.options(['/api/merchants/*', '/api/merchants', '/api/vendors/*', '/api/vendors', '*'], (req, res) => {
+    const origin = req.headers.origin || '*';
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', allowedCorsHeaders.join(', '));
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    return res.sendStatus(204);
+});
 
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
     if (req.method === 'OPTIONS') {
+        const origin = req.headers.origin || '*';
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', allowedCorsHeaders.join(', '));
+        res.setHeader('Access-Control-Max-Age', '86400');
         return res.sendStatus(204);
     }
     next();
@@ -216,6 +249,8 @@ process.on('uncaughtException', (err) => {
     logger.error('Uncaught Exception thrown', { error: err.message, stack: err.stack });
 });
 
-bootServer();
+if (require.main === module) {
+    bootServer();
+}
 
 module.exports = app;

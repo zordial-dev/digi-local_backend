@@ -6,7 +6,7 @@ const adminPanelController = require('../../controllers/Admin/adminPanelControll
 const vendorPanelController = require('../../controllers/Vendor/vendorPanelController');
 const storefrontController = require('../../controllers/Storefront/storefrontController');
 const { authenticateAdminToken, requirePower } = require('../../middleware/adminAuth');
-const { authenticateToken, requireVendor, requireVendorOwner } = require('../../middleware/auth');
+const { authenticateToken, requireVendor, requireVendorOwner, verifyMerchantToken } = require('../../middleware/auth');
 const { loginBruteForceGuard } = require('../../middleware/security');
 const { validateRequest } = require('../../middleware/validate');
 const {
@@ -81,7 +81,15 @@ const ratingController = require('../../controllers/Rating/ratingController');
 // Vendor Self Ratings & Customer Reviews (Vendor Only)
 router.get('/ratings', authenticateToken, requireVendor, ratingController.getVendorSelfRatings);
 router.get('/reviews', authenticateToken, requireVendor, ratingController.getVendorSelfRatings);
-router.get('/status', authenticateToken, requireVendor, vendorAuthController.getVendorStatus);
+router.options('/status', (req, res) => {
+  const origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Accept, X-Platform-Client, X-Request-ID, X-Idempotency-Key');
+  return res.sendStatus(204);
+});
+router.get('/status', verifyMerchantToken, vendorAuthController.getVendorStatus);
 router.put('/payment-details', authenticateToken, requireVendor, vendorPanelController.updatePaymentDetails);
 router.post('/resubmit', authenticateToken, requireVendor, vendorAuthController.resubmitVendorRequest);
 router.put('/resubmit', authenticateToken, requireVendor, vendorAuthController.resubmitVendorRequest);
@@ -215,7 +223,7 @@ router.post('/:vendorId/fcm-token', authenticateToken, requireVendorOwner, vendo
 router.delete('/:vendorId/fcm-token', authenticateToken, requireVendorOwner, vendorPanelController.deleteFcmToken);
 
 router.get('/:id', (req, res, next) => {
-    if (['categories', 'search', 'locations', 'ratings', 'reviews', 'tickets'].includes(req.params.id)) return next();
+    if (['categories', 'search', 'locations', 'ratings', 'reviews', 'tickets', 'status'].includes(req.params.id)) return next();
     return storefrontController.getVendorStorefront(req, res, next);
 });
 router.delete('/:vendorId', authenticateToken, requireVendorOwner, vendorPanelController.deleteStore);
