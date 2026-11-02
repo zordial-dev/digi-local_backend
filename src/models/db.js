@@ -5,6 +5,15 @@ const fs = require('fs');
 // Ensure PostgreSQL NUMERIC/DECIMAL types (OID 1700) parse as JS floats
 types.setTypeParser(1700, parseFloat);
 
+// Ensure PostgreSQL TIMESTAMP WITHOUT TIME ZONE (OID 1114) correctly parses as IST across all server environments (e.g. Render Linux UTC)
+types.setTypeParser(1114, (stringValue) => {
+  if (!stringValue) return null;
+  if (stringValue.includes('Z') || stringValue.includes('+')) {
+    return new Date(stringValue);
+  }
+  return new Date(stringValue.replace(' ', 'T') + '+05:30');
+});
+
 let pgPool = null;
 
 /**

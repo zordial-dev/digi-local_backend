@@ -3,13 +3,39 @@
  */
 
 /**
+ * Robust date parser that handles Date objects, numeric epoch, explicit timezone strings,
+ * and SQL TIMESTAMP WITHOUT TIME ZONE strings consistently across both local and cloud UTC servers (Render).
+ */
+function parseInputDate(inputDate) {
+  if (!inputDate) return new Date();
+  if (inputDate instanceof Date) return isNaN(inputDate.getTime()) ? new Date() : inputDate;
+  if (typeof inputDate === 'number') return new Date(inputDate);
+  if (typeof inputDate === 'string') {
+    const s = inputDate.trim();
+    if (!s) return new Date();
+    // If it already has explicit timezone (Z, +05:30, etc.)
+    if (s.includes('Z') || s.includes('+') || /\s[+-]\d{2}/.test(s)) {
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? new Date() : d;
+    }
+    // If it's date only: YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      return new Date(s + 'T00:00:00+05:30');
+    }
+    // SQL TIMESTAMP WITHOUT TIME ZONE (e.g. '2026-11-02 15:36:54')
+    // In this system, raw database timestamps without timezone represent IST wall-clock time
+    const d = new Date(s.replace(' ', 'T') + '+05:30');
+    return isNaN(d.getTime()) ? new Date(s) : d;
+  }
+  return new Date();
+}
+
+/**
  * Formats date to ISO string with IST (+05:30) offset.
  * Example: "2026-09-01T17:45:03+05:30"
  */
 function formatISTISO(inputDate) {
-  if (!inputDate) inputDate = new Date();
-  const d = new Date(inputDate);
-  if (isNaN(d.getTime())) inputDate = new Date();
+  const d = parseInputDate(inputDate);
 
   // Offset UTC time by +5.5 hours (330 minutes)
   const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
@@ -31,8 +57,8 @@ function formatISTISO(inputDate) {
  * Example: "01 Sep 2026, 05:45 pm IST"
  */
 function formatISTReadable(inputDate) {
-  if (!inputDate) inputDate = new Date();
-  const d = new Date(inputDate);
+  if (inputDate === null || inputDate === undefined || inputDate === '') return '';
+  const d = parseInputDate(inputDate);
   if (isNaN(d.getTime())) return '';
 
   const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
@@ -59,8 +85,8 @@ function formatISTReadable(inputDate) {
  * Example: "05:45 pm"
  */
 function formatISTTimeOnly(inputDate) {
-  if (!inputDate) inputDate = new Date();
-  const d = new Date(inputDate);
+  if (inputDate === null || inputDate === undefined || inputDate === '') return '';
+  const d = parseInputDate(inputDate);
   if (isNaN(d.getTime())) return '';
 
   const istOffsetMs = (5 * 60 + 30) * 60 * 1000;
@@ -80,5 +106,6 @@ function formatISTTimeOnly(inputDate) {
 module.exports = {
   formatISTISO,
   formatISTReadable,
-  formatISTTimeOnly
+  formatISTTimeOnly,
+  parseInputDate
 };
