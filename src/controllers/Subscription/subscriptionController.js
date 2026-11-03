@@ -86,6 +86,20 @@ class SubscriptionController {
   }
 
   /**
+   * POST /api/subscriptions/subscribe (Alias to createPaymentSession)
+   */
+  async subscribe(req, res) {
+    return this.createPaymentSession(req, res);
+  }
+
+  /**
+   * POST /api/subscriptions/renew (Alias to createPaymentSession)
+   */
+  async renew(req, res) {
+    return this.createPaymentSession(req, res);
+  }
+
+  /**
    * POST /api/subscriptions/create-payment-session
    */
   async createPaymentSession(req, res) {

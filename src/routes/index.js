@@ -162,7 +162,7 @@ router.post([
   '/api/subscriptions/subscribe',
   '/api/subscriptions/:vendorId/subscribe',
   '/api/subscriptions/:vendorId/renew'
-], authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
+], authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 
 router.post([
   '/api/subscriptions/create-payment-session',

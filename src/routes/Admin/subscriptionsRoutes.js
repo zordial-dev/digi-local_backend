@@ -23,7 +23,7 @@ router.get('/coupons/:vendorId', authenticateToken, requireVendorOwner, subscrip
 router.post('/apply-coupon', authenticateToken, requireVendorOwner, subscriptionController.applyCoupon.bind(subscriptionController));
 
 // POST /api/subscriptions/subscribe - Purchase/renew 1-year ₹5,999 subscription (Online payment only)
-router.post('/subscribe', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
+router.post('/subscribe', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/renew', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/create-payment-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/create-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
