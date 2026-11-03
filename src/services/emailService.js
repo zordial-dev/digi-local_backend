@@ -109,4 +109,46 @@ async function sendLoginAlertEmail({ to, name, role = 'user', store_name = null,
     }
 }
 
-module.exports = { sendEmail, sendLoginAlertEmail };
+
+/**
+ * Sends a Service Enquiry Alert email to a merchant when a resident submits an enquiry.
+ * Non-blocking, fault-tolerant: returns { sent: boolean, reason/messageId } without throwing.
+ */
+async function sendEnquiryAlertEmail({ to, merchant_name, store_name, enquiry = {} }) {
+    if (!to || typeof to !== 'string' || !to.includes('@') || to.endsWith('.internal')) {
+        console.warn(`[Enquiry Alert Email] Skipped: No valid recipient email address (${to})`);
+        return { sent: false, reason: 'No valid recipient email address' };
+    }
+
+    try {
+        const { serviceEnquiryTemplate } = require('../templates/emailTemplates');
+        const { formatISTReadable } = require('../utils/time');
+
+        const enqId = enquiry.enquiry_id || enquiry.id || 'N/A';
+        const serviceType = enquiry.service_type || 'General Service';
+        const subject = `🔔 New Service Request #${enqId}: ${serviceType} [${store_name || merchant_name || 'DigiLocal'}]`;
+        const istTime = formatISTReadable(enquiry.created_at || new Date());
+
+        const html = serviceEnquiryTemplate({
+            merchant_name,
+            store_name,
+            enquiry_id: enqId,
+            customer_name: enquiry.user_name || enquiry.name,
+            customer_phone: enquiry.user_phone || enquiry.phone,
+            service_type: serviceType,
+            preferred_time: enquiry.preferred_time,
+            description: enquiry.description,
+            society_name: enquiry.society_name,
+            sector: enquiry.sector,
+            created_at: istTime
+        });
+
+        const res = await sendEmail({ to, subject, html });
+        return res;
+    } catch (err) {
+        console.warn(`[Enquiry Alert Email Error] Failed to send email to ${to}:`, err.message);
+        return { sent: false, reason: err.message };
+    }
+}
+
+module.exports = { sendEmail, sendLoginAlertEmail, sendEnquiryAlertEmail };

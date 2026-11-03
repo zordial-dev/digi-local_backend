@@ -241,6 +241,83 @@ function loginAlertTemplate({ name, role = 'user', store_name = null, loginMetho
   return baseContainer('🔐 Security Alert: Successful Login Detected', '#0A1428', content);
 }
 
+
+/**
+ * 9. Service Enquiry Alert Template
+ */
+function serviceEnquiryTemplate({
+  merchant_name,
+  store_name,
+  enquiry_id,
+  customer_name,
+  customer_phone,
+  service_type,
+  preferred_time,
+  description,
+  society_name,
+  sector,
+  created_at
+}) {
+  const cleanPhone = (customer_phone || '').replace(/[^0-9]/g, '');
+  const telLink = cleanPhone ? `tel:${cleanPhone}` : null;
+  const whatsappLink = cleanPhone ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent('Hello ' + (customer_name || 'Customer') + ', regarding your DigiLocal enquiry #' + enquiry_id + ' for ' + (service_type || 'service') + ':')}` : null;
+
+  const content = `
+    <p style="font-size: 14px; line-height: 1.6; color: #333;">Hello <strong>${merchant_name || store_name || 'Partner'}</strong>,</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #444;">
+      You have received a new service enquiry from a resident customer on the <strong>DigiLocal Marketplace</strong>!
+    </p>
+
+    <div style="background-color: #FAF9F6; border: 1px solid #E0D5C3; border-radius: 12px; padding: 20px; margin: 20px 0;">
+      <h3 style="margin: 0 0 14px; font-size: 14px; color: #0A1428; text-transform: uppercase; letter-spacing: 1px;">📋 Enquiry #${enquiry_id} Details</h3>
+      <table style="width: 100%; font-size: 13px; color: #4A5568; line-height: 1.8; border-collapse: collapse;">
+        <tr>
+          <td style="width: 35%; font-weight: 600; color: #2D3748;">Service Requested:</td>
+          <td><strong style="color: #0A1428;">${service_type || 'General Service'}</strong></td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Customer Name:</td>
+          <td>${customer_name || 'Resident'}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Contact Phone:</td>
+          <td><strong style="color: #166534;">${customer_phone || 'Not provided'}</strong></td>
+        </tr>
+        ${preferred_time ? `
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Preferred Time:</td>
+          <td>${preferred_time}</td>
+        </tr>` : ''}
+        ${society_name || sector ? `
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Location / Society:</td>
+          <td>${[society_name, sector].filter(Boolean).join(', ')}</td>
+        </tr>` : ''}
+        <tr>
+          <td style="font-weight: 600; color: #2D3748;">Received Time:</td>
+          <td>${created_at || (new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }) + ' IST')}</td>
+        </tr>
+      </table>
+
+      ${description ? `
+      <div style="margin-top: 16px; padding-top: 14px; border-top: 1px dashed #E0D5C3;">
+        <span style="font-weight: 600; color: #2D3748; display: block; margin-bottom: 6px;">Customer Notes / Description:</span>
+        <div style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 14px; font-size: 13px; color: #2D3748; line-height: 1.5; font-style: italic;">
+          "${description}"
+        </div>
+      </div>` : ''}
+    </div>
+
+    <!-- Quick Action Buttons -->
+    <div style="text-align: center; margin: 24px 0 10px;">
+      ${telLink ? `<a href="${telLink}" style="background-color: #0A1428; color: #C5A880; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 13px; display: inline-block; margin-right: 8px;">📞 CALL CUSTOMER</a>` : ''}
+      ${whatsappLink ? `<a href="${whatsappLink}" style="background-color: #25D366; color: #FFFFFF; font-weight: 700; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-size: 13px; display: inline-block;">💬 WHATSAPP</a>` : ''}
+    </div>
+  `;
+
+  return baseContainer(`🔔 New Service Request #${enquiry_id}`, '#0A1428', content);
+}
+
 module.exports = {
   otpTemplate,
   welcomeTemplate,
@@ -249,5 +326,6 @@ module.exports = {
   invoiceTemplate,
   passwordResetSuccessTemplate,
   verificationTemplate,
-  loginAlertTemplate
+  loginAlertTemplate,
+  serviceEnquiryTemplate
 };

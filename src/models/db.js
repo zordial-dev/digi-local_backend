@@ -515,6 +515,10 @@ async function setupTablesPg() {
     `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cashfree_payment_id VARCHAR(100)`,
     `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
     `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS auto_renewal BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS vendor_notified BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS vendor_notified_at TIMESTAMP`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS email_sent BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP`,
     `CREATE INDEX IF NOT EXISTS idx_subscriptions_cf_order ON subscriptions (cashfree_order_id)`
   ];
 

@@ -246,6 +246,10 @@ CREATE TABLE IF NOT EXISTS enquiries (
     description TEXT,
     issue_photos JSONB DEFAULT '[]',
     status VARCHAR(50) DEFAULT 'PENDING',
+    vendor_notified BOOLEAN DEFAULT FALSE,
+    vendor_notified_at TIMESTAMP,
+    email_sent BOOLEAN DEFAULT FALSE,
+    email_sent_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
