@@ -6,9 +6,8 @@ const cashfreeService = require('./cashfreeService');
 
 /**
  * Subscription Service
- * Implements 1-year ₹5,999 subscription plans, 8-character coupons,
- * vendor panel status & expiry popups, storefront visibility rules,
- * and multi-stage expiry reminder emails (7d, 3d, 1d, 0d, expired).
+ * Configurable multi-plan subscription engine, precise unused-credit upgrade arithmetic (in integer paise),
+ * server-side Cashfree PG verification, and independent admin approval management.
  */
 class SubscriptionService {
 
@@ -40,29 +39,38 @@ class SubscriptionService {
 
   /**
    * 1. GET AVAILABLE PLANS
-   * Note: The plans table supports future scalability. Currently returns the active 1-year ₹5,999 plan.
+   * Dynamically queries all active plans from database.
+   * Billing interval and pricing are completely configurable without hardcoded logic.
    */
   async getPlans() {
     const res = await query(
-      `SELECT plan_id, plan_code, name, description, price, duration_days, billing_cycle, features, is_active 
+      `SELECT plan_id, plan_code, name, description, price, duration_days, billing_cycle,
+              COALESCE(billing_interval, billing_cycle) as billing_interval, features, is_active, sort_order
        FROM plans 
-       WHERE is_active = TRUE AND plan_code = 'ANNUAL_5999' 
-       ORDER BY plan_id ASC LIMIT 1`
+       WHERE is_active = TRUE 
+       ORDER BY sort_order ASC, price ASC, plan_id ASC`
     );
 
     if (res.rows && res.rows.length > 0) {
-      return res.rows;
+      return res.rows.map(p => ({
+        ...p,
+        plan_id: Number(p.plan_id),
+        price: Number(p.price),
+        duration_days: Number(p.duration_days),
+        billing_interval: String(p.billing_interval || p.billing_cycle || 'MONTHLY').toUpperCase()
+      }));
     }
 
-    // Default fallback
+    // Configurable fallback: Single testing plan (₹2/month)
     return [{
       plan_id: 1,
-      plan_code: 'ANNUAL_5999',
-      name: 'Annual Merchant Plan',
-      description: '1 Year DigiLocal Storefront Visibility & Resident Ordering',
-      price: 5999.00,
-      duration_days: 365,
-      billing_cycle: 'YEARLY',
+      plan_code: 'MONTHLY_TEST_2',
+      name: 'Monthly Merchant Plan (Testing)',
+      description: '1 Month DigiLocal Storefront Visibility & Resident Ordering (Testing Plan)',
+      price: 2.00,
+      duration_days: 30,
+      billing_cycle: 'MONTHLY',
+      billing_interval: 'MONTHLY',
       features: [
         'Storefront visible on DigiLocal user portal',
         'Customers can view and buy products from your store',
@@ -75,8 +83,25 @@ class SubscriptionService {
   }
 
   /**
+   * Helper to retrieve a single active plan by plan_id or plan_code.
+   */
+  async getPlan(planIdOrCode) {
+    if (!planIdOrCode) {
+      // Default to first active plan in database
+      const defaultRes = await query(`SELECT * FROM plans WHERE is_active = TRUE ORDER BY sort_order ASC, plan_id ASC LIMIT 1`);
+      return defaultRes.rows?.[0] || null;
+    }
+
+    const isNumeric = !isNaN(Number(planIdOrCode));
+    const sql = isNumeric
+      ? `SELECT * FROM plans WHERE plan_id = ? LIMIT 1`
+      : `SELECT * FROM plans WHERE UPPER(plan_code) = UPPER(?) LIMIT 1`;
+    const res = await query(sql, [isNumeric ? Number(planIdOrCode) : String(planIdOrCode)]);
+    return res.rows?.[0] || null;
+  }
+
+  /**
    * 2. GET UNUSED ACTIVE COUPONS FOR A VENDOR
-   * Only returns coupons where status = 'unused' and CURRENT_DATE is between start_date and end_date.
    */
   async getVendorCoupons(vendorId) {
     const vId = Number(vendorId);
@@ -106,7 +131,6 @@ class SubscriptionService {
 
   /**
    * 3. APPLY / VALIDATE COUPON
-   * Validates coupon code and returns discounted subscription pricing.
    */
   async applyCoupon({ vendorId, couponCode, planId }) {
     if (!couponCode) {
@@ -116,23 +140,12 @@ class SubscriptionService {
     const vId = vendorId ? Number(vendorId) : null;
     const today = this.getTodayIST();
 
-    // 1. Fetch active 1-year plan
-    let basePrice = 5999.00;
-    let plan = null;
-    if (planId) {
-      const planRes = await query(`SELECT * FROM plans WHERE plan_id = ? AND is_active = TRUE`, [planId]);
-      if (planRes.rows.length > 0) {
-        plan = planRes.rows[0];
-        basePrice = parseFloat(plan.price);
-      }
-    }
+    const plan = await this.getPlan(planId);
     if (!plan) {
-      const planRes = await query(`SELECT * FROM plans WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE LIMIT 1`);
-      plan = planRes.rows[0] || { plan_id: 1, name: 'Annual Merchant Plan', price: 5999.00, duration_days: 365 };
-      basePrice = parseFloat(plan.price);
+      throw new Error('Active subscription plan not found');
     }
+    const basePrice = Number(plan.price);
 
-    // 2. Fetch coupon
     const couponRes = await query(
       `SELECT * FROM coupons WHERE UPPER(coupon_code) = ? LIMIT 1`,
       [cleanCode]
@@ -144,20 +157,17 @@ class SubscriptionService {
 
     const coupon = couponRes.rows[0];
 
-    // 3. Validate status & usage limit
     const timesUsed = Number(coupon.times_used || 0);
     const usageLimit = Number(coupon.usage_limit || 1);
 
     if (String(coupon.status).toLowerCase() === 'used' || timesUsed >= usageLimit) {
-      throw new Error(`Coupon "${cleanCode}" has reached its maximum usage limit (${usageLimit} redemption${usageLimit > 1 ? 's' : ''}).`);
+      throw new Error(`Coupon "${cleanCode}" has reached its maximum usage limit.`);
     }
 
-    // 4. Validate vendor ownership if vendor-specific
     if (coupon.vendor_id && vId && Number(coupon.vendor_id) !== vId) {
       throw new Error(`Coupon "${cleanCode}" is not valid for this vendor account.`);
     }
 
-    // 5. Validate date range
     const couponStartDate = coupon.start_date instanceof Date ? coupon.start_date.toISOString().split('T')[0] : String(coupon.start_date).split('T')[0];
     const couponEndDate = coupon.end_date instanceof Date ? coupon.end_date.toISOString().split('T')[0] : String(coupon.end_date).split('T')[0];
 
@@ -168,14 +178,12 @@ class SubscriptionService {
       throw new Error(`Coupon "${cleanCode}" expired on ${couponEndDate}.`);
     }
 
-    // 6. Calculate discount
     const rawDiscount = parseFloat(coupon.discount);
     let discountAmount = 0.00;
 
     if (coupon.type === 'percentage') {
       discountAmount = (basePrice * rawDiscount) / 100.0;
     } else {
-      // Flat discount
       discountAmount = rawDiscount;
     }
 
@@ -194,7 +202,8 @@ class SubscriptionService {
       final_price: finalPrice,
       plan_id: plan.plan_id,
       plan_name: plan.name,
-      duration_days: plan.duration_days || 365,
+      duration_days: plan.duration_days || 30,
+      billing_interval: plan.billing_interval || plan.billing_cycle || 'MONTHLY',
       start_date: couponStartDate,
       end_date: couponEndDate,
       usage_limit: usageLimit,
@@ -205,164 +214,8 @@ class SubscriptionService {
   }
 
   /**
-   * 4. SUBSCRIBE / RENEW SUBSCRIPTION
-   * Enforces ONLINE payment method ONLY.
-   * Consumes coupon (marks 'used').
-   * Grants 1-year subscription (extends current subscription if active).
-   * Sets vendor status to 'ACTIVE' so shop is immediately live on user portal.
-   */
-  async subscribe({ vendorId, planId, couponCode, paymentMethod = 'ONLINE', transactionId }) {
-    const vId = Number(vendorId);
-    if (!vId || isNaN(vId)) {
-      throw new Error('Valid vendor_id is required');
-    }
-
-    // Check payment method - strictly ONLINE ONLY
-    const rawMethod = String(paymentMethod || '').trim().toUpperCase();
-    const disallowedMethods = ['COD', 'CASH', 'PAY_ON_DELIVERY', 'CASH_ON_DELIVERY', 'OFFLINE'];
-    if (disallowedMethods.includes(rawMethod)) {
-      throw new Error('Vendor subscription can ONLY be purchased using online payment (Razorpay, Cashfree, UPI, NetBanking, Card). Cash/COD is not accepted for subscriptions.');
-    }
-
-    // Check vendor exists
-    const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`, [vId]);
-    if (!vendorRes.rows || vendorRes.rows.length === 0) {
-      throw new Error(`Vendor ${vId} not found.`);
-    }
-    const vendor = vendorRes.rows[0];
-
-    // Fetch plan details (1-year 5999 default)
-    let plan = null;
-    if (planId) {
-      const pRes = await query(`SELECT * FROM plans WHERE plan_id = ? AND is_active = TRUE`, [planId]);
-      if (pRes.rows.length > 0) plan = pRes.rows[0];
-    }
-    if (!plan) {
-      const pRes = await query(`SELECT * FROM plans WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE LIMIT 1`);
-      plan = pRes.rows[0] || { plan_id: 1, name: 'Annual Merchant Plan', price: 5999.00, duration_days: 365 };
-    }
-
-    const basePrice = parseFloat(plan.price || 5999.00);
-    let discountAmount = 0.00;
-    let appliedCoupon = null;
-
-    // Validate & apply coupon if provided
-    if (couponCode) {
-      const couponCheck = await this.applyCoupon({ vendorId: vId, couponCode, planId: plan.plan_id });
-      discountAmount = couponCheck.discount_amount;
-      appliedCoupon = couponCheck;
-    }
-
-    const finalPrice = Math.max(0, Math.round((basePrice - discountAmount) * 100) / 100);
-    const txnId = transactionId || `TXN_${Date.now()}_${vId}`;
-    const todayStr = this.getTodayIST();
-
-    // Check current active subscription to determine start and end dates
-    const existingSubRes = await query(
-      `SELECT subscription_id, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date, status 
-       FROM subscriptions 
-       WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' 
-       ORDER BY subscription_id DESC LIMIT 1`,
-      [vId]
-    );
-
-    let startDateStr = todayStr;
-    const existingSub = existingSubRes.rows && existingSubRes.rows[0];
-
-    if (existingSub && existingSub.end_date && existingSub.end_date >= todayStr) {
-      // Current subscription still active: Extend from current end_date!
-      startDateStr = existingSub.end_date;
-    }
-
-    // Calculate end_date = startDate + 365 days
-    const startDateObj = new Date(startDateStr + 'T00:00:00+05:30');
-    const endDateObj = new Date(startDateObj);
-    endDateObj.setFullYear(endDateObj.getFullYear() + 1);
-    const endDateStr = endDateObj.toISOString().split('T')[0];
-
-    return await withTransaction(async (txQuery) => {
-      // 1. Atomically increment times_used and transition status if limit reached
-      if (appliedCoupon && appliedCoupon.coupon_id) {
-        await txQuery(
-          `UPDATE coupons 
-           SET times_used = COALESCE(times_used, 0) + 1,
-               status = CASE WHEN COALESCE(times_used, 0) + 1 >= usage_limit THEN 'used' ELSE 'unused' END
-           WHERE id = ?`,
-          [appliedCoupon.coupon_id]
-        );
-      }
-
-      // 2. Insert new 1-year subscription record
-      const subRes = await txQuery(
-        `INSERT INTO subscriptions (
-           vendor_id, plan_id, plan_name, start_date, end_date, 
-           original_price, discount_amount, final_price, coupon_code, 
-           payment_method, transaction_id, status, reminders_sent, created_at, updated_at
-         ) VALUES (?, ?, ?, ?::date, ?::date, ?, ?, ?, ?, ?, ?, 'ACTIVE', '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         RETURNING *`,
-        [
-          vId,
-          plan.plan_id || null,
-          plan.name || 'Annual Merchant Plan',
-          startDateStr,
-          endDateStr,
-          basePrice,
-          discountAmount,
-          finalPrice,
-          appliedCoupon ? appliedCoupon.coupon_code : null,
-          rawMethod || 'ONLINE',
-          txnId
-        ]
-      );
-
-      const newSub = subRes.rows[0];
-
-      // 3. Ensure vendor status is set to 'ACTIVE' so store is visible to resident users
-      await txQuery(`UPDATE vendors SET status = 'ACTIVE' WHERE vendor_id = ?`, [vId]);
-
-      // 4. Record payment in payments table
-      await txQuery(
-        `INSERT INTO payments (vendor_id, amount, currency, payment_status, payment_method, transaction_id, created_at, updated_at)
-         VALUES (?, ?, 'INR', 'SUCCESS', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [vId, finalPrice, rawMethod || 'ONLINE', txnId]
-      ).catch(() => {});
-
-      // 5. Send Renewal / Subscription Success Email
-      try {
-        if (vendor.email && !vendor.email.includes('@vendor.digilocal')) {
-          sendRenewalEmail(vendor.email, vendor.vendor_name, vendor.store_name, endDateStr, finalPrice, txnId);
-        }
-      } catch (mailErr) {
-        console.warn('[SubscriptionService] Could not send confirmation email:', mailErr.message);
-      }
-
-      // 6. Clear cache
-      memoryCache.clear();
-
-      return {
-        success: true,
-        message: `Subscription activated successfully for 1 full year until ${endDateStr}! Store is now visible on DigiLocal user portal.`,
-        subscription_id: newSub.subscription_id,
-        vendor_id: vId,
-        store_name: vendor.store_name,
-        plan_name: plan.name,
-        start_date: startDateStr,
-        end_date: endDateStr,
-        original_price: basePrice,
-        discount_amount: discountAmount,
-        final_price: finalPrice,
-        coupon_applied: appliedCoupon ? appliedCoupon.coupon_code : null,
-        payment_method: rawMethod || 'ONLINE',
-        transaction_id: txnId,
-        status: 'ACTIVE',
-        shop_visible_on_portal: true
-      };
-    });
-  }
-
-  /**
-   * 4a. CREATE SUBSCRIPTION REAL PAYMENT SESSION (Cashfree PG)
-   * Calculates plan amount, applies coupon discount, and generates Cashfree payment_session_id.
+   * 4. CREATE SUBSCRIPTION REAL PAYMENT SESSION (Cashfree PG)
+   * Resolves plan price dynamically from database.
    */
   async createSubscriptionPaymentSession({ vendorId, planId, couponCode, returnUrl, notifyUrl, options = {} }) {
     const vId = Number(vendorId);
@@ -370,29 +223,22 @@ class SubscriptionService {
       throw new Error('Valid vendor_id is required');
     }
 
-    // Check vendor exists
     const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`, [vId]);
     if (!vendorRes.rows || vendorRes.rows.length === 0) {
-      throw new Error(`Vendor ${vId} not found.`);
+      throw new Error(`Vendor #${vId} not found.`);
     }
     const vendor = vendorRes.rows[0];
 
-    // Fetch plan details (1-year 5999 default)
-    let plan = null;
-    if (planId) {
-      const pRes = await query(`SELECT * FROM plans WHERE plan_id = ? AND is_active = TRUE`, [planId]);
-      if (pRes.rows.length > 0) plan = pRes.rows[0];
-    }
+    // Fetch plan details dynamically
+    const plan = await this.getPlan(planId);
     if (!plan) {
-      const pRes = await query(`SELECT * FROM plans WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE LIMIT 1`);
-      plan = pRes.rows[0] || { plan_id: 1, name: 'Annual Merchant Plan', price: 5999.00, duration_days: 365 };
+      throw new Error('Subscription plan not found or currently inactive');
     }
 
-    const basePrice = parseFloat(plan.price || 5999.00);
+    const basePrice = Number(plan.price);
     let discountAmount = 0.00;
     let appliedCoupon = null;
 
-    // Validate & apply coupon if provided
     if (couponCode) {
       const couponCheck = await this.applyCoupon({ vendorId: vId, couponCode, planId: plan.plan_id });
       discountAmount = couponCheck.discount_amount;
@@ -419,7 +265,7 @@ class SubscriptionService {
       throw new Error(session?.error || 'Failed to generate Cashfree payment session for subscription');
     }
 
-    // Record initial PENDING payment in payments table for audit
+    // Record PENDING payment audit log in payments table
     await query(
       `INSERT INTO payments (
          order_id, vendor_id, amount, currency, payment_status,
@@ -434,7 +280,7 @@ class SubscriptionService {
         vendor.vendor_name || vendor.store_name,
         vendor.phone_number,
         vendor.email,
-        `Annual Subscription Payment for ${vendor.store_name}${appliedCoupon ? ' (Coupon: ' + appliedCoupon.coupon_code + ')' : ''}`
+        `Subscription Payment for ${vendor.store_name} [${plan.name}]${appliedCoupon ? ' (Coupon: ' + appliedCoupon.coupon_code + ')' : ''}`
       ]
     ).catch(err => console.warn('Could not pre-insert payment audit log:', err.message));
 
@@ -451,38 +297,38 @@ class SubscriptionService {
       final_price: finalPrice,
       coupon_applied: appliedCoupon ? appliedCoupon.coupon_code : null,
       payment_url: session.payment_url,
-      environment: session.mode === 'live' ? 'PRODUCTION' : (session.mode === 'sandbox' || session.mode === 'test_sandbox' ? 'SANDBOX' : 'PRODUCTION'),
+      environment: session.mode === 'live' ? 'PRODUCTION' : 'SANDBOX',
       vendor_id: vId,
       store_name: vendor.store_name,
       plan_id: plan.plan_id,
       plan_name: plan.name,
+      billing_interval: plan.billing_interval || plan.billing_cycle || 'MONTHLY',
       cashfree: session
     };
   }
 
   /**
-   * 4b. VERIFY AND ACTIVATE SUBSCRIPTION REAL PAYMENT (Cashfree PG)
-   * Verifies payment status via Cashfree PG, prevents duplicate activations,
-   * activates subscription for 1 year, updates vendor status to ACTIVE, marks coupon used, and sends confirmation email.
+   * 5. VERIFY AND ACTIVATE SUBSCRIPTION REAL PAYMENT (Cashfree PG)
+   * Enforces server-side payment verification, idempotency protection against duplicate calls,
+   * activates subscription for plan.duration_days, but STRICTLY preserves merchant approval status.
    */
   async verifyAndActivatePayment({ orderId, vendorId, couponCode, planId, transactionId, options = {} }) {
     if (!orderId) {
       throw new Error('order_id is required for payment verification');
     }
 
-    // Extract vendorId from orderId if missing (Format: SUB_<timestamp>_<vendorId>)
+    // Resolve vendorId
     let vId = vendorId ? Number(vendorId) : null;
     if (!vId && orderId.startsWith('SUB_')) {
       const parts = orderId.split('_');
-      if (parts.length >= 3) {
-        vId = Number(parts[2]);
+      if (parts.length >= 3 && !isNaN(Number(parts[parts.length - 1]))) {
+        vId = Number(parts[parts.length - 1]);
       }
     }
 
-    // If still missing, check in payments table
     if (!vId) {
       const pCheck = await query(`SELECT vendor_id FROM payments WHERE order_id = ? OR cashfree_order_id = ? LIMIT 1`, [orderId, orderId]);
-      if (pCheck.rows.length > 0) {
+      if (pCheck.rows.length > 0 && pCheck.rows[0].vendor_id) {
         vId = Number(pCheck.rows[0].vendor_id);
       }
     }
@@ -491,14 +337,14 @@ class SubscriptionService {
       throw new Error('Unable to resolve vendor_id for subscription payment verification');
     }
 
-    // 1. Check if this payment order has ALREADY activated a subscription (Idempotency protection)
+    // 1. Idempotency Check: Did this payment order ALREADY activate a subscription?
     const existingSubCheck = await query(
-      `SELECT s.*, v.store_name 
+      `SELECT s.*, v.store_name, v.status as vendor_status 
        FROM subscriptions s 
        JOIN vendors v ON s.vendor_id = v.vendor_id 
-       WHERE s.transaction_id = ? OR s.transaction_id LIKE ? 
+       WHERE s.cashfree_order_id = ? OR s.transaction_id = ? OR s.transaction_id LIKE ? 
        ORDER BY s.subscription_id DESC LIMIT 1`,
-      [orderId, `%${orderId}%`]
+      [orderId, orderId, `%${orderId}%`]
     );
 
     if (existingSubCheck.rows && existingSubCheck.rows.length > 0) {
@@ -514,17 +360,25 @@ class SubscriptionService {
         plan_name: existingSub.plan_name,
         start_date: existingSub.start_date,
         end_date: existingSub.end_date,
+        billing_interval: existingSub.billing_interval || 'MONTHLY',
         payment_method: existingSub.payment_method || 'CASHFREE',
         transaction_id: existingSub.transaction_id,
         status: existingSub.status,
-        shop_visible_on_portal: true
+        merchant_status: existingSub.vendor_status,
+        shop_visible_on_portal: existingSub.vendor_status === 'ACTIVE' && existingSub.status === 'ACTIVE'
       };
     }
 
-    // 2. Query Cashfree PG to verify real payment status
+    // 2. Query Cashfree PG to verify real payment status server-side
     const verification = await cashfreeService.verifyPaymentStatus(orderId, transactionId, options);
 
     if (!verification.success || !verification.verified) {
+      // Record failed payment in payments ledger
+      await query(
+        `UPDATE payments SET payment_status = 'FAILED', updated_at = CURRENT_TIMESTAMP WHERE order_id = ? OR cashfree_order_id = ?`,
+        [orderId, orderId]
+      ).catch(() => {});
+
       return {
         success: false,
         verified: false,
@@ -535,16 +389,21 @@ class SubscriptionService {
     }
 
     const verifiedPaymentId = verification.cf_payment_id || transactionId || `CF_PAY_${Date.now()}`;
-    const verifiedAmount = Number(verification.payment_amount || 5999.00);
+    const verifiedAmount = Number(verification.payment_amount || 0);
 
-    // 3. Vendor lookup
+    // 3. Resolve vendor and plan
     const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`, [vId]);
     if (!vendorRes.rows || vendorRes.rows.length === 0) {
       throw new Error(`Vendor ${vId} not found.`);
     }
     const vendor = vendorRes.rows[0];
 
-    // 4. Resolve coupon code if not explicitly passed
+    const plan = await this.getPlan(planId);
+    if (!plan) {
+      throw new Error('Active plan not found');
+    }
+
+    // 4. Resolve coupon code
     let activeCouponCode = couponCode;
     if (!activeCouponCode) {
       const payMeta = await query(`SELECT notes FROM payments WHERE order_id = ? OR cashfree_order_id = ? LIMIT 1`, [orderId, orderId]);
@@ -554,10 +413,9 @@ class SubscriptionService {
       }
     }
 
-    // 5. Activate subscription inside transaction
+    // 5. Compute subscription dates based on plan.duration_days
     const todayStr = this.getTodayIST();
 
-    // Check existing active subscription to compute dates
     const existingActiveSubRes = await query(
       `SELECT subscription_id, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date, status 
        FROM subscriptions 
@@ -572,13 +430,16 @@ class SubscriptionService {
       startDateStr = activeSub.end_date;
     }
 
+    const durationDays = Number(plan.duration_days || 30);
     const startDateObj = new Date(startDateStr + 'T00:00:00+05:30');
     const endDateObj = new Date(startDateObj);
-    endDateObj.setFullYear(endDateObj.getFullYear() + 1);
+    endDateObj.setDate(endDateObj.getDate() + durationDays);
     const endDateStr = endDateObj.toISOString().split('T')[0];
 
+    const billingInterval = String(plan.billing_interval || plan.billing_cycle || 'MONTHLY').toUpperCase();
+
     return await withTransaction(async (txQuery) => {
-      // Atomically increment times_used and transition status if limit reached
+      // Consume coupon if applicable
       if (activeCouponCode) {
         await txQuery(
           `UPDATE coupons 
@@ -596,29 +457,33 @@ class SubscriptionService {
         `INSERT INTO subscriptions (
            vendor_id, plan_id, plan_name, start_date, end_date, 
            original_price, discount_amount, final_price, coupon_code, 
-           payment_method, transaction_id, status, reminders_sent, created_at, updated_at
-         ) VALUES (?, ?, ?, ?::date, ?::date, ?, ?, ?, ?, 'CASHFREE', ?, 'ACTIVE', '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           payment_method, transaction_id, cashfree_order_id, cashfree_payment_id,
+           billing_interval, status, reminders_sent, created_at, updated_at
+         ) VALUES (?, ?, ?, ?::date, ?::date, ?, ?, ?, ?, 'CASHFREE', ?, ?, ?, ?, 'ACTIVE', '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
         [
           vId,
-          planId || 1,
-          'Annual Merchant Plan',
+          plan.plan_id,
+          plan.name,
           startDateStr,
           endDateStr,
-          5999.00,
-          Math.max(0, 5999.00 - verifiedAmount),
+          Number(plan.price),
+          Math.max(0, Number(plan.price) - verifiedAmount),
           verifiedAmount,
           activeCouponCode || null,
-          finalTxnIdentifier
+          finalTxnIdentifier,
+          orderId,
+          verifiedPaymentId,
+          billingInterval
         ]
       );
 
       const newSub = subRes.rows[0];
 
-      // Update vendor status to ACTIVE
-      await txQuery(`UPDATE vendors SET status = 'ACTIVE' WHERE vendor_id = ?`, [vId]);
+      // CRITICAL SAFEGUARD: Keep merchant admin approval status separate from payment activation!
+      // Do NOT mutate vendors.status here. If vendor.status is PENDING, it remains PENDING awaiting admin approval.
 
-      // Update / insert payments table
+      // Update payments ledger
       await txQuery(
         `UPDATE payments 
          SET payment_status = 'SUCCESS',
@@ -631,43 +496,480 @@ class SubscriptionService {
         [verifiedPaymentId, verifiedAmount, orderId, orderId]
       );
 
-      // Send confirmation email
       try {
         if (vendor.email && !vendor.email.includes('@vendor.digilocal')) {
           sendRenewalEmail(vendor.email, vendor.vendor_name, vendor.store_name, endDateStr, verifiedAmount, verifiedPaymentId);
         }
       } catch (mailErr) {
-        console.warn('[SubscriptionService] Could not send confirmation email:', mailErr.message);
+        console.warn('[SubscriptionService] Confirmation email warning:', mailErr.message);
       }
 
-      // Clear cache
       memoryCache.clear();
 
       return {
         success: true,
         verified: true,
-        message: `Subscription activated successfully for 1 full year until ${endDateStr}! Store is now visible on DigiLocal user portal.`,
+        message: `Subscription successfully activated until ${endDateStr}!`,
         subscription_id: newSub.subscription_id,
         vendor_id: vId,
         store_name: vendor.store_name,
-        plan_name: 'Annual Merchant Plan',
+        plan_name: plan.name,
         start_date: startDateStr,
         end_date: endDateStr,
+        billing_interval: billingInterval,
         final_price: verifiedAmount,
         coupon_applied: activeCouponCode || null,
         payment_method: 'CASHFREE',
         transaction_id: verifiedPaymentId,
         cashfree_order_id: orderId,
         status: 'ACTIVE',
-        shop_visible_on_portal: true
+        merchant_status: vendor.status,
+        shop_visible_on_portal: vendor.status === 'ACTIVE'
       };
     });
   }
 
   /**
-   * 5. VENDOR PANEL SUBSCRIPTION STATUS & EXPIRY POPUP
-   * Checks subscription status, computes days left, and determines if frontend (Web/App)
-   * should trigger an expiry popup/modal or renewal banner.
+   * 6. GENERIC UPGRADE QUOTE CALCULATION
+   * Computes precise unused credit in integer paise based on remaining billing time.
+   * Enforces that upgrade is only allowed to a higher-priced plan.
+   */
+  async calculateUpgradeQuote({ vendorId, toPlanId }) {
+    const vId = Number(vendorId);
+    if (!vId || isNaN(vId)) {
+      throw new Error('Valid vendor_id is required');
+    }
+    const targetPlanId = Number(toPlanId);
+    if (!targetPlanId || isNaN(targetPlanId)) {
+      throw new Error('Valid to_plan_id is required');
+    }
+
+    const toPlan = await this.getPlan(targetPlanId);
+    if (!toPlan) {
+      throw new Error(`Target plan #${targetPlanId} not found.`);
+    }
+    if (!toPlan.is_active) {
+      throw new Error(`Target plan "${toPlan.name}" is currently inactive.`);
+    }
+
+    // Fetch latest active subscription
+    const subRes = await query(
+      `SELECT s.*, p.price as plan_table_price, p.duration_days as plan_duration, p.billing_cycle, p.billing_interval
+       FROM subscriptions s
+       LEFT JOIN plans p ON s.plan_id = p.plan_id
+       WHERE s.vendor_id = ? AND UPPER(s.status) = 'ACTIVE'
+       ORDER BY s.end_date DESC, s.subscription_id DESC LIMIT 1`,
+      [vId]
+    );
+
+    if (!subRes.rows || subRes.rows.length === 0) {
+      throw new Error('No active subscription found to upgrade. Please purchase a subscription first.');
+    }
+
+    const currentSub = subRes.rows[0];
+    const daysLeft = this.calculateDaysLeft(currentSub.end_date);
+
+    if (daysLeft < 0) {
+      throw new Error('Current subscription has expired. Upgrades are only permitted on active subscriptions.');
+    }
+
+    const currentPriceRupees = Number(currentSub.original_price || currentSub.plan_table_price || currentSub.final_price || 0);
+    const newPriceRupees = Number(toPlan.price || 0);
+
+    const currentPricePaise = Math.round(currentPriceRupees * 100);
+    const newPricePaise = Math.round(newPriceRupees * 100);
+
+    // Rule: Reject downgrades and same-price plan selections
+    if (newPricePaise <= currentPricePaise) {
+      throw new Error(`Upgrades are only permitted to a higher-priced plan. Current plan: ₹${currentPriceRupees.toFixed(2)}, Target plan: ₹${newPriceRupees.toFixed(2)}.`);
+    }
+
+    // Time calculations
+    const startTs = new Date(currentSub.start_date).getTime();
+    const endTs = new Date(currentSub.end_date).getTime();
+    const nowTs = Date.now();
+
+    const totalDurationSec = Math.max(1, Math.round((endTs - startTs) / 1000));
+    const remainingSec = Math.max(0, Math.min(totalDurationSec, Math.round((endTs - nowTs) / 1000)));
+
+    // Base unused credit on verified amount paid
+    const paidAmountRupees = Number(currentSub.final_price !== undefined && currentSub.final_price !== null ? currentSub.final_price : currentPriceRupees);
+    const paidPaise = Math.round(paidAmountRupees * 100);
+
+    let unusedCreditPaise = 0;
+    if (nowTs <= startTs) {
+      unusedCreditPaise = paidPaise; // 100% unused
+    } else if (remainingSec <= 0) {
+      unusedCreditPaise = 0;
+    } else {
+      // Documented Rounding Rule: Math.floor on integer paise so credit never exceeds mathematical entitlement
+      unusedCreditPaise = Math.floor((paidPaise * remainingSec) / totalDurationSec);
+    }
+
+    const eligibleCreditPaise = Math.min(unusedCreditPaise, newPricePaise);
+    const payablePaise = Math.max(0, newPricePaise - eligibleCreditPaise);
+
+    const unusedCreditRupees = Number((unusedCreditPaise / 100).toFixed(2));
+    const eligibleCreditRupees = Number((eligibleCreditPaise / 100).toFixed(2));
+    const payableRupees = Number((payablePaise / 100).toFixed(2));
+
+    return {
+      vendor_id: vId,
+      current_subscription_id: Number(currentSub.subscription_id),
+      from_plan: {
+        plan_id: currentSub.plan_id ? Number(currentSub.plan_id) : null,
+        plan_name: currentSub.plan_name,
+        price: currentPriceRupees,
+        amount_paid: paidAmountRupees,
+        start_date: currentSub.start_date instanceof Date ? currentSub.start_date.toISOString().split('T')[0] : String(currentSub.start_date).split('T')[0],
+        end_date: currentSub.end_date instanceof Date ? currentSub.end_date.toISOString().split('T')[0] : String(currentSub.end_date).split('T')[0],
+        days_left: daysLeft,
+        billing_interval: currentSub.billing_interval || 'MONTHLY'
+      },
+      to_plan: {
+        plan_id: Number(toPlan.plan_id),
+        plan_code: toPlan.plan_code,
+        name: toPlan.name,
+        price: newPriceRupees,
+        duration_days: Number(toPlan.duration_days),
+        billing_cycle: toPlan.billing_cycle,
+        billing_interval: toPlan.billing_interval || toPlan.billing_cycle || 'MONTHLY'
+      },
+      calculation: {
+        total_duration_seconds: totalDurationSec,
+        remaining_seconds: remainingSec,
+        unused_ratio: Number((remainingSec / totalDurationSec).toFixed(4)),
+        unused_credit_amount: unusedCreditRupees,
+        eligible_unused_credit: eligibleCreditRupees,
+        payable_amount: payableRupees,
+        payable_paise: payablePaise,
+        currency: 'INR'
+      }
+    };
+  }
+
+  /**
+   * 7. REQUEST PLAN UPGRADE
+   * If payable_amount > 0: Creates Cashfree payment session for exact payable amount.
+   * If payable_amount == 0: Activates immediately in transaction.
+   * Uses row-level lock and idempotency key to prevent concurrent upgrade requests.
+   */
+  async requestUpgrade({ vendorId, toPlanId, idempotencyKey, returnUrl, notifyUrl, options = {} }) {
+    const vId = Number(vendorId);
+    if (!vId || isNaN(vId)) {
+      throw new Error('Valid vendor_id is required');
+    }
+
+    const cleanKey = String(idempotencyKey || `UPG_IDEM_${vId}_${toPlanId}_${Date.now()}`).trim();
+
+    // Idempotency check
+    const existingUpgrade = await query(
+      `SELECT * FROM subscription_upgrades WHERE idempotency_key = ?`,
+      [cleanKey]
+    );
+    if (existingUpgrade.rows && existingUpgrade.rows.length > 0) {
+      const upg = existingUpgrade.rows[0];
+      return {
+        success: true,
+        already_exists: true,
+        status: upg.status,
+        upgrade_id: upg.upgrade_id,
+        payable_amount: Number(upg.payable_amount),
+        cashfree_order_id: upg.cashfree_order_id
+      };
+    }
+
+    const quote = await this.calculateUpgradeQuote({ vendorId: vId, toPlanId });
+    const { calculation, from_plan, to_plan, current_subscription_id } = quote;
+    const payableAmount = calculation.payable_amount;
+
+    // Handle zero payable upgrade (100% covered by unused credit)
+    if (payableAmount <= 0) {
+      return await withTransaction(async (txQuery) => {
+        const lockRes = await txQuery(
+          `SELECT subscription_id, status FROM subscriptions WHERE subscription_id = ? FOR UPDATE`,
+          [current_subscription_id]
+        );
+        if (!lockRes.rows || lockRes.rows.length === 0 || lockRes.rows[0].status !== 'ACTIVE') {
+          throw new Error('Subscription state has changed. Upgrade aborted.');
+        }
+
+        const todayStr = this.getTodayIST();
+        const durationDays = Number(to_plan.duration_days || 30);
+        const startDateObj = new Date(todayStr + 'T00:00:00+05:30');
+        const endDateObj = new Date(startDateObj);
+        endDateObj.setDate(endDateObj.getDate() + durationDays);
+        const endDateStr = endDateObj.toISOString().split('T')[0];
+
+        // Apply upgraded plan with fresh billing cycle starting now
+        await txQuery(
+          `UPDATE subscriptions 
+           SET plan_id = ?, plan_name = ?, start_date = ?::date, end_date = ?::date,
+               original_price = ?, discount_amount = ?, final_price = 0.00,
+               billing_interval = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE subscription_id = ?`,
+          [
+            to_plan.plan_id,
+            to_plan.name,
+            todayStr,
+            endDateStr,
+            to_plan.price,
+            calculation.eligible_unused_credit,
+            to_plan.billing_interval,
+            current_subscription_id
+          ]
+        );
+
+        // Record upgrade audit record
+        const upgRes = await txQuery(
+          `INSERT INTO subscription_upgrades (
+             vendor_id, subscription_id, from_plan_id, to_plan_id,
+             old_plan_price, new_plan_price, unused_credit_amount,
+             payable_amount, status, idempotency_key, created_at, activated_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, 0.00, 'SUCCESS', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+           RETURNING *`,
+          [
+            vId,
+            current_subscription_id,
+            from_plan.plan_id,
+            to_plan.plan_id,
+            from_plan.price,
+            to_plan.price,
+            calculation.eligible_unused_credit,
+            cleanKey
+          ]
+        );
+
+        memoryCache.clear();
+
+        return {
+          success: true,
+          status: 'SUCCESS',
+          zero_payable: true,
+          message: `Upgraded to "${to_plan.name}" successfully! Credit of ₹${calculation.eligible_unused_credit.toFixed(2)} applied.`,
+          upgrade_id: upgRes.rows[0]?.upgrade_id,
+          vendor_id: vId,
+          new_plan: to_plan,
+          start_date: todayStr,
+          end_date: endDateStr,
+          credit_applied: calculation.eligible_unused_credit,
+          amount_charged: 0.00
+        };
+      });
+    }
+
+    // Payable amount > 0: Create Cashfree checkout session
+    const cfOrderId = `SUB_UPG_${Date.now()}_${vId}`;
+    const vendorRes = await query(`SELECT vendor_name, store_name, email, phone_number FROM vendors WHERE vendor_id = ?`, [vId]);
+    const vendor = vendorRes.rows[0] || {};
+
+    const session = await cashfreeService.createPaymentSession({
+      order_id: cfOrderId,
+      order_amount: payableAmount,
+      order_currency: 'INR',
+      order_note: `DigiLocal Subscription Upgrade to ${to_plan.name} (Credit: ₹${calculation.eligible_unused_credit})`,
+      customer_details: {
+        customer_id: String(vId),
+        customer_name: vendor.vendor_name || vendor.store_name || 'Merchant Owner',
+        customer_email: vendor.email || 'vendor@digilocal.in',
+        customer_phone: vendor.phone_number || '9876543210'
+      },
+      order_meta: {
+        return_url: returnUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
+        notify_url: notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+        payment_methods: 'cc,dc,upi,nb,app,paylater'
+      },
+      order_tags: {
+        order_type: 'VENDOR_SUBSCRIPTION_UPGRADE',
+        vendor_id: String(vId),
+        subscription_id: String(current_subscription_id),
+        from_plan_id: String(from_plan.plan_id),
+        to_plan_id: String(to_plan.plan_id),
+        idempotency_key: cleanKey,
+        credit_amount: String(calculation.eligible_unused_credit),
+        payable_amount: String(payableAmount)
+      }
+    }, options);
+
+    if (!session || !session.success || !session.payment_session_id) {
+      throw new Error(session?.error || 'Failed to create Cashfree payment session for upgrade');
+    }
+
+    // Record PENDING upgrade audit entry
+    await query(
+      `INSERT INTO subscription_upgrades (
+         vendor_id, subscription_id, from_plan_id, to_plan_id,
+         old_plan_price, new_plan_price, unused_credit_amount,
+         payable_amount, cashfree_order_id, status, idempotency_key, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, CURRENT_TIMESTAMP)`,
+      [
+        vId,
+        current_subscription_id,
+        from_plan.plan_id,
+        to_plan.plan_id,
+        from_plan.price,
+        to_plan.price,
+        calculation.eligible_unused_credit,
+        payableAmount,
+        session.order_id,
+        cleanKey
+      ]
+    );
+
+    return {
+      success: true,
+      status: 'PENDING_PAYMENT',
+      payment_session_id: session.payment_session_id,
+      order_id: session.order_id,
+      cf_order_id: session.cf_order_id,
+      payable_amount: payableAmount,
+      credit_applied: calculation.eligible_unused_credit,
+      payment_url: session.payment_url,
+      quote
+    };
+  }
+
+  /**
+   * 8. VERIFY AND ACTIVATE UPGRADE PAYMENT
+   */
+  async verifyAndActivateUpgrade({ orderId, transactionId, options = {} }) {
+    if (!orderId) {
+      throw new Error('order_id is required for upgrade verification');
+    }
+
+    const upgRes = await query(
+      `SELECT u.*, p_to.name as to_plan_name, p_to.duration_days as to_duration, 
+              COALESCE(p_to.billing_interval, p_to.billing_cycle) as to_interval
+       FROM subscription_upgrades u
+       LEFT JOIN plans p_to ON u.to_plan_id = p_to.plan_id
+       WHERE u.cashfree_order_id = ?`,
+      [orderId]
+    );
+
+    if (!upgRes.rows || upgRes.rows.length === 0) {
+      throw new Error(`Upgrade record for order #${orderId} not found`);
+    }
+
+    const upgradeRecord = upgRes.rows[0];
+
+    // Idempotency check
+    if (upgradeRecord.status === 'SUCCESS') {
+      return {
+        success: true,
+        verified: true,
+        already_processed: true,
+        message: 'Upgrade has already been activated.',
+        upgrade_id: upgradeRecord.upgrade_id,
+        vendor_id: upgradeRecord.vendor_id
+      };
+    }
+
+    // Verify Cashfree PG status
+    const verification = await cashfreeService.verifyPaymentStatus(orderId, transactionId, options);
+    if (!verification.success || !verification.verified) {
+      await query(
+        `UPDATE subscription_upgrades SET status = 'FAILED' WHERE upgrade_id = ?`,
+        [upgradeRecord.upgrade_id]
+      ).catch(() => {});
+
+      return {
+        success: false,
+        verified: false,
+        payment_status: verification.payment_status || 'FAILED',
+        error: verification.error || 'Upgrade payment verification failed'
+      };
+    }
+
+    const verifiedPaymentId = verification.cf_payment_id || transactionId || `CF_PAY_${Date.now()}`;
+    const verifiedAmount = Number(verification.payment_amount || upgradeRecord.payable_amount);
+
+    return await withTransaction(async (txQuery) => {
+      const subRes = await txQuery(
+        `SELECT * FROM subscriptions WHERE subscription_id = ? FOR UPDATE`,
+        [upgradeRecord.subscription_id]
+      );
+      if (!subRes.rows || subRes.rows.length === 0) {
+        throw new Error('Subscription not found during activation');
+      }
+
+      const todayStr = this.getTodayIST();
+      const durationDays = Number(upgradeRecord.to_duration || 30);
+      const startDateObj = new Date(todayStr + 'T00:00:00+05:30');
+      const endDateObj = new Date(startDateObj);
+      endDateObj.setDate(endDateObj.getDate() + durationDays);
+      const endDateStr = endDateObj.toISOString().split('T')[0];
+
+      // Update active subscription with new plan
+      await txQuery(
+        `UPDATE subscriptions
+         SET plan_id = ?, plan_name = ?, start_date = ?::date, end_date = ?::date,
+             original_price = ?, discount_amount = ?, final_price = ?,
+             billing_interval = ?, cashfree_order_id = ?, cashfree_payment_id = ?,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE subscription_id = ?`,
+        [
+          upgradeRecord.to_plan_id,
+          upgradeRecord.to_plan_name,
+          todayStr,
+          endDateStr,
+          upgradeRecord.new_plan_price,
+          upgradeRecord.unused_credit_amount,
+          verifiedAmount,
+          upgradeRecord.to_interval || 'MONTHLY',
+          orderId,
+          verifiedPaymentId,
+          upgradeRecord.subscription_id
+        ]
+      );
+
+      // Mark upgrade SUCCESS
+      await txQuery(
+        `UPDATE subscription_upgrades
+         SET status = 'SUCCESS', cashfree_payment_id = ?, activated_at = CURRENT_TIMESTAMP
+         WHERE upgrade_id = ?`,
+        [verifiedPaymentId, upgradeRecord.upgrade_id]
+      );
+
+      // Record payment in payments ledger
+      await txQuery(
+        `INSERT INTO payments (
+           order_id, vendor_id, amount, currency, payment_status,
+           payment_method, payment_gateway, cashfree_order_id, cashfree_payment_id,
+           notes, created_at
+         ) VALUES (?, ?, ?, 'INR', 'SUCCESS', 'CASHFREE', 'CASHFREE', ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          orderId,
+          upgradeRecord.vendor_id,
+          verifiedAmount,
+          orderId,
+          verifiedPaymentId,
+          `Subscription Upgrade to ${upgradeRecord.to_plan_name} (Credit: ₹${upgradeRecord.unused_credit_amount})`
+        ]
+      ).catch(() => {});
+
+      memoryCache.clear();
+
+      return {
+        success: true,
+        verified: true,
+        message: `Subscription successfully upgraded to "${upgradeRecord.to_plan_name}"!`,
+        upgrade_id: upgradeRecord.upgrade_id,
+        vendor_id: upgradeRecord.vendor_id,
+        new_plan_id: upgradeRecord.to_plan_id,
+        plan_name: upgradeRecord.to_plan_name,
+        start_date: todayStr,
+        end_date: endDateStr,
+        credit_applied: Number(upgradeRecord.unused_credit_amount),
+        amount_paid: verifiedAmount,
+        transaction_id: verifiedPaymentId,
+        status: 'ACTIVE'
+      };
+    });
+  }
+
+  /**
+   * 9. VENDOR PANEL SUBSCRIPTION STATUS
+   * Provides current subscription, lifecycle status, billing interval, and renewal/expiry details.
    */
   async getVendorSubscriptionStatus(vendorId) {
     const vId = Number(vendorId);
@@ -684,13 +986,14 @@ class SubscriptionService {
     }
     const vendor = vendorRes.rows[0];
 
-    // Fetch latest subscription record (prioritizes active subscription with latest end_date)
     const subRes = await query(
       `SELECT s.subscription_id, s.plan_id, s.plan_name, 
               TO_CHAR(s.start_date, 'YYYY-MM-DD') as start_date, 
               TO_CHAR(s.end_date, 'YYYY-MM-DD') as end_date, 
               s.original_price, s.discount_amount, s.final_price, 
-              s.coupon_code, s.payment_method, s.transaction_id, 
+              s.coupon_code, s.payment_method, s.transaction_id,
+              s.cashfree_order_id, s.cashfree_payment_id,
+              COALESCE(s.billing_interval, p.billing_interval, 'MONTHLY') as billing_interval,
               s.status, s.reminders_sent, s.created_at,
               p.duration_days, p.price as plan_price
        FROM subscriptions s
@@ -703,19 +1006,7 @@ class SubscriptionService {
     const subscription = (subRes.rows && subRes.rows[0]) || null;
     const todayStr = this.getTodayIST();
 
-    // Available unused coupons count for this vendor
-    const couponsRes = await query(
-      `SELECT COUNT(*) as count FROM coupons 
-       WHERE (vendor_id = ? OR vendor_id IS NULL) 
-         AND LOWER(status) = 'unused' 
-         AND start_date <= ?::date 
-         AND end_date >= ?::date`,
-      [vId, todayStr, todayStr]
-    );
-    const availableCouponsCount = parseInt(couponsRes.rows[0]?.count || 0, 10);
-
     if (!subscription) {
-      // Vendor has never subscribed
       return {
         vendor_id: vId,
         store_name: vendor.store_name,
@@ -723,17 +1014,17 @@ class SubscriptionService {
         status: 'NONE',
         start_date: null,
         end_date: null,
+        billing_interval: 'MONTHLY',
         days_left: 0,
         is_expired: true,
         is_expiring_soon: false,
+        merchant_status: vendor.status,
         shop_visible_on_portal: false,
         show_expiry_popup: true,
         popup_type: 'NO_SUBSCRIPTION',
         popup_title: 'Subscription Required',
-        popup_message: 'Your store is currently not visible on the DigiLocal user portal. Subscribe to our Annual Merchant Plan (₹5,999/year) to make your shop visible and start receiving orders from local residents.',
-        action_text: 'Subscribe for ₹5,999/yr',
-        annual_price: 5999.00,
-        available_coupons_count: availableCouponsCount
+        popup_message: 'Your store is currently not visible on the DigiLocal user portal. Subscribe to start receiving orders from local residents.',
+        action_text: 'Subscribe Now'
       };
     }
 
@@ -742,7 +1033,6 @@ class SubscriptionService {
     const isExpiringSoon = daysLeft >= 0 && daysLeft <= 7;
     const shopVisible = !isExpired && String(vendor.status).toUpperCase() === 'ACTIVE' && String(subscription.status).toUpperCase() === 'ACTIVE';
 
-    // Popup logic for Frontend (App and Web)
     let showExpiryPopup = false;
     let popupType = 'NONE';
     let popupTitle = '';
@@ -752,36 +1042,31 @@ class SubscriptionService {
     if (isExpired) {
       showExpiryPopup = true;
       popupType = 'EXPIRED';
-      popupTitle = '⚠️ Subscription Expired';
-      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" has expired on ${subscription.end_date}. Your store is currently hidden from resident users on the portal. Please renew now to restore shop visibility and receive customer orders.`;
-      actionText = 'Renew Now for ₹5,999/yr';
+      popupTitle = 'Subscription Expired';
+      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" has expired on ${subscription.end_date}. Your store is currently hidden from resident users. Please renew now to restore storefront visibility.`;
+      actionText = 'Renew Now';
     } else if (daysLeft === 0) {
       showExpiryPopup = true;
       popupType = 'EXPIRING_TODAY';
-      popupTitle = '🚨 Subscription Expires Today!';
-      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" expires TODAY. Renew immediately to ensure zero disruption to your store visibility and orders.`;
+      popupTitle = 'Subscription Expires Today!';
+      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" expires TODAY. Renew immediately to ensure zero disruption to your store visibility.`;
       actionText = 'Renew Today';
     } else if (daysLeft <= 3) {
       showExpiryPopup = true;
       popupType = 'EXPIRING_CRITICAL';
-      popupTitle = `🔔 Subscription Expiring in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}`;
-      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" will expire on ${subscription.end_date} (in ${daysLeft} day${daysLeft === 1 ? '' : 's'}). Renew now to keep receiving resident orders.`;
+      popupTitle = `Subscription Expiring in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}`;
+      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" will expire on ${subscription.end_date}. Renew now to keep receiving resident orders.`;
       actionText = 'Renew Now';
-    } else if (daysLeft <= 7) {
-      // Warning banner only, non-blocking modal
-      showExpiryPopup = false;
-      popupType = 'EXPIRING_WARNING';
-      popupTitle = `Subscription Expiring in ${daysLeft} Days`;
-      popupMessage = `Your annual subscription will end on ${subscription.end_date}.`;
-      actionText = 'Renew Early';
     }
 
     return {
       vendor_id: vId,
       store_name: vendor.store_name,
       has_subscription: true,
-      subscription_id: subscription.subscription_id,
-      plan_name: subscription.plan_name || 'Annual Merchant Plan',
+      subscription_id: Number(subscription.subscription_id),
+      plan_id: subscription.plan_id ? Number(subscription.plan_id) : null,
+      plan_name: subscription.plan_name || 'Monthly Merchant Plan',
+      billing_interval: String(subscription.billing_interval || 'MONTHLY').toUpperCase(),
       status: isExpired ? 'EXPIRED' : subscription.status,
       start_date: subscription.start_date,
       end_date: subscription.end_date,
@@ -789,72 +1074,27 @@ class SubscriptionService {
       raw_days_left: daysLeft,
       is_expired: isExpired,
       is_expiring_soon: isExpiringSoon,
+      amount_paid: Number(subscription.final_price || 0),
+      original_price: Number(subscription.original_price || 0),
+      payment_method: subscription.payment_method || 'CASHFREE',
+      payment_reference: subscription.cashfree_payment_id || subscription.transaction_id || null,
+      cashfree_order_id: subscription.cashfree_order_id,
+      merchant_status: vendor.status,
       shop_visible_on_portal: shopVisible,
       show_expiry_popup: showExpiryPopup,
       popup_type: popupType,
       popup_title: popupTitle,
       popup_message: popupMessage,
-      action_text: actionText,
-      annual_price: 5999.00,
-      original_price: parseFloat(subscription.original_price || 5999.00),
-      final_price: parseFloat(subscription.final_price || 5999.00),
-      coupon_code: subscription.coupon_code,
-      available_coupons_count: availableCouponsCount
+      action_text: actionText
     };
   }
 
   /**
-   * 6. CREATE / GENERATE 8-DIGIT COUPON (Admin / Partner Support)
-   */
-  async createCoupon({ vendor_id, coupon_code, discount, type = 'flat', start_date, end_date, usage_limit = 1 }) {
-    if (!discount || isNaN(discount)) {
-      throw new Error('Valid discount number is required');
-    }
-    const cleanType = String(type || 'flat').toLowerCase();
-    if (!['percentage', 'flat'].includes(cleanType)) {
-      throw new Error('type must be either "percentage" or "flat"');
-    }
-
-    let code = coupon_code ? String(coupon_code).trim().toUpperCase() : null;
-    if (!code) {
-      code = await generateUniqueCouponCode('DIGI');
-    }
-    if (code.length !== 8) {
-      throw new Error(`Coupon code must be exactly 8 characters (e.g. DIGI5999, SAVE2026). Received: ${code}`);
-    }
-
-    const todayStr = this.getTodayIST();
-    const startDateStr = start_date || todayStr;
-    let endDateStr = end_date;
-    if (!endDateStr) {
-      const eDate = new Date(startDateStr + 'T00:00:00+05:30');
-      eDate.setDate(eDate.getDate() + 30); // 30 days valid by default
-      endDateStr = eDate.toISOString().split('T')[0];
-    }
-
-    const res = await query(
-      `INSERT INTO coupons (coupon_code, vendor_id, discount, type, start_date, end_date, usage_limit, times_used, status)
-       VALUES (?, ?, ?, ?, ?::date, ?::date, ?, 0, 'unused')
-       RETURNING *`,
-      [code, vendor_id || null, parseFloat(discount), cleanType, startDateStr, endDateStr, usage_limit || 1]
-    );
-
-    return res.rows[0];
-  }
-
-  /**
-   * 7. CHECK AND SEND SUBSCRIPTION EXPIRY REMINDERS
-   * Multi-stage reminder email schedule:
-   * - 7 days before expiry ('7_DAYS')
-   * - 3 days before expiry ('3_DAYS')
-   * - 1 day before expiry ('1_DAY')
-   * - On the day of expiry ('0_DAY')
-   * - At expiration time ('EXPIRED') -> sets status = 'EXPIRED' and hides store
+   * 10. EXPIRY REMINDER DISPATCHER
    */
   async checkAndSendReminders() {
     const todayStr = this.getTodayIST();
 
-    // Fetch all active subscriptions with vendor email and store info
     const subRes = await query(`
       SELECT s.subscription_id, s.vendor_id, s.plan_name,
              TO_CHAR(s.start_date, 'YYYY-MM-DD') as start_date,
@@ -892,44 +1132,32 @@ class SubscriptionService {
           end_date: sub.end_date
         };
 
-        // 1. 7-Days Before Expiry (Window: 4 to 7 days remaining, sends strictly once)
         if (daysLeft <= 7 && daysLeft > 3 && !sentStages.includes('7_DAYS')) {
           await sendSubscriptionExpiryEmail(vendorData, daysLeft);
           sentStages.push('7_DAYS');
           await query(`UPDATE subscriptions SET reminders_sent = $1::jsonb WHERE subscription_id = $2`, [JSON.stringify(sentStages), sub.subscription_id]);
           report.reminders_sent_7d++;
-        }
-        // 2. 3-Days Before Expiry (Window: 2 to 3 days remaining, sends strictly once)
-        else if (daysLeft <= 3 && daysLeft > 1 && !sentStages.includes('3_DAYS')) {
+        } else if (daysLeft <= 3 && daysLeft > 1 && !sentStages.includes('3_DAYS')) {
           await sendSubscriptionExpiryEmail(vendorData, daysLeft);
           sentStages.push('3_DAYS');
           await query(`UPDATE subscriptions SET reminders_sent = $1::jsonb WHERE subscription_id = $2`, [JSON.stringify(sentStages), sub.subscription_id]);
           report.reminders_sent_3d++;
-        }
-        // 3. 1-Day Before Expiry (1 day remaining / tomorrow, sends strictly once)
-        else if (daysLeft === 1 && !sentStages.includes('1_DAY')) {
+        } else if (daysLeft === 1 && !sentStages.includes('1_DAY')) {
           await sendSubscriptionExpiryEmail(vendorData, 1);
           sentStages.push('1_DAY');
           await query(`UPDATE subscriptions SET reminders_sent = $1::jsonb WHERE subscription_id = $2`, [JSON.stringify(sentStages), sub.subscription_id]);
           report.reminders_sent_1d++;
-        }
-        // 4. On the Day of Expiry (0 days remaining / today, sends strictly once)
-        else if (daysLeft === 0 && !sentStages.includes('0_DAY')) {
+        } else if (daysLeft === 0 && !sentStages.includes('0_DAY')) {
           await sendSubscriptionExpiryEmail(vendorData, 0);
           sentStages.push('0_DAY');
           await query(`UPDATE subscriptions SET reminders_sent = $1::jsonb WHERE subscription_id = $2`, [JSON.stringify(sentStages), sub.subscription_id]);
           report.reminders_sent_0d++;
-        }
-        // 5. At Expiry / Expired (daysLeft < 0, sends strictly once, marks subscription EXPIRED)
-        else if (daysLeft < 0 && !sentStages.includes('EXPIRED')) {
-          // Transition subscription to EXPIRED
+        } else if (daysLeft < 0 && !sentStages.includes('EXPIRED')) {
           sentStages.push('EXPIRED');
           await query(
             `UPDATE subscriptions SET status = 'EXPIRED', reminders_sent = $1::jsonb, updated_at = CURRENT_TIMESTAMP WHERE subscription_id = $2`,
             [JSON.stringify(sentStages), sub.subscription_id]
           );
-
-          // Notify vendor that store is now hidden
           await sendSubscriptionExpiryEmail(vendorData, -1);
           report.subscriptions_expired++;
         }

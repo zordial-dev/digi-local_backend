@@ -110,6 +110,7 @@ async function initDb(maxRetries = 5, initialDelayMs = 2000) {
         await createIndexes();
         await seedInitialData();
         return;
+      
       } catch (err) {
         console.error(`[Database Error] Connection attempt ${attempt}/${maxRetries} failed: ${err.message}`);
         if (attempt >= maxRetries) {
@@ -506,7 +507,19 @@ async function setupTablesPg() {
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS customer_email VARCHAR(255)`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS notes TEXT`,
     `ALTER TABLE payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
-    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+    `ALTER TABLE payments ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`,
+    `ALTER TABLE plans ADD COLUMN IF NOT EXISTS billing_interval VARCHAR(20) DEFAULT 'MONTHLY'`,
+    `ALTER TABLE plans ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 0`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS billing_interval VARCHAR(20) DEFAULT 'MONTHLY'`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cashfree_order_id VARCHAR(100)`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cashfree_payment_id VARCHAR(100)`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMP`,
+    `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS auto_renewal BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS vendor_notified BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS vendor_notified_at TIMESTAMP`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS email_sent BOOLEAN DEFAULT FALSE`,
+    `ALTER TABLE enquiries ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMP`,
+    `CREATE INDEX IF NOT EXISTS idx_subscriptions_cf_order ON subscriptions (cashfree_order_id)`
   ];
 
   await Promise.all(columns.map(colSql => pgPool.query(colSql).catch(() => { })));
@@ -772,6 +785,27 @@ async function setupTablesPg() {
   await pgPool.query('ALTER TABLE vendors ALTER COLUMN ifsc_code DROP DEFAULT').catch(() => {});
   // Ensure merchants view alias exists for zero-downtime vendor-to-merchant migration
   await pgPool.query('CREATE OR REPLACE VIEW merchants AS SELECT * FROM vendors').catch(() => {});
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS subscription_upgrades (
+      upgrade_id BIGSERIAL PRIMARY KEY,
+      vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE SET NULL,
+      subscription_id BIGINT REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
+      from_plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL,
+      to_plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL,
+      old_plan_price DECIMAL(10,2) NOT NULL,
+      new_plan_price DECIMAL(10,2) NOT NULL,
+      unused_credit_amount DECIMAL(10,2) NOT NULL,
+      payable_amount DECIMAL(10,2) NOT NULL,
+      cashfree_order_id VARCHAR(100) UNIQUE,
+      cashfree_payment_id VARCHAR(100),
+      status VARCHAR(50) DEFAULT 'PENDING',
+      idempotency_key VARCHAR(100) UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      activated_at TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_sub_upgrades_vendor ON subscription_upgrades (vendor_id);
+    CREATE INDEX IF NOT EXISTS idx_sub_upgrades_cf_order ON subscription_upgrades (cashfree_order_id);
+  `).catch(() => {});
 }
 
 /**
@@ -814,6 +848,11 @@ async function seedInitialData() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
+
+  // Idempotently seed single active ₹2/month testing plan
+  await pgPool.query(`INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, billing_interval, features, is_active, sort_order) SELECT 'MONTHLY_TEST_2', 'Monthly Merchant Plan (Testing)', '1 Month DigiLocal Storefront Visibility & Resident Ordering (Testing Plan)', 2.00, 30, 'MONTHLY', 'MONTHLY', '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb, TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM plans WHERE plan_code = 'MONTHLY_TEST_2'); UPDATE plans SET is_active = TRUE WHERE plan_code = 'MONTHLY_TEST_2' AND is_active IS NOT TRUE; UPDATE plans SET is_active = FALSE WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE;`).catch(() => {});
+
+
 }
 
 async function removeDuplicateVendors() {

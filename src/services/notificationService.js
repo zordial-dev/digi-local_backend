@@ -8,6 +8,7 @@ const { query } = require('../models/db');
 class NotificationService {
   constructor() {
     this.processedOrders = new Set();
+    this.processedEnquiries = new Set();
   }
 
   /**
@@ -284,6 +285,220 @@ class NotificationService {
       return pushResult;
     } catch (err) {
       console.error('[NotificationService] Error notifying vendor of new order:', err.message);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
+   * Sends high-priority In-App Notification (Socket.IO) & Push Notification (FCM / Expo) to Service Vendor on New Enquiry.
+   */
+  async notifyVendorNewEnquiry({
+    vendor_id,
+    enquiry_id,
+    user_name,
+    user_phone,
+    service_type = 'General Service',
+    preferred_time = 'ASAP',
+    description = '',
+    society_name = '',
+    sector = '',
+    created_at = null
+  }) {
+    try {
+      // 1. Deduplication Guard: Check in-memory deduplication set
+      const cleanEnquiryId = enquiry_id ? String(enquiry_id).trim() : null;
+      if (cleanEnquiryId && this.processedEnquiries.has(cleanEnquiryId)) {
+        console.log(`ℹ️ [ENQUIRY DEDUP] Notification already sent for enquiry #${cleanEnquiryId}. Bypassing duplicate.`);
+        return { success: true, bypassed: true, message: 'Notification already sent for this enquiry_id' };
+      }
+
+      // Check database to see if vendor was already notified for this enquiry
+      if (cleanEnquiryId) {
+        const dbCheck = await query(
+          `SELECT vendor_notified FROM enquiries WHERE enquiry_id = ? OR CAST(enquiry_id AS TEXT) = ?`,
+          [isNaN(Number(cleanEnquiryId)) ? -1 : Number(cleanEnquiryId), cleanEnquiryId]
+        ).catch(() => ({ rows: [] }));
+
+        if (dbCheck.rows && dbCheck.rows[0]?.vendor_notified === true) {
+          console.log(`ℹ️ [ENQUIRY DEDUP] Database indicates notification already sent for enquiry #${cleanEnquiryId}. Bypassing duplicate.`);
+          this.processedEnquiries.add(cleanEnquiryId);
+          return { success: true, bypassed: true, message: 'Notification already sent for this enquiry_id' };
+        }
+
+        this.processedEnquiries.add(cleanEnquiryId);
+        if (this.processedEnquiries.size > 1000) {
+          const firstKey = this.processedEnquiries.values().next().value;
+          this.processedEnquiries.delete(firstKey);
+        }
+
+        await query(
+          `UPDATE enquiries SET vendor_notified = TRUE, vendor_notified_at = CURRENT_TIMESTAMP WHERE enquiry_id = ? OR CAST(enquiry_id AS TEXT) = ?`,
+          [isNaN(Number(cleanEnquiryId)) ? -1 : Number(cleanEnquiryId), cleanEnquiryId]
+        ).catch(() => {});
+      }
+
+      // 2. Fetch target vendor's registered FCM / Expo device token
+      const isNumeric = !isNaN(Number(vendor_id)) && vendor_id !== null && vendor_id !== undefined;
+      const numVendorId = isNumeric ? Number(vendor_id) : -1;
+      const strVendorId = String(vendor_id);
+
+      const vendorRes = await query(
+        `SELECT push_token, fcm_token, device_token FROM vendors WHERE vendor_id = ? OR public_id = ?`,
+        [numVendorId, strVendorId]
+      );
+
+      const fcmToken = vendorRes.rows[0]?.push_token || vendorRes.rows[0]?.fcm_token || vendorRes.rows[0]?.device_token;
+
+      const customerName = user_name || 'Resident';
+      const title = `NEW SERVICE ENQUIRY #${enquiry_id}!`;
+      let body = `${customerName} requested ${service_type}`;
+      if (preferred_time) body += ` • Slot: ${preferred_time}`;
+      if (description) body += ` • Note: "${description}"`;
+
+      let pushResult = { success: true, mode: 'mock', fcm_token: fcmToken };
+
+      // 3. Dispatch Push Notification (Expo or FCM Native)
+      if (fcmToken) {
+        if (fcmToken.includes('ExponentPushToken') || fcmToken.startsWith('ExponentPushToken[')) {
+          // Expo Push Notification API
+          try {
+            const expoPayload = {
+              to: fcmToken,
+              sound: 'order_alert_chime.wav',
+              title,
+              body,
+              priority: 'high',
+              channelId: 'enquiry_alerts_channel',
+              categoryId: 'NEW_ENQUIRY_ACTIONS',
+              _displayInForeground: true,
+              tag: `enquiry_${enquiry_id}`,
+              data: {
+                enquiryId: isNaN(Number(enquiry_id)) ? enquiry_id : Number(enquiry_id),
+                enquiry_id: String(enquiry_id),
+                type: 'NEW_SERVICE_ENQUIRY',
+                vendor_id: String(vendor_id),
+                customer_name: customerName,
+                customer_phone: user_phone || '',
+                service_type,
+                preferred_time,
+                description: String(description || ''),
+                society_name: String(society_name || ''),
+                sector: String(sector || ''),
+                actions: ['VIEW', 'CALL']
+              },
+              ttl: 120,
+              expiration: Math.floor(Date.now() / 1000) + 120
+            };
+
+            const response = await fetch('https://exp.host/--/api/v2/push/send', {
+              method: 'POST',
+              headers: {
+                Accept: 'application/json',
+                'Accept-Encoding': 'gzip, deflate',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(expoPayload)
+            });
+
+            const resData = await response.json();
+            const firstTicket = Array.isArray(resData?.data) ? resData.data[0] : resData?.data;
+            const messageId = firstTicket?.id || `expo_${Date.now()}`;
+            const ticketStatus = firstTicket?.status || 'ok';
+            console.log(`✅ [EXPO PUSH ENQUIRY] Vendor #${vendor_id} | Status: ${ticketStatus} | ID: ${messageId}`);
+            pushResult = { success: ticketStatus === 'ok', service: 'expo', status: ticketStatus, messageId, fcm_token: fcmToken, response: resData };
+          } catch (expoErr) {
+            console.error('[NotificationService] Expo Push send error for enquiry:', expoErr.message);
+            pushResult = { success: false, service: 'expo', error: expoErr.message, fcm_token: fcmToken };
+          }
+        } else if (isFirebaseAvailable()) {
+          // Firebase Cloud Messaging (FCM Native)
+          try {
+            const message = {
+              token: fcmToken,
+              notification: { title, body },
+              android: {
+                priority: 'high',
+                notification: {
+                  channelId: 'enquiry_alerts_channel',
+                  sound: 'new_order_alert_sound',
+                  defaultSound: true,
+                  priority: 'max',
+                  visibility: 'public'
+                }
+              },
+              apns: {
+                payload: {
+                  aps: {
+                    sound: 'new_order_alert_sound.caf',
+                    badge: 1
+                  }
+                }
+              },
+              data: {
+                type: 'NEW_SERVICE_ENQUIRY',
+                enquiry_id: String(enquiry_id),
+                vendor_id: String(vendor_id),
+                customer_name: customerName,
+                customer_phone: String(user_phone || ''),
+                service_type: String(service_type || ''),
+                preferred_time: String(preferred_time || ''),
+                description: String(description || ''),
+                society_name: String(society_name || ''),
+                sector: String(sector || ''),
+                sound: 'new_order_alert_sound'
+              }
+            };
+
+            const messageId = await admin.messaging().send(message);
+            console.log(`[FCM PUSH ENQUIRY SUCCESS] Sent to Vendor #${vendor_id} | Message ID: ${messageId}`);
+            pushResult = { success: true, mode: 'fcm', service: 'fcm', messageId, fcm_token: fcmToken };
+          } catch (fcmErr) {
+            console.error('[NotificationService] FCM send error for enquiry:', fcmErr.message);
+            pushResult = { success: false, mode: 'fcm_error', service: 'fcm', error: fcmErr.message, fcm_token: fcmToken };
+          }
+        } else {
+          pushResult = { success: true, mode: 'mock_fallback', service: 'fcm', fcm_token: fcmToken };
+        }
+      } else {
+        pushResult = { success: false, mode: 'no_token', message: `No device push_token registered in DB for vendor #${vendor_id}` };
+      }
+
+      // 4. Emit Real-Time Socket.IO Alert to vendor panel & vendor mobile app
+      try {
+        const { getIO } = require('../socket');
+        const io = getIO();
+        if (io) {
+          const socketPayload = {
+            enquiry_id: Number(enquiry_id),
+            vendor_id: Number(vendor_id),
+            customer_name: customerName,
+            user_name: customerName,
+            customer_phone: user_phone || '',
+            user_phone: user_phone || '',
+            service_type,
+            preferred_time,
+            description: String(description || ''),
+            society_name: String(society_name || ''),
+            sector: String(sector || ''),
+            status: 'NEW',
+            created_at: created_at || new Date().toISOString(),
+            timestamp: new Date().toISOString(),
+            sound: 'new_order_alert_sound'
+          };
+
+          io.to(`vendor_${vendor_id}`).emit('NEW_ENQUIRY_ALERT', socketPayload);
+          io.to(String(vendor_id)).emit('NEW_ENQUIRY_ALERT', socketPayload);
+          console.log(`🔌 [SOCKET.IO] NEW_ENQUIRY_ALERT → rooms: vendor_${vendor_id}, ${vendor_id}`);
+        } else {
+          console.warn(`⚠️ [SOCKET.IO] io not initialized — NEW_ENQUIRY_ALERT NOT sent for enquiry #${enquiry_id}`);
+        }
+      } catch (wsErr) {
+        console.error(`❌ [SOCKET.IO] Failed to emit NEW_ENQUIRY_ALERT for enquiry #${enquiry_id}:`, wsErr.message);
+      }
+
+      return pushResult;
+    } catch (err) {
+      console.error('[NotificationService] Error notifying vendor of new enquiry:', err.message);
       return { success: false, error: err.message };
     }
   }

@@ -282,10 +282,76 @@ async function registerVendor(req, res) {
     const authUser = { id: vendor_id, vendor_id, name: vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
 
+    // 1. Resolve configurable subscription plan for new merchant registration
+    const targetPlanIdOrCode = body.plan_id || body.planId || body.plan_code || body.planCode;
+    let selectedPlan = null;
+    if (targetPlanIdOrCode) {
+      const isNum = !isNaN(Number(targetPlanIdOrCode));
+      const pRes = await query(
+        isNum ? `SELECT * FROM plans WHERE plan_id = ? AND is_active = TRUE` : `SELECT * FROM plans WHERE UPPER(plan_code) = UPPER(?) AND is_active = TRUE`,
+        [isNum ? Number(targetPlanIdOrCode) : String(targetPlanIdOrCode)]
+      );
+      if (pRes.rows && pRes.rows.length > 0) selectedPlan = pRes.rows[0];
+    }
+    if (!selectedPlan) {
+      const defaultPlanRes = await query(`SELECT * FROM plans WHERE is_active = TRUE ORDER BY sort_order ASC, plan_id ASC LIMIT 1`);
+      selectedPlan = defaultPlanRes.rows?.[0] || { plan_id: 1, plan_code: 'MONTHLY_TEST_2', name: 'Monthly Merchant Plan (Testing)', price: 2.00, duration_days: 30, billing_interval: 'MONTHLY' };
+    }
+
+    // 2. Generate Cashfree payment order session for subscription purchase
+    const cashfreeService = require('../../services/cashfreeService');
+    const returnUrl = body.return_url || body.returnUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`;
+    const notifyUrl = body.notify_url || body.notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`;
+
+    const cashfreeSession = await cashfreeService.createSubscriptionPaymentSession({
+      vendor_id,
+      store_name,
+      vendor_name,
+      amount: Number(selectedPlan.price),
+      plan_id: selectedPlan.plan_id,
+      email,
+      phone_number,
+      return_url: returnUrl,
+      notify_url: notifyUrl
+    }, {
+      mock: body.mock === true || body.simulation === true,
+      env: body.env
+    });
+
+    const cfOrderId = cashfreeSession.order_id;
+    await query(
+      `UPDATE subscriptions SET plan_id = ?, plan_name = ?, original_price = ?, final_price = ?, billing_interval = ?, cashfree_order_id = ? WHERE vendor_id = ? AND UPPER(status) = 'PENDING'`,
+      [selectedPlan.plan_id, selectedPlan.name, selectedPlan.price, selectedPlan.price, selectedPlan.billing_interval || 'MONTHLY', cfOrderId, vendor_id]
+    ).catch(() => {});
+
+    await query(
+      `INSERT INTO payments (order_id, vendor_id, amount, currency, payment_status, payment_method, payment_gateway, cashfree_order_id, customer_name, customer_phone, customer_email, notes, created_at)
+       VALUES (?, ?, ?, 'INR', 'PENDING', 'CASHFREE', 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [cfOrderId, vendor_id, Number(selectedPlan.price), cfOrderId, vendor_name, phone_number, email, `Registration Subscription Payment for ${store_name} [${selectedPlan.name}]`]
+    ).catch(() => {});
+
     const isOnlineEligible = Boolean(bankValidation.hasBankDetails && bankValidation.isValid);
     const eligiblePaymentMethods = isOnlineEligible ? ['COD', 'ONLINE'] : ['COD'];
 
     return res.status(201).json({
+      registration_status: 'PENDING_PAYMENT',
+      message: 'Vendor registration submitted successfully. Please complete subscription payment to proceed with merchant onboarding.',
+      plan: {
+        plan_id: Number(selectedPlan.plan_id),
+        plan_code: selectedPlan.plan_code,
+        name: selectedPlan.name,
+        price: Number(selectedPlan.price),
+        duration_days: Number(selectedPlan.duration_days || 30),
+        billing_interval: selectedPlan.billing_interval || 'MONTHLY'
+      },
+      payment_session: {
+        payment_session_id: cashfreeSession.payment_session_id,
+        order_id: cashfreeSession.order_id,
+        cf_order_id: cashfreeSession.cf_order_id,
+        payment_url: cashfreeSession.payment_url,
+        order_amount: Number(selectedPlan.price),
+        order_currency: 'INR'
+      },
       success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
@@ -622,6 +688,23 @@ async function loginVendor(req, res) {
 
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Incorrect password. Please check your password and try again.' });
+    }
+
+    // Subscription payment enforcement check
+    const subCheck = await query(
+      `SELECT subscription_id, status, end_date FROM subscriptions WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= CURRENT_DATE LIMIT 1`,
+      [v.vendor_id]
+    );
+
+    if (!subCheck.rows || subCheck.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Active subscription required. Please complete your subscription payment to access the merchant portal.',
+        code: 'SUBSCRIPTION_PAYMENT_REQUIRED',
+        subscription_required: true,
+        vendor_id: Number(v.vendor_id),
+        message: 'Active subscription required. Please complete your subscription payment to access the merchant portal.'
+      });
     }
 
     const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
@@ -1043,6 +1126,23 @@ async function loginVendorWithOtp(req, res) {
         is_blocked: true,
         status: 'blocked',
         message: 'Your vendor store account has been blocked. Please contact customer support for assistance.'
+      });
+    }
+
+    // Subscription payment enforcement check
+    const subCheck = await query(
+      `SELECT subscription_id, status, end_date FROM subscriptions WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= CURRENT_DATE LIMIT 1`,
+      [v.vendor_id]
+    );
+
+    if (!subCheck.rows || subCheck.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        error: 'Active subscription required. Please complete your subscription payment to access the merchant portal.',
+        code: 'SUBSCRIPTION_PAYMENT_REQUIRED',
+        subscription_required: true,
+        vendor_id: Number(v.vendor_id),
+        message: 'Active subscription required. Please complete your subscription payment to access the merchant portal.'
       });
     }
 

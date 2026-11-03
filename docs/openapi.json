@@ -24,12 +24,16 @@
     "/api/vendors/register": {
       "post": {
         "summary": "Vendor Registration & Payment Submission",
-        "tags": ["Vendor Authentication"],
+        "tags": [
+          "Vendor Authentication"
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/VendorRegisterRequest" },
+              "schema": {
+                "$ref": "#/components/schemas/VendorRegisterRequest"
+              },
               "example": {
                 "society_id": 1,
                 "vendor_name": "Rajesh Sharma",
@@ -48,7 +52,8 @@
             "content": {
               "application/json": {
                 "example": {
-                  "message": "Vendor registration & payment submitted successfully!",
+                  "registration_status": "PENDING_PAYMENT",
+                  "message": "Vendor registration submitted successfully. Please complete subscription payment to proceed with merchant onboarding.",
                   "vendor_id": 1,
                   "vendor": {
                     "vendor_id": 1,
@@ -58,32 +63,59 @@
                     "email": "freshmart@gmail.com",
                     "status": "PENDING"
                   },
-                  "status": "PENDING",
-                  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-                  "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  "plan": {
+                    "plan_id": 221,
+                    "plan_code": "MONTHLY_TEST_2",
+                    "name": "Test Monthly Plan (₹2)",
+                    "price": 2,
+                    "duration_days": 30,
+                    "billing_interval": "MONTHLY"
+                  },
+                  "payment_session": {
+                    "payment_session_id": "session_xyz123",
+                    "order_id": "SUB_REG_1_1793688123456",
+                    "cf_order_id": "cf_ord_...",
+                    "payment_url": "https://sandbox.cashfree.com/pg/orders/...",
+                    "order_amount": 2,
+                    "order_currency": "INR"
+                  },
+                  "success": true,
+                  "token": "eyJhbGciOi...",
+                  "accessToken": "eyJhbGciOi..."
                 }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/400Error" }
+          "400": {
+            "$ref": "#/components/responses/400Error"
+          }
         }
       }
     },
     "/api/vendors/login": {
       "post": {
         "summary": "Vendor Login",
-        "tags": ["Vendor Authentication"],
+        "tags": [
+          "Vendor Authentication"
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["email", "password"],
+                "required": [
+                  "email",
+                  "password"
+                ],
                 "properties": {
-                  "email": { "type": "string", "format": "email" },
-                  "password": { "type": "string" }
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
                 }
               },
               "example": {
@@ -114,21 +146,29 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/401Error" },
-          "429": { "description": "Too Many Requests / Account Lockout" }
+          "401": {
+            "$ref": "#/components/responses/401Error"
+          },
+          "429": {
+            "description": "Too Many Requests / Account Lockout"
+          }
         }
       }
     },
     "/api/societies": {
       "get": {
         "summary": "List All Societies",
-        "tags": ["Storefront & Societies"],
+        "tags": [
+          "Storefront & Societies"
+        ],
         "parameters": [
           {
             "name": "search",
             "in": "query",
             "description": "Filter by society name, location, or store name",
-            "schema": { "type": "string" }
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -153,20 +193,32 @@
     "/api/orders": {
       "post": {
         "summary": "Customer Places an Order",
-        "tags": ["Customer Orders"],
+        "tags": [
+          "Customer Orders"
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/CreateOrderRequest" },
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderRequest"
+              },
               "example": {
                 "customer_name": "Rahul Verma",
                 "phone_number": "9898989898",
                 "address": "Flat 402, Tower B, Greenwood Residency",
                 "vendor_id": 1,
                 "items": [
-                  { "item_id": 1, "quantity": 1, "unit_price": 68.00 },
-                  { "item_id": 2, "quantity": 1, "unit_price": 240.00 }
+                  {
+                    "item_id": 1,
+                    "quantity": 1,
+                    "unit_price": 68
+                  },
+                  {
+                    "item_id": 2,
+                    "quantity": 1,
+                    "unit_price": 240
+                  }
                 ]
               }
             }
@@ -180,23 +232,38 @@
                 "example": {
                   "message": "Order placed successfully",
                   "order_id": 1,
-                  "total_amount": 308.00,
+                  "total_amount": 308,
                   "status": "PLACED"
                 }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/400Error" }
+          "400": {
+            "$ref": "#/components/responses/400Error"
+          }
         }
       }
     },
     "/api/vendorPanel/{vendorId}": {
       "get": {
         "summary": "Get Full Vendor Dashboard Data",
-        "tags": ["Vendor Dashboard"],
-        "security": [{ "bearerAuth": [] }],
+        "tags": [
+          "Vendor Dashboard"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
-          { "name": "vendorId", "in": "path", "required": true, "schema": { "type": "integer" } }
+          {
+            "name": "vendorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -204,23 +271,32 @@
             "content": {
               "application/json": {
                 "example": {
-                  "vendor": { "vendor_id": 1, "store_name": "FreshMart Grocery & Organic" },
+                  "vendor": {
+                    "vendor_id": 1,
+                    "store_name": "FreshMart Grocery & Organic"
+                  },
                   "items": [],
                   "orders": [],
-                  "subscription": { "status": "ACTIVE" },
+                  "subscription": {
+                    "status": "ACTIVE"
+                  },
                   "payments": []
                 }
               }
             }
           },
-          "403": { "$ref": "#/components/responses/403Error" }
+          "403": {
+            "$ref": "#/components/responses/403Error"
+          }
         }
       }
     },
     "/api/admin/login": {
       "post": {
         "summary": "Admin Login (Super Admin & Sub-Admins)",
-        "tags": ["Admin Authentication"],
+        "tags": [
+          "Admin Authentication"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -241,7 +317,14 @@
                   "success": true,
                   "message": "Authentication successful.",
                   "data": {
-                    "user": { "id": "usr-admin-01", "name": "Super Administrator", "role": "SUPER_ADMIN", "permissions": ["ALL"] },
+                    "user": {
+                      "id": "usr-admin-01",
+                      "name": "Super Administrator",
+                      "role": "SUPER_ADMIN",
+                      "permissions": [
+                        "ALL"
+                      ]
+                    },
                     "access_token": "eyJhbGciOiJIUzI1Ni...",
                     "refresh_token": "def456uvw789...",
                     "expires_in": 900
@@ -258,12 +341,46 @@
     "/api/admin/societies": {
       "get": {
         "summary": "List All Societies with Status Filtering",
-        "tags": ["Admin Societies"],
+        "tags": [
+          "Admin Societies"
+        ],
         "parameters": [
-          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["all", "active", "suspended", "pending"] } },
-          { "name": "search", "in": "query", "schema": { "type": "string" } },
-          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
-          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20 } }
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "active",
+                "suspended",
+                "pending"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 20
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -272,8 +389,21 @@
               "application/json": {
                 "example": {
                   "success": true,
-                  "data": [{ "society_id": 1, "society_name": "Greenwood Residency", "status": "active" }],
-                  "pagination": { "total": 36, "page": 1, "limit": 20, "total_pages": 2, "has_next": true, "has_prev": false }
+                  "data": [
+                    {
+                      "society_id": 1,
+                      "society_name": "Greenwood Residency",
+                      "status": "active"
+                    }
+                  ],
+                  "pagination": {
+                    "total": 36,
+                    "page": 1,
+                    "limit": 20,
+                    "total_pages": 2,
+                    "has_next": true,
+                    "has_prev": false
+                  }
                 }
               }
             }
@@ -282,7 +412,9 @@
       },
       "post": {
         "summary": "Register New Society",
-        "tags": ["Admin Societies"],
+        "tags": [
+          "Admin Societies"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -298,27 +430,47 @@
           }
         },
         "responses": {
-          "201": { "description": "Society registered successfully" }
+          "201": {
+            "description": "Society registered successfully"
+          }
         }
       }
     },
     "/api/admin/vendors": {
       "get": {
         "summary": "List All Vendors with Status & Search Filtering",
-        "tags": ["Admin Vendor Management"],
+        "tags": [
+          "Admin Vendor Management"
+        ],
         "parameters": [
-          { "name": "status", "in": "query", "schema": { "type": "string" } },
-          { "name": "search", "in": "query", "schema": { "type": "string" } }
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
-          "200": { "description": "Vendors list retrieved successfully" }
+          "200": {
+            "description": "Vendors list retrieved successfully"
+          }
         }
       }
     },
     "/api/admin/subscriptions/stats": {
       "get": {
         "summary": "Subscription Telemetry & MRR Summary",
-        "tags": ["Admin Subscriptions"],
+        "tags": [
+          "Admin Subscriptions"
+        ],
         "responses": {
           "200": {
             "description": "Telemetry stats retrieved",
@@ -327,11 +479,15 @@
                 "example": {
                   "success": true,
                   "data": {
-                    "mrr": 58450.00,
-                    "arr": 701400.00,
+                    "mrr": 58450,
+                    "arr": 701400,
                     "active_subscriptions": 980,
                     "expiring_soon_15_days": 14,
-                    "tier_breakdown": { "free": 120, "pro": 650, "enterprise": 210 }
+                    "tier_breakdown": {
+                      "free": 120,
+                      "pro": 650,
+                      "enterprise": 210
+                    }
                   }
                 }
               }
@@ -343,27 +499,43 @@
     "/api/admin/payments/refund": {
       "post": {
         "summary": "Process Refund via Payment Gateway",
-        "tags": ["Admin Payments & Revenue"],
+        "tags": [
+          "Admin Payments & Revenue"
+        ],
         "parameters": [
-          { "name": "X-Idempotency-Key", "in": "header", "schema": { "type": "string" } }
+          {
+            "name": "X-Idempotency-Key",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "example": { "transaction_id": "TXN-9001", "amount": 450.00, "reason": "Damaged goods" }
+              "example": {
+                "transaction_id": "TXN-9001",
+                "amount": 450,
+                "reason": "Damaged goods"
+              }
             }
           }
         },
         "responses": {
-          "200": { "description": "Refund processed successfully" }
+          "200": {
+            "description": "Refund processed successfully"
+          }
         }
       }
     },
     "/api/admin/notifications/broadcast": {
       "post": {
         "summary": "Broadcast System Announcement to Vendors / Users",
-        "tags": ["Admin Real-Time Notifications"],
+        "tags": [
+          "Admin Real-Time Notifications"
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -377,16 +549,320 @@
           }
         },
         "responses": {
-          "201": { "description": "System broadcast announcement dispatched successfully" }
+          "201": {
+            "description": "System broadcast announcement dispatched successfully"
+          }
         }
       }
     },
     "/api/admin/reports/telemetry": {
       "get": {
         "summary": "Executive Analytics Telemetry Metrics",
-        "tags": ["Admin Executive Analytics"],
+        "tags": [
+          "Admin Executive Analytics"
+        ],
         "responses": {
-          "200": { "description": "Executive telemetry metrics retrieved" }
+          "200": {
+            "description": "Executive telemetry metrics retrieved"
+          }
+        }
+      }
+    },
+    "/api/subscriptions/plans": {
+      "get": {
+        "summary": "Get Active Subscription Plans",
+        "tags": [
+          "Vendor Subscriptions"
+        ],
+        "responses": {
+          "200": {
+            "description": "Active plans retrieved successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Active subscription plans fetched successfully.",
+                  "plans": [
+                    {
+                      "plan_id": 221,
+                      "plan_code": "MONTHLY_TEST_2",
+                      "name": "Test Monthly Plan (₹2)",
+                      "price": 2,
+                      "duration_days": 30,
+                      "billing_interval": "MONTHLY",
+                      "sort_order": 0,
+                      "is_active": true
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions/verify-payment": {
+      "post": {
+        "summary": "Verify Subscription Payment & Activate Plan",
+        "tags": [
+          "Vendor Subscriptions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "order_id": "SUB_REG_1_1793688123456"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment verified and subscription activated",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "verified": true,
+                  "payment_status": "SUCCESS",
+                  "subscription_status": "ACTIVE",
+                  "message": "Subscription payment confirmed and activated successfully.",
+                  "order_id": "SUB_REG_1_1793688123456",
+                  "subscription": {
+                    "status": "ACTIVE",
+                    "plan_id": 221,
+                    "plan_name": "Test Monthly Plan (₹2)",
+                    "billing_interval": "MONTHLY",
+                    "amount_paid": 2,
+                    "start_date": "2026-11-03T12:00:00+05:30",
+                    "end_date": "2026-12-03T12:00:00+05:30"
+                  },
+                  "vendor": {
+                    "vendor_id": 1,
+                    "status": "PENDING",
+                    "is_approved": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions/current": {
+      "get": {
+        "summary": "Get Current Vendor Subscription Status",
+        "tags": [
+          "Vendor Subscriptions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current subscription status",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "vendor_id": 1,
+                  "has_active_subscription": true,
+                  "subscription_id": 84,
+                  "status": "ACTIVE",
+                  "plan_id": 221,
+                  "plan_name": "Test Monthly Plan (₹2)",
+                  "billing_interval": "MONTHLY",
+                  "amount_paid": 2,
+                  "payment_reference": "SUB_REG_1_1793688123456",
+                  "start_date": "2026-11-03T12:00:00+05:30",
+                  "end_date": "2026-12-03T12:00:00+05:30",
+                  "days_remaining": 30,
+                  "auto_renewal": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/enquiries": {
+      "post": {
+        "summary": "Submit Service Enquiry (Resident)",
+        "tags": [
+          "Service Enquiries"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "vendor_id": 1495,
+                "name": "Rohan Sharma",
+                "phone": "9876543210",
+                "service_type": "Pipe Leakage Repair",
+                "preferred_time": "Today 5:00 PM",
+                "description": "Major leak in kitchen sink pipe under the counter",
+                "society_name": "Silver Oak Heights",
+                "sector": "Sector 45"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Service enquiry submitted successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Service enquiry submitted successfully!",
+                  "enquiry": {
+                    "enquiry_id": 45,
+                    "vendor_id": 1495,
+                    "vendor_name": "FastPlumb Services",
+                    "store_name": "FastPlumb Plumbers",
+                    "user_name": "Rohan Sharma",
+                    "user_phone": "9876543210",
+                    "service_type": "Pipe Leakage Repair",
+                    "preferred_time": "Today 5:00 PM",
+                    "description": "Major leak in kitchen sink pipe under the counter",
+                    "status": "NEW",
+                    "created_at_readable": "03 Nov 2026, 06:15 pm IST",
+                    "direct_actions": {
+                      "whatsapp_link": "https://wa.me/919911223344?text=...",
+                      "call_link": "tel:9911223344"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vendors/{vendorId}/enquiries": {
+      "get": {
+        "summary": "Get Service Enquiries for Vendor",
+        "tags": [
+          "Service Enquiries"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vendorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NEW",
+                "IN_PROGRESS",
+                "COMPLETED",
+                "CANCELLED"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Enquiries retrieved successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "total": 1,
+                  "enquiries": [
+                    {
+                      "enquiry_id": 45,
+                      "vendor_id": 1495,
+                      "user_name": "Rohan Sharma",
+                      "user_phone": "9876543210",
+                      "service_type": "Pipe Leakage Repair",
+                      "preferred_time": "Today 5:00 PM",
+                      "status": "NEW",
+                      "created_at_readable": "03 Nov 2026, 06:15 pm IST"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/vendors/{vendorId}/enquiries/{enquiryId}/status": {
+      "patch": {
+        "summary": "Update Enquiry Status (Vendor)",
+        "tags": [
+          "Service Enquiries"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "vendorId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "enquiryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "example": {
+                "status": "IN_PROGRESS"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Status updated successfully",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "Enquiry status updated to \"IN_PROGRESS\"",
+                  "enquiry_id": 45,
+                  "status": "IN_PROGRESS"
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -403,33 +879,77 @@
     "schemas": {
       "VendorRegisterRequest": {
         "type": "object",
-        "required": ["society_id", "vendor_name", "email", "password", "store_name"],
+        "required": [
+          "society_id",
+          "vendor_name",
+          "email",
+          "password",
+          "store_name"
+        ],
         "properties": {
-          "society_id": { "type": "integer" },
-          "vendor_name": { "type": "string" },
-          "email": { "type": "string", "format": "email" },
-          "password": { "type": "string", "minLength": 6 },
-          "store_name": { "type": "string" },
-          "phone_number": { "type": "string" },
-          "gst_number": { "type": "string" }
+          "society_id": {
+            "type": "integer"
+          },
+          "vendor_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 6
+          },
+          "store_name": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "gst_number": {
+            "type": "string"
+          }
         }
       },
       "CreateOrderRequest": {
         "type": "object",
-        "required": ["customer_name", "phone_number", "address", "vendor_id", "items"],
+        "required": [
+          "customer_name",
+          "phone_number",
+          "address",
+          "vendor_id",
+          "items"
+        ],
         "properties": {
-          "customer_name": { "type": "string" },
-          "phone_number": { "type": "string" },
-          "address": { "type": "string" },
-          "vendor_id": { "type": "integer" },
+          "customer_name": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "vendor_id": {
+            "type": "integer"
+          },
           "items": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["item_id", "quantity"],
+              "required": [
+                "item_id",
+                "quantity"
+              ],
               "properties": {
-                "item_id": { "type": "integer" },
-                "quantity": { "type": "integer", "minimum": 1 }
+                "item_id": {
+                  "type": "integer"
+                },
+                "quantity": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               }
             }
           }
@@ -443,7 +963,12 @@
           "application/json": {
             "example": {
               "error": "Validation Error: Invalid email address format",
-              "details": [{ "field": "email", "message": "Invalid email address format" }]
+              "details": [
+                {
+                  "field": "email",
+                  "message": "Invalid email address format"
+                }
+              ]
             }
           }
         }
@@ -452,7 +977,9 @@
         "description": "Unauthorized Access",
         "content": {
           "application/json": {
-            "example": { "error": "Unauthorized: Access token is missing or invalid" }
+            "example": {
+              "error": "Unauthorized: Access token is missing or invalid"
+            }
           }
         }
       },
@@ -460,7 +987,9 @@
         "description": "Forbidden Access / IDOR Guard Violation",
         "content": {
           "application/json": {
-            "example": { "error": "Forbidden: You do not have permission to access this vendor resource" }
+            "example": {
+              "error": "Forbidden: You do not have permission to access this vendor resource"
+            }
           }
         }
       }

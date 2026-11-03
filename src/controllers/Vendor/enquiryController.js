@@ -34,7 +34,7 @@ async function createEnquiry(req, res) {
 
         // Verify vendor exists
         const vendorCheck = await query(
-            `SELECT vendor_id, vendor_name, store_name, phone_number, whatsapp_number, vendor_type FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
+            `SELECT vendor_id, vendor_name, store_name, email, phone_number, whatsapp_number, vendor_type FROM vendors WHERE vendor_id = ? OR CAST(vendor_id AS TEXT) = ?`,
             [vendor_id, String(vendor_id)]
         );
 
@@ -45,6 +45,50 @@ async function createEnquiry(req, res) {
         const vendor = vendorCheck.rows[0];
         const targetVendorId = Number(vendor.vendor_id);
 
+        
+        // Check for duplicate rapid submission (within 15 seconds)
+        const dupCheck = await query(
+            `SELECT * FROM enquiries 
+             WHERE vendor_id = ? AND user_phone = ? AND service_type = ? AND created_at >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
+             ORDER BY enquiry_id DESC LIMIT 1`,
+            [targetVendorId, user_phone, service_type]
+        ).catch(() => ({ rows: [] }));
+
+        if (dupCheck.rows && dupCheck.rows.length > 0) {
+            const existing = dupCheck.rows[0];
+            const cleanVendorPhone = (vendor.whatsapp_number || vendor.phone_number || '').replace(/[^0-9]/g, '');
+            const whatsapp_link = cleanVendorPhone ? `https://wa.me/${cleanVendorPhone.length === 10 ? '91' + cleanVendorPhone : cleanVendorPhone}?text=${encodeURIComponent(`Hi ${vendor.store_name}, I have submitted a service request #${existing.enquiry_id} for ${service_type}.`)}` : null;
+            const call_link = cleanVendorPhone ? `tel:${cleanVendorPhone}` : null;
+
+            return res.status(201).json({
+                success: true,
+                message: 'Service enquiry submitted successfully!',
+                enquiry: {
+                    enquiry_id: Number(existing.enquiry_id),
+                    vendor_id: targetVendorId,
+                    vendor_name: vendor.vendor_name,
+                    store_name: vendor.store_name,
+                    name: existing.user_name,
+                    user_name: existing.user_name,
+                    phone: existing.user_phone,
+                    user_phone: existing.user_phone,
+                    user_id: existing.user_id,
+                    society_id: existing.society_id,
+                    society_name: existing.society_name,
+                    sector: existing.sector,
+                    service_type: existing.service_type,
+                    preferred_time: existing.preferred_time,
+                    description: existing.description,
+                    issue_photos: existing.issue_photos,
+                    status: existing.status || 'NEW',
+                    created_at: existing.created_at,
+                    created_at_ist: formatISTISO(existing.created_at),
+                    created_at_readable: formatISTReadable(existing.created_at),
+                    direct_actions: { whatsapp_link, call_link }
+                }
+            });
+        }
+
         const result = await query(
             `INSERT INTO enquiries (vendor_id, user_id, user_name, user_phone, society_id, society_name, sector, service_type, preferred_time, description, issue_photos, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'NEW') RETURNING *`,
@@ -54,7 +98,66 @@ async function createEnquiry(req, res) {
         const newEnquiry = result.rows[0] || {};
         const enquiry_id = Number(newEnquiry.enquiry_id || result.insertId);
 
-        // Build direct contact action URLs for resident response
+
+        // 1. Dispatch In-App Notification (Socket.IO + Mobile Push via Expo / FCM)
+        try {
+            const notificationService = require('../../services/notificationService');
+            notificationService.notifyVendorNewEnquiry({
+                vendor_id: targetVendorId,
+                enquiry_id,
+                user_name,
+                user_phone,
+                service_type,
+                preferred_time,
+                description,
+                society_name,
+                sector,
+                created_at: newEnquiry.created_at
+            }).catch(notifErr => {
+                console.warn(`[Enquiry Notification Warning] Failed to notify vendor #${targetVendorId}:`, notifErr.message);
+            });
+        } catch (notifErr) {
+            console.warn(`[Enquiry Notification Error] Notification service invocation failed:`, notifErr.message);
+        }
+
+        // 2. Dispatch Merchant Email Alert
+        const vendorEmail = vendor.email ? String(vendor.email).trim() : null;
+        if (vendorEmail && vendorEmail.includes('@') && !vendorEmail.endsWith('.internal')) {
+            try {
+                const { sendEnquiryAlertEmail } = require('../../services/emailService');
+                sendEnquiryAlertEmail({
+                    to: vendorEmail,
+                    merchant_name: vendor.vendor_name,
+                    store_name: vendor.store_name,
+                    enquiry: {
+                        ...newEnquiry,
+                        enquiry_id,
+                        user_name,
+                        user_phone,
+                        service_type,
+                        preferred_time,
+                        description,
+                        society_name,
+                        sector
+                    }
+                }).then(async (emailRes) => {
+                    if (emailRes?.sent) {
+                        await query(
+                            `UPDATE enquiries SET email_sent = TRUE, email_sent_at = CURRENT_TIMESTAMP WHERE enquiry_id = ?`,
+                            [enquiry_id]
+                        ).catch(() => {});
+                    }
+                }).catch(emailErr => {
+                    console.warn(`[Enquiry Email Warning] Failed to email vendor #${targetVendorId} (${vendorEmail}):`, emailErr.message);
+                });
+            } catch (emailErr) {
+                console.warn(`[Enquiry Email Error] Email service invocation failed:`, emailErr.message);
+            }
+        } else {
+            console.log(`ℹ️ [Enquiry Email] Merchant #${targetVendorId} has no registered email. Skipped email alert.`);
+        }
+
+                // Build direct contact action URLs for resident response
         const cleanVendorPhone = (vendor.whatsapp_number || vendor.phone_number || '').replace(/[^0-9]/g, '');
         const whatsapp_link = cleanVendorPhone ? `https://wa.me/${cleanVendorPhone.length === 10 ? '91' + cleanVendorPhone : cleanVendorPhone}?text=${encodeURIComponent(`Hi ${vendor.store_name}, I have submitted a service request #${enquiry_id} for ${service_type}.`)}` : null;
         const call_link = cleanVendorPhone ? `tel:${cleanVendorPhone}` : null;

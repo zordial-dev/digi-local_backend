@@ -191,6 +191,25 @@ router.post([
   '/api/payments/cashfree/verify-subscription-payment'
 ], authenticateToken, requireVendorOwner, subscriptionController.verifyPayment.bind(subscriptionController));
 
+router.get([
+  '/api/subscriptions/upgrade-quote',
+  '/api/subscriptions/:vendorId/upgrade-quote',
+  '/api/vendorPanel/:vendorId/upgrade-quote',
+  '/api/merchantPanel/:vendorId/upgrade-quote'
+], authenticateToken, requireVendorOwner, subscriptionController.getUpgradeQuote.bind(subscriptionController));
+
+router.post([
+  '/api/subscriptions/upgrade',
+  '/api/subscriptions/:vendorId/upgrade',
+  '/api/vendorPanel/:vendorId/upgrade',
+  '/api/merchantPanel/:vendorId/upgrade'
+], authenticateToken, requireVendorOwner, subscriptionController.upgrade.bind(subscriptionController));
+
+router.get([
+  '/api/subscriptions/current',
+  '/api/subscriptions/:vendorId/current'
+], authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+
 // ── Categories & Platform Config Direct Endpoints ──────────
 router.get('/api/categories', storefrontController.getCategories);
 router.get('/api/vendors/categories', storefrontController.getCategories);
