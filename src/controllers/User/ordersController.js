@@ -12,6 +12,9 @@ const {
  * GET /api/orders/user/:userId
  */
 async function getUserOrders(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   try {
     const { userId } = req.params;
     const cleanPhone = String(userId).trim().replace(/[^0-9]/g, '');
@@ -202,6 +205,9 @@ async function getUserOrders(req, res) {
  * GET /api/orders/vendor/:vendorId
  */
 async function getVendorOrders(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   try {
     const vendorId = req.params.merchantId || req.params.vendorId;
 
@@ -1259,9 +1265,20 @@ async function getOrderById(req, res) {
     rawOrder.societyName = finalSociety;
 
     const orderRemarks = rawOrder.remarks || '';
+    const finalCreatedAt = formatISTISO(rawOrder.created_at || rawOrder.order_timestamp);
+    const finalCreatedAtReadable = formatISTReadable(rawOrder.created_at || rawOrder.order_timestamp);
+    const finalTimeOnly = formatISTTimeOnly(rawOrder.created_at || rawOrder.order_timestamp);
 
     const enrichedOrder = {
       ...rawOrder,
+      date: finalCreatedAt,
+      timestamp: finalTimeOnly,
+      createdAt: finalCreatedAt,
+      created_at: finalCreatedAt,
+      created_at_ist: finalCreatedAt,
+      created_at_readable: finalCreatedAtReadable,
+      order_timestamp: finalCreatedAt,
+      order_timestamp_ist: finalCreatedAt,
       remarks: orderRemarks,
       notes: orderRemarks,
       instructions: orderRemarks,
@@ -1269,6 +1286,10 @@ async function getOrderById(req, res) {
       refund_status_label: refundStatusLabel,
       is_refund_in_progress: Boolean(isProgress)
     };
+
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
 
     res.status(200).json({
       order: enrichedOrder,
