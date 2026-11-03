@@ -849,8 +849,8 @@ async function seedInitialData() {
     )
   `).catch(() => { });
 
-  // Idempotently seed single active ₹2/month testing plan
-  await pgPool.query(`INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, billing_interval, features, is_active, sort_order) SELECT 'MONTHLY_TEST_2', 'Monthly Merchant Plan (Testing)', '1 Month InPinch Storefront Visibility & Resident Ordering (Testing Plan)', 2.00, 30, 'MONTHLY', 'MONTHLY', '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb, TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM plans WHERE plan_code = 'MONTHLY_TEST_2'); UPDATE plans SET is_active = TRUE WHERE plan_code = 'MONTHLY_TEST_2' AND is_active IS NOT TRUE; UPDATE plans SET is_active = FALSE WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE;`).catch(() => {});
+  // Idempotently seed single active ₹1/month merchant plan
+  await pgPool.query(`INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, billing_interval, features, is_active, sort_order) SELECT 'MONTHLY_TEST_2', 'Monthly Merchant Plan', '1 Month InPinch Storefront Visibility & Resident Ordering', 1.00, 30, 'MONTHLY', 'MONTHLY', '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb, TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM plans WHERE plan_code = 'MONTHLY_TEST_2'); UPDATE plans SET price = 1.00, name = 'Monthly Merchant Plan', description = '1 Month InPinch Storefront Visibility & Resident Ordering', is_active = TRUE WHERE plan_code = 'MONTHLY_TEST_2'; UPDATE plans SET is_active = FALSE WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE;`).catch(() => {});
 
 
 }

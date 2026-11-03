@@ -24,19 +24,16 @@ async function getSocietyVendorsStorefront(req, res) {
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods,
                           v.vendor_type, v.can_add_items,
-                          v.area, s.society_name 
+                          v.area, s.society_name,
+                          EXISTS (
+                            SELECT 1 FROM subscriptions sub 
+                            WHERE sub.vendor_id = v.vendor_id 
+                              AND UPPER(sub.status) = 'ACTIVE' 
+                              AND sub.end_date >= CURRENT_DATE
+                          ) AS is_subscription_active
                     FROM vendors v
                     LEFT JOIN societies s ON v.society_id = s.society_id
-                    WHERE UPPER(v.status) = 'ACTIVE'
-                      AND (
-                        NOT EXISTS (SELECT 1 FROM subscriptions sub WHERE sub.vendor_id = v.vendor_id)
-                        OR EXISTS (
-                          SELECT 1 FROM subscriptions sub 
-                          WHERE sub.vendor_id = v.vendor_id 
-                            AND UPPER(sub.status) = 'ACTIVE' 
-                            AND sub.end_date >= CURRENT_DATE
-                        )
-                      )`;
+                    WHERE UPPER(v.status) = 'ACTIVE'`;
         const params = [];
 
         if (!isAll) {
@@ -73,12 +70,17 @@ async function getSocietyVendorsStorefront(req, res) {
             const rawImg = v.logo || v.shop_image || null;
             const finalImg = rawImg ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImg) : rawImg) : null;
             const eligibility = getVendorPaymentEligibility(v);
+            const isSubActive = Boolean(v.is_subscription_active);
             return {
                 ...v,
                 account_number: maskAccountNumber(v.account_number),
                 bank_account_number: maskAccountNumber(v.bank_account_number || v.account_number),
                 payment_eligibility: eligibility,
                 is_online_eligible: eligibility.is_online_eligible,
+                is_subscription_active: isSubActive,
+                subscription_active: isSubActive,
+                is_order_eligible: isSubActive,
+                can_accept_orders: isSubActive,
                 logo: finalImg,
                 shop_image: finalImg,
                 logo_url: finalImg
@@ -141,24 +143,16 @@ async function getVendorStorefront(req, res) {
         vendor.account_number = maskAccountNumber(vendor.account_number);
         vendor.bank_account_number = maskAccountNumber(vendor.bank_account_number || vendor.account_number);
 
-        // Verify active subscription (hide expired shops from user portal)
+        // Check active subscription for order eligibility (merchants can list items without active subscription, but cannot receive orders)
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
         const subCheck = await query(
             `SELECT subscription_id, status, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date 
              FROM subscriptions 
-             WHERE vendor_id = ? 
-             ORDER BY subscription_id DESC LIMIT 1`,
-            [vendor.vendor_id]
+             WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= ?
+             ORDER BY end_date DESC, subscription_id DESC LIMIT 1`,
+            [vendor.vendor_id, todayStr]
         );
-        const sub = subCheck.rows && subCheck.rows[0];
-        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-        if (sub && (String(sub.status).toUpperCase() === 'EXPIRED' || sub.end_date < todayStr)) {
-            return res.status(403).json({
-                success: false,
-                error: `Store "${vendor.store_name}" is currently unavailable as its annual subscription has expired.`,
-                message: `Store "${vendor.store_name}" is currently unavailable as its annual subscription has expired.`,
-                subscription_expired: true
-            });
-        }
+        const hasActiveSub = Boolean(subCheck.rows && subCheck.rows.length > 0);
 
         const itemsResult = await query(
             `SELECT item_id, vendor_id, item_name, price, category, description, image_url, in_stock, stock, unit, is_available, created_at
@@ -292,7 +286,11 @@ async function getVendorStorefront(req, res) {
             account_number: maskAccountNumber(vendor.account_number),
             bank_account_number: maskAccountNumber(vendor.bank_account_number || vendor.account_number),
             payment_eligibility: vendorEligibility,
-            is_online_eligible: vendorEligibility.is_online_eligible
+            is_online_eligible: vendorEligibility.is_online_eligible,
+            is_subscription_active: hasActiveSub,
+            subscription_active: hasActiveSub,
+            is_order_eligible: hasActiveSub,
+            can_accept_orders: hasActiveSub
         };
 
         return res.status(200).json({
@@ -392,21 +390,18 @@ async function searchVendorsLocationAware(req, res) {
                           v.store_name, v.logo, v.shop_image, v.description, v.status, v.account_number, v.ifsc_code,
                           v.bank_name, v.account_holder_name, v.upi_id, v.qr_code,
                           v.whatsapp_number, v.accepted_payment_methods,
+                          EXISTS (
+                            SELECT 1 FROM subscriptions sub 
+                            WHERE sub.vendor_id = v.vendor_id 
+                              AND UPPER(sub.status) = 'ACTIVE' 
+                              AND sub.end_date >= CURRENT_DATE
+                          ) AS is_subscription_active,
                           v.vendor_type, v.can_add_items, v.location_address, v.location, v.city, v.state, v.pincode,
                           s.latitude, s.longitude, v.area,
                           s.society_name, s.location as society_location
                    FROM vendors v
                    LEFT JOIN societies s ON v.society_id = s.society_id
-                   WHERE UPPER(v.status) = 'ACTIVE'
-                     AND (
-                       NOT EXISTS (SELECT 1 FROM subscriptions sub WHERE sub.vendor_id = v.vendor_id)
-                       OR EXISTS (
-                         SELECT 1 FROM subscriptions sub 
-                         WHERE sub.vendor_id = v.vendor_id 
-                           AND UPPER(sub.status) = 'ACTIVE' 
-                           AND sub.end_date >= CURRENT_DATE
-                       )
-                     )`;
+                   WHERE UPPER(v.status) = 'ACTIVE'`;
         const params = [];
 
         if (targetType === 'product' || targetType === 'service') {
@@ -449,6 +444,7 @@ async function searchVendorsLocationAware(req, res) {
             const finalImg = rawImg ? (typeof normalizeImageUrl === 'function' ? normalizeImageUrl(rawImg) : rawImg) : null;
             const hasBankDetails = Boolean(String(v.account_number || v.bank_account_number || '').trim() && String(v.ifsc_code || '').trim());
             const acceptedPaymentMethods = hasBankDetails ? ['COD', 'ONLINE', 'UPI'] : ['COD'];
+            const isSubActive = Boolean(v.is_subscription_active);
             return {
                 ...v,
                 has_bank_details: hasBankDetails,
@@ -459,6 +455,10 @@ async function searchVendorsLocationAware(req, res) {
                 merchant_name: v.vendor_name || '',
                 vendor_id: Number(v.vendor_id),
                 society_id: Number(v.society_id),
+                is_subscription_active: isSubActive,
+                subscription_active: isSubActive,
+                is_order_eligible: isSubActive,
+                can_accept_orders: isSubActive,
                 logo: finalImg,
                 shop_image: finalImg,
                 logo_url: finalImg,

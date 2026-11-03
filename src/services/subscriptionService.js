@@ -61,13 +61,13 @@ class SubscriptionService {
       }));
     }
 
-    // Configurable fallback: Single testing plan (₹2/month)
+    // Configurable fallback: Monthly Merchant Plan (₹1/month)
     return [{
       plan_id: 1,
       plan_code: 'MONTHLY_TEST_2',
-      name: 'Monthly Merchant Plan (Testing)',
-      description: '1 Month InPinch Storefront Visibility & Resident Ordering (Testing Plan)',
-      price: 2.00,
+      name: 'Monthly Merchant Plan',
+      description: '1 Month InPinch Storefront Visibility & Resident Ordering',
+      price: 1.00,
       duration_days: 30,
       billing_cycle: 'MONTHLY',
       billing_interval: 'MONTHLY',
@@ -1011,6 +1011,9 @@ class SubscriptionService {
         vendor_id: vId,
         store_name: vendor.store_name,
         has_subscription: false,
+        has_active_subscription: false,
+        is_order_eligible: false,
+        can_receive_orders: false,
         status: 'NONE',
         start_date: null,
         end_date: null,
@@ -1019,19 +1022,21 @@ class SubscriptionService {
         is_expired: true,
         is_expiring_soon: false,
         merchant_status: vendor.status,
-        shop_visible_on_portal: false,
+        shop_visible_on_portal: true,
         show_expiry_popup: true,
         popup_type: 'NO_SUBSCRIPTION',
-        popup_title: 'Subscription Required',
-        popup_message: 'Your store is currently not visible on the InPinch user portal. Subscribe to start receiving orders from local residents.',
-        action_text: 'Subscribe Now'
+        popup_title: 'Subscription Required to Accept Orders',
+        popup_message: 'Subscribe to InPinch merchant plan for ₹1/month to start receiving orders from local customers.',
+        action_text: 'Subscribe for ₹1/mo'
       };
     }
 
+    const subStatus = String(subscription.status || 'NONE').toUpperCase();
     const daysLeft = this.calculateDaysLeft(subscription.end_date);
-    const isExpired = daysLeft < 0 || String(subscription.status).toUpperCase() === 'EXPIRED';
-    const isExpiringSoon = daysLeft >= 0 && daysLeft <= 7;
-    const shopVisible = !isExpired && String(vendor.status).toUpperCase() === 'ACTIVE' && String(subscription.status).toUpperCase() === 'ACTIVE';
+    const isExpired = daysLeft < 0 || subStatus === 'EXPIRED';
+    const isSubActive = subStatus === 'ACTIVE' && !isExpired;
+    const isExpiringSoon = isSubActive && daysLeft >= 0 && daysLeft <= 7;
+    const canReceiveOrders = isSubActive && String(vendor.status).toUpperCase() === 'ACTIVE';
 
     let showExpiryPopup = false;
     let popupType = 'NONE';
@@ -1043,31 +1048,40 @@ class SubscriptionService {
       showExpiryPopup = true;
       popupType = 'EXPIRED';
       popupTitle = 'Subscription Expired';
-      popupMessage = `Your InPinch subscription for "${vendor.store_name}" has expired on ${subscription.end_date}. Your store is currently hidden from resident users. Please renew now to restore storefront visibility.`;
-      actionText = 'Renew Now';
+      popupMessage = `Your InPinch subscription for "${vendor.store_name}" has expired on ${subscription.end_date}. Renew for ₹1/month to keep receiving orders from customers.`;
+      actionText = 'Renew for ₹1/mo';
+    } else if (subStatus === 'PENDING' || !isSubActive) {
+      showExpiryPopup = true;
+      popupType = 'NO_SUBSCRIPTION';
+      popupTitle = 'Subscription Required to Accept Orders';
+      popupMessage = 'Complete your InPinch subscription for ₹1/month to start receiving customer orders.';
+      actionText = 'Subscribe for ₹1/mo';
     } else if (daysLeft === 0) {
       showExpiryPopup = true;
       popupType = 'EXPIRING_TODAY';
       popupTitle = 'Subscription Expires Today!';
-      popupMessage = `Your InPinch subscription for "${vendor.store_name}" expires TODAY. Renew immediately to ensure zero disruption to your store visibility.`;
+      popupMessage = `Your InPinch subscription for "${vendor.store_name}" expires TODAY. Renew immediately for ₹1 to ensure uninterrupted ordering.`;
       actionText = 'Renew Today';
     } else if (daysLeft <= 3) {
       showExpiryPopup = true;
       popupType = 'EXPIRING_CRITICAL';
       popupTitle = `Subscription Expiring in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}`;
-      popupMessage = `Your InPinch subscription for "${vendor.store_name}" will expire on ${subscription.end_date}. Renew now to keep receiving resident orders.`;
-      actionText = 'Renew Now';
+      popupMessage = `Your InPinch subscription for "${vendor.store_name}" will expire on ${subscription.end_date}. Renew for ₹1/month to keep receiving customer orders.`;
+      actionText = 'Renew for ₹1/mo';
     }
 
     return {
       vendor_id: vId,
       store_name: vendor.store_name,
-      has_subscription: true,
+      has_subscription: isSubActive,
+      has_active_subscription: isSubActive,
+      is_order_eligible: canReceiveOrders,
+      can_receive_orders: canReceiveOrders,
       subscription_id: Number(subscription.subscription_id),
       plan_id: subscription.plan_id ? Number(subscription.plan_id) : null,
       plan_name: subscription.plan_name || 'Monthly Merchant Plan',
       billing_interval: String(subscription.billing_interval || 'MONTHLY').toUpperCase(),
-      status: isExpired ? 'EXPIRED' : subscription.status,
+      status: isExpired ? 'EXPIRED' : (isSubActive ? 'ACTIVE' : subscription.status),
       start_date: subscription.start_date,
       end_date: subscription.end_date,
       days_left: Math.max(0, daysLeft),
@@ -1080,7 +1094,7 @@ class SubscriptionService {
       payment_reference: subscription.cashfree_payment_id || subscription.transaction_id || null,
       cashfree_order_id: subscription.cashfree_order_id,
       merchant_status: vendor.status,
-      shop_visible_on_portal: shopVisible,
+      shop_visible_on_portal: true,
       show_expiry_popup: showExpiryPopup,
       popup_type: popupType,
       popup_title: popupTitle,

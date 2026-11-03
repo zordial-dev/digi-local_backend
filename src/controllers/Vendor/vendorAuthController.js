@@ -261,11 +261,8 @@ async function registerVendor(req, res) {
     if (!vendor_id || isNaN(vendor_id)) {
       throw new Error('Failed to obtain vendor ID during registration');
     }
+    // Subscriptions are optional during registration and not created upfront
 
-    await query(
-      `INSERT INTO subscriptions (vendor_id, start_date, end_date, status) VALUES (?, CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 'PENDING') RETURNING *`,
-      [vendor_id]
-    ).catch(() => { });
 
     // Auto-create corresponding Resident User account in users table with standardized Option B public_id
     const userPublicId = await generateUniquePublicId('user', query);
@@ -295,47 +292,68 @@ async function registerVendor(req, res) {
     }
     if (!selectedPlan) {
       const defaultPlanRes = await query(`SELECT * FROM plans WHERE is_active = TRUE ORDER BY sort_order ASC, plan_id ASC LIMIT 1`);
-      selectedPlan = defaultPlanRes.rows?.[0] || { plan_id: 1, plan_code: 'MONTHLY_TEST_2', name: 'Monthly Merchant Plan (Testing)', price: 2.00, duration_days: 30, billing_interval: 'MONTHLY' };
+      selectedPlan = defaultPlanRes.rows?.[0] || { plan_id: 1, plan_code: 'MONTHLY_TEST_2', name: 'Monthly Merchant Plan', price: 1.00, duration_days: 30, billing_interval: 'MONTHLY' };
     }
 
-    // 2. Generate Cashfree payment order session for subscription purchase
-    const cashfreeService = require('../../services/cashfreeService');
-    const returnUrl = body.return_url || body.returnUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`;
-    const notifyUrl = body.notify_url || body.notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`;
+    // 2. Subscription is optional during registration. Generate Cashfree payment session only if explicitly requested.
+    let paymentSessionData = null;
+    if (body.subscribe === true || body.initiate_subscription === true || body.create_payment_session === true) {
+      try {
+        const cashfreeService = require('../../services/cashfreeService');
+        const returnUrl = body.return_url || body.returnUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`;
+        const notifyUrl = body.notify_url || body.notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`;
 
-    const cashfreeSession = await cashfreeService.createSubscriptionPaymentSession({
-      vendor_id,
-      store_name,
-      vendor_name,
-      amount: Number(selectedPlan.price),
-      plan_id: selectedPlan.plan_id,
-      email,
-      phone_number,
-      return_url: returnUrl,
-      notify_url: notifyUrl
-    }, {
-      mock: body.mock === true || body.simulation === true,
-      env: body.env
-    });
+        const cashfreeSession = await cashfreeService.createSubscriptionPaymentSession({
+          vendor_id,
+          store_name,
+          vendor_name,
+          amount: Number(selectedPlan.price),
+          plan_id: selectedPlan.plan_id,
+          email,
+          phone_number,
+          return_url: returnUrl,
+          notify_url: notifyUrl
+        }, {
+          mock: body.mock === true || body.simulation === true,
+          env: body.env
+        });
 
-    const cfOrderId = cashfreeSession.order_id;
-    await query(
-      `UPDATE subscriptions SET plan_id = ?, plan_name = ?, original_price = ?, final_price = ?, billing_interval = ?, cashfree_order_id = ? WHERE vendor_id = ? AND UPPER(status) = 'PENDING'`,
-      [selectedPlan.plan_id, selectedPlan.name, selectedPlan.price, selectedPlan.price, selectedPlan.billing_interval || 'MONTHLY', cfOrderId, vendor_id]
-    ).catch(() => {});
+        const cfOrderId = cashfreeSession.order_id;
+        await query(
+          `INSERT INTO subscriptions (vendor_id, plan_id, plan_name, original_price, final_price, billing_interval, cashfree_order_id, start_date, end_date, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_DATE, CURRENT_DATE + INTERVAL '30 days', 'PENDING')`,
+          [vendor_id, selectedPlan.plan_id, selectedPlan.name, selectedPlan.price, selectedPlan.price, selectedPlan.billing_interval || 'MONTHLY', cfOrderId]
+        ).catch(() => {});
 
-    await query(
-      `INSERT INTO payments (order_id, vendor_id, amount, currency, payment_status, payment_method, payment_gateway, cashfree_order_id, customer_name, customer_phone, customer_email, notes, created_at)
-       VALUES (?, ?, ?, 'INR', 'PENDING', 'CASHFREE', 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
-      [cfOrderId, vendor_id, Number(selectedPlan.price), cfOrderId, vendor_name, phone_number, email, `Registration Subscription Payment for ${store_name} [${selectedPlan.name}]`]
-    ).catch(() => {});
+        await query(
+          `INSERT INTO payments (order_id, vendor_id, amount, currency, payment_status, payment_method, payment_gateway, cashfree_order_id, customer_name, customer_phone, customer_email, notes, created_at)
+           VALUES (?, ?, ?, 'INR', 'PENDING', 'CASHFREE', 'CASHFREE', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+          [cfOrderId, vendor_id, Number(selectedPlan.price), cfOrderId, vendor_name, phone_number, email, `Registration Subscription Payment for ${store_name} [${selectedPlan.name}]`]
+        ).catch(() => {});
+
+        paymentSessionData = {
+          payment_session_id: cashfreeSession.payment_session_id,
+          order_id: cashfreeSession.order_id,
+          cf_order_id: cashfreeSession.cf_order_id,
+          payment_url: cashfreeSession.payment_url,
+          order_amount: Number(selectedPlan.price),
+          order_currency: 'INR'
+        };
+      } catch (sessErr) {
+        console.warn('[Registration] Optional subscription session skipped:', sessErr.message);
+      }
+    }
 
     const isOnlineEligible = Boolean(bankValidation.hasBankDetails && bankValidation.isValid);
     const eligiblePaymentMethods = isOnlineEligible ? ['COD', 'ONLINE'] : ['COD'];
 
     return res.status(201).json({
-      registration_status: 'PENDING_PAYMENT',
-      message: 'Vendor registration submitted successfully. Please complete subscription payment to proceed with merchant onboarding.',
+      registration_status: 'SUCCESS',
+      message: 'Vendor registration completed successfully. Welcome to InPinch!',
+      subscription_required: false,
+      subscription_status: 'NONE',
+      has_subscription: false,
+      is_order_eligible: false,
       plan: {
         plan_id: Number(selectedPlan.plan_id),
         plan_code: selectedPlan.plan_code,
@@ -344,14 +362,7 @@ async function registerVendor(req, res) {
         duration_days: Number(selectedPlan.duration_days || 30),
         billing_interval: selectedPlan.billing_interval || 'MONTHLY'
       },
-      payment_session: {
-        payment_session_id: cashfreeSession.payment_session_id,
-        order_id: cashfreeSession.order_id,
-        cf_order_id: cashfreeSession.cf_order_id,
-        payment_url: cashfreeSession.payment_url,
-        order_amount: Number(selectedPlan.price),
-        order_currency: 'INR'
-      },
+      payment_session: paymentSessionData,
       success: true,
       token: tokens.accessToken,
       accessToken: tokens.accessToken,
@@ -690,22 +701,12 @@ async function loginVendor(req, res) {
       return res.status(401).json({ error: 'Incorrect password. Please check your password and try again.' });
     }
 
-    // Subscription payment enforcement check
+    // Subscription status check (informational; does not block merchant panel access)
     const subCheck = await query(
       `SELECT subscription_id, status, end_date FROM subscriptions WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= CURRENT_DATE LIMIT 1`,
       [v.vendor_id]
     );
-
-    if (!subCheck.rows || subCheck.rows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        error: 'Active subscription required. Please complete your subscription payment to access the merchant portal.',
-        code: 'SUBSCRIPTION_PAYMENT_REQUIRED',
-        subscription_required: true,
-        vendor_id: Number(v.vendor_id),
-        message: 'Active subscription required. Please complete your subscription payment to access the merchant portal.'
-      });
-    }
+    const hasActiveSub = Boolean(subCheck.rows && subCheck.rows.length > 0);
 
     const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
@@ -750,6 +751,10 @@ async function loginVendor(req, res) {
       vendor_id: Number(v.vendor_id),
       public_id: vendorPublicId,
       status: statusLower,
+      has_subscription: hasActiveSub,
+      has_active_subscription: hasActiveSub,
+      is_order_eligible: hasActiveSub,
+      subscription_status: hasActiveSub ? 'ACTIVE' : 'INACTIVE',
       merchant: vendorData,
       vendor: vendorData
     });
@@ -1129,22 +1134,12 @@ async function loginVendorWithOtp(req, res) {
       });
     }
 
-    // Subscription payment enforcement check
+    // Subscription status check (informational; does not block merchant panel access)
     const subCheck = await query(
       `SELECT subscription_id, status, end_date FROM subscriptions WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= CURRENT_DATE LIMIT 1`,
       [v.vendor_id]
     );
-
-    if (!subCheck.rows || subCheck.rows.length === 0) {
-      return res.status(403).json({
-        success: false,
-        error: 'Active subscription required. Please complete your subscription payment to access the merchant portal.',
-        code: 'SUBSCRIPTION_PAYMENT_REQUIRED',
-        subscription_required: true,
-        vendor_id: Number(v.vendor_id),
-        message: 'Active subscription required. Please complete your subscription payment to access the merchant portal.'
-      });
-    }
+    const hasActiveSub = Boolean(subCheck.rows && subCheck.rows.length > 0);
 
     const authUser = { id: v.vendor_id, vendor_id: v.vendor_id, name: v.vendor_name, role: 'vendor', roles: ['vendor'], isVendor: true, isUser: false };
     const tokens = generateTokens(authUser);
@@ -1196,6 +1191,10 @@ async function loginVendorWithOtp(req, res) {
       vendor_id: Number(v.vendor_id),
       public_id: vendorPublicId,
       status: statusLower,
+      has_subscription: hasActiveSub,
+      has_active_subscription: hasActiveSub,
+      is_order_eligible: hasActiveSub,
+      subscription_status: hasActiveSub ? 'ACTIVE' : 'INACTIVE',
       merchant: vendorOtpData,
       vendor: vendorOtpData
     });
