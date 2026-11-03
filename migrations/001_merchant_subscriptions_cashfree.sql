@@ -13,12 +13,12 @@ INSERT INTO plans (
 SELECT
     'MONTHLY_TEST_2',
     'Monthly Merchant Plan (Testing)',
-    '1 Month DigiLocal Storefront Visibility & Resident Ordering (Testing Plan)',
+    '1 Month InPinch Storefront Visibility & Resident Ordering (Testing Plan)',
     2.00,
     30,
     'MONTHLY',
     'MONTHLY',
-    '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb,
+    '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb,
     TRUE,
     1
 WHERE NOT EXISTS (

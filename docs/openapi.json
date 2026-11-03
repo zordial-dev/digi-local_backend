@@ -1,15 +1,19 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "DigiLocal Backend API Platform",
-    "description": "Production-grade RESTful API specification for DigiLocal local marketplace, vendor subscriptions, customer ordering, and admin management.",
+    "title": "InPinch Backend API Platform",
+    "description": "Production-grade RESTful API specification for InPinch local marketplace, vendor subscriptions, customer ordering, and admin management.",
     "version": "1.0.0",
     "contact": {
-      "name": "DigiLocal Platform Engineering",
-      "email": "support@digilocal.in"
+      "name": "InPinch Platform Engineering",
+      "email": "support@inpinch.com"
     }
   },
   "servers": [
+    {
+      "url": "https://services.inpinch.com",
+      "description": "Production Server"
+    },
     {
       "url": "http://localhost:5001",
       "description": "Local Development Server"
@@ -302,7 +306,7 @@
           "content": {
             "application/json": {
               "example": {
-                "email": "admin@digilocal.com",
+                "email": "admin@inpinch.com",
                 "password": "Password123!"
               }
             }
@@ -542,7 +546,7 @@
             "application/json": {
               "example": {
                 "title": "Platform Scheduled Maintenance",
-                "message": "DigiLocal will undergo scheduled maintenance tonight 2 AM - 4 AM.",
+                "message": "InPinch will undergo scheduled maintenance tonight 2 AM - 4 AM.",
                 "target_audience": "ALL_VENDORS"
               }
             }

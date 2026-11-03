@@ -78,9 +78,9 @@ async function getReadiness(req, res) {
  */
 function getAppVersion(req, res) {
   res.status(200).json({
-    name: pkg.name || 'digilocal-backend',
+    name: pkg.name || 'inpinch-backend',
     version: pkg.version || '1.0.0',
-    description: pkg.description || 'Backend API for DigiLocal Marketplace',
+    description: pkg.description || 'Backend API for InPinch Marketplace',
     environment: process.env.NODE_ENV || 'development',
     nodeVersion: process.version
   });

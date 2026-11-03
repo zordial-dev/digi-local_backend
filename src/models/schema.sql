@@ -1,4 +1,4 @@
--- DigiLocal Platform Relational Database Schema (PostgreSQL & SQLite compatible)
+-- InPinch Platform Relational Database Schema (PostgreSQL & SQLite compatible)
 
 CREATE TABLE IF NOT EXISTS locations (
     location_id BIGSERIAL PRIMARY KEY,
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS backend_audit_logs (
 
 CREATE TABLE IF NOT EXISTS platform_config (
     id INT PRIMARY KEY DEFAULT 1,
-    platform_name VARCHAR(255) DEFAULT 'DigiLocal',
+    platform_name VARCHAR(255) DEFAULT 'InPinch',
     platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6',
     admin_password_hash VARCHAR(255),
     gst_percentage DECIMAL(5,2) DEFAULT 18.00,
@@ -354,7 +354,7 @@ CREATE TABLE IF NOT EXISTS plans (
     billing_cycle VARCHAR(20) DEFAULT 'MONTHLY',
     billing_interval VARCHAR(20) DEFAULT 'MONTHLY',
     sort_order INT DEFAULT 0,
-    features JSONB DEFAULT '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
+    features JSONB DEFAULT '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

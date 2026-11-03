@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Standard API Response Helper for DigiLocal Backend.
+ * Standard API Response Helper for InPinch Backend.
  * Standard Format:
  * {
  *   "success": true | false,

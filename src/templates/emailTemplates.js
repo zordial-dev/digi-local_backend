@@ -1,5 +1,5 @@
 /**
- * Production-Grade HTML Email Templates for DigiLocal Platform.
+ * Production-Grade HTML Email Templates for InPinch Platform.
  * Feature-responsive layout, inline CSS styling, dark-navy branding, and clear CTA typography.
  */
 
@@ -8,7 +8,7 @@ const baseContainer = (title, headerColor, contentHtml) => `
   <div style="max-width: 580px; margin: 0 auto; background-color: #FFFFFF; border-radius: 16px; border: 1px solid #E0D5C3; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06);">
     <!-- Header -->
     <div style="background-color: #0A1428; padding: 28px 32px; text-align: center;">
-      <h1 style="color: #C5A880; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: 3px;">DIGILOCAL</h1>
+      <h1 style="color: #C5A880; font-size: 24px; font-weight: 700; margin: 0; letter-spacing: 3px;">INPINCH</h1>
       <p style="color: #8AA0B8; font-size: 11px; margin: 6px 0 0; letter-spacing: 1.5px; text-transform: uppercase;">Local Marketplace Platform</p>
     </div>
     
@@ -18,8 +18,8 @@ const baseContainer = (title, headerColor, contentHtml) => `
       ${contentHtml}
       <hr style="border: none; border-top: 1px solid #F0E8DD; margin: 28px 0;" />
       <p style="font-size: 12px; color: #8AA0B8; text-align: center; margin: 0; line-height: 1.5;">
-        This is an automated notification from DigiLocal Platform.<br />
-        If you have questions, contact <a href="mailto:support@digilocal.in" style="color: #C5A880; text-decoration: none;">support@digilocal.in</a>
+        This is an automated notification from InPinch Platform.<br />
+        If you have questions, contact <a href="mailto:support@inpinch.com" style="color: #C5A880; text-decoration: none;">support@inpinch.com</a>
       </p>
     </div>
   </div>
@@ -47,7 +47,7 @@ function otpTemplate({ name, otp, ttlMinutes = 10 }) {
 function welcomeTemplate({ vendor_name, store_name }) {
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #444;">Dear <strong>${vendor_name}</strong>,</p>
-    <p style="font-size: 14px; line-height: 1.6; color: #444;">Welcome to DigiLocal! Your store <strong>${store_name}</strong> has been successfully registered on our neighborhood marketplace platform.</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #444;">Welcome to InPinch! Your store <strong>${store_name}</strong> has been successfully registered on our neighborhood marketplace platform.</p>
     <div style="background-color: #FAF9F6; border-radius: 10px; border: 1px solid #E0D5C3; padding: 20px; margin: 20px 0;">
       <h3 style="margin: 0 0 10px; font-size: 14px; color: #0A1428;">Next Steps:</h3>
       <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #555; line-height: 1.7;">
@@ -60,7 +60,7 @@ function welcomeTemplate({ vendor_name, store_name }) {
       <a href="http://localhost:3000" style="background-color: #0A1428; color: #C5A880; font-weight: bold; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-size: 14px; display: inline-block;">OPEN VENDOR DASHBOARD</a>
     </div>
   `;
-  return baseContainer('🎉 Welcome to DigiLocal Marketplace!', '#0A1428', content);
+  return baseContainer('🎉 Welcome to InPinch Marketplace!', '#0A1428', content);
 }
 
 /**
@@ -76,16 +76,16 @@ function subscriptionExpiryTemplate({ vendor_name, store_name, end_date, daysLef
 
   if (isExpired) {
     badgeTitle = '⚠️ Subscription Expired';
-    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> has <span style="color: #B91C1C; font-weight: bold;">expired</span>. Your shop is currently hidden from local residents on the user portal, and you cannot receive new orders.`;
+    milestoneMessage = `Your InPinch annual subscription for <strong>${store_name}</strong> has <span style="color: #B91C1C; font-weight: bold;">expired</span>. Your shop is currently hidden from local residents on the user portal, and you cannot receive new orders.`;
   } else if (isToday) {
     badgeTitle = '🚨 Subscription Expires Today!';
-    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> <span style="color: #DC2626; font-weight: bold;">expires TODAY</span>. Please renew immediately to keep your shop visible to customers without any interruption.`;
+    milestoneMessage = `Your InPinch annual subscription for <strong>${store_name}</strong> <span style="color: #DC2626; font-weight: bold;">expires TODAY</span>. Please renew immediately to keep your shop visible to customers without any interruption.`;
   } else if (daysLeft === 1) {
     badgeTitle = '🔔 Subscription Expiring Tomorrow';
-    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #DC2626;">1 day</strong> (tomorrow) on <strong>${end_date}</strong>.`;
+    milestoneMessage = `Your InPinch annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #DC2626;">1 day</strong> (tomorrow) on <strong>${end_date}</strong>.`;
   } else {
     badgeTitle = `🔔 Subscription Expiring in ${daysLeft} Days`;
-    milestoneMessage = `Your DigiLocal annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #B78103;">${daysLeft} days</strong> on <strong>${end_date}</strong>.`;
+    milestoneMessage = `Your InPinch annual subscription for <strong>${store_name}</strong> will expire in <strong style="color: #B78103;">${daysLeft} days</strong> on <strong>${end_date}</strong>.`;
   }
 
   const content = `
@@ -117,7 +117,7 @@ function subscriptionExpiryTemplate({ vendor_name, store_name, end_date, daysLef
 function renewalSuccessTemplate({ vendor_name, store_name, end_date, amount = 5999.00, transaction_id }) {
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #444;">Dear <strong>${vendor_name}</strong>,</p>
-    <p style="font-size: 14px; line-height: 1.6; color: #444;">Your subscription for <strong>${store_name}</strong> has been successfully renewed for 1 full year! Your shop is live and visible to all local resident customers on the DigiLocal user portal.</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #444;">Your subscription for <strong>${store_name}</strong> has been successfully renewed for 1 full year! Your shop is live and visible to all local resident customers on the InPinch user portal.</p>
     <div style="background-color: #FAF9F6; border-radius: 10px; border: 1px solid #E0D5C3; padding: 18px 20px; margin: 20px 0; font-size: 13px;">
       <table width="100%" cellpadding="6" style="border-collapse: collapse;">
         <tr><td style="color: #787F8C;">Store Name:</td><td style="font-weight: bold;">${store_name}</td></tr>
@@ -167,7 +167,7 @@ function invoiceTemplate({ customer_name, order_id, total_amount, items = [], st
 function passwordResetSuccessTemplate({ name }) {
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #444;">Hello <strong>${name || 'Valued User'}</strong>,</p>
-    <p style="font-size: 14px; line-height: 1.6; color: #444;">Your password for DigiLocal account has been changed successfully.</p>
+    <p style="font-size: 14px; line-height: 1.6; color: #444;">Your password for InPinch account has been changed successfully.</p>
     <p style="font-size: 13px; color: #888;">If you did not perform this password reset, please contact security support immediately.</p>
   `;
   return baseContainer('🔒 Password Changed Successfully', '#0A1428', content);
@@ -193,7 +193,7 @@ function verificationTemplate({ name, verificationUrl }) {
 function loginAlertTemplate({ name, role = 'user', store_name = null, loginMethod = 'Password', loginTime = null, ipAddress = null, userAgent = null }) {
   const isVendor = role === 'vendor';
   const roleTitle = isVendor ? `Merchant Partner (${store_name || 'Vendor'})` : 'Resident User';
-  const portalName = isVendor ? 'DigiLocal Vendor Merchant Portal / App' : 'DigiLocal Resident Website / App';
+  const portalName = isVendor ? 'InPinch Vendor Merchant Portal / App' : 'InPinch Resident Website / App';
 
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #333;">Hello <strong>${name || (isVendor ? store_name : 'Valued Resident')}</strong>,</p>
@@ -234,7 +234,7 @@ function loginAlertTemplate({ name, role = 'user', store_name = null, loginMetho
     </div>
 
     <div style="text-align: center; margin: 28px 0 10px;">
-      <a href="mailto:support@digilocal.in?subject=Unauthorized%20Login%20Alert" style="background-color: #0A1428; color: #C5A880; font-weight: 700; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 13px; display: inline-block;">REPORT SUSPICIOUS ACTIVITY</a>
+      <a href="mailto:support@inpinch.com?subject=Unauthorized%20Login%20Alert" style="background-color: #0A1428; color: #C5A880; font-weight: 700; padding: 12px 28px; border-radius: 8px; text-decoration: none; font-size: 13px; display: inline-block;">REPORT SUSPICIOUS ACTIVITY</a>
     </div>
   `;
 
@@ -260,12 +260,12 @@ function serviceEnquiryTemplate({
 }) {
   const cleanPhone = (customer_phone || '').replace(/[^0-9]/g, '');
   const telLink = cleanPhone ? `tel:${cleanPhone}` : null;
-  const whatsappLink = cleanPhone ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent('Hello ' + (customer_name || 'Customer') + ', regarding your DigiLocal enquiry #' + enquiry_id + ' for ' + (service_type || 'service') + ':')}` : null;
+  const whatsappLink = cleanPhone ? `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent('Hello ' + (customer_name || 'Customer') + ', regarding your InPinch enquiry #' + enquiry_id + ' for ' + (service_type || 'service') + ':')}` : null;
 
   const content = `
     <p style="font-size: 14px; line-height: 1.6; color: #333;">Hello <strong>${merchant_name || store_name || 'Partner'}</strong>,</p>
     <p style="font-size: 14px; line-height: 1.6; color: #444;">
-      You have received a new service enquiry from a resident customer on the <strong>DigiLocal Marketplace</strong>!
+      You have received a new service enquiry from a resident customer on the <strong>InPinch Marketplace</strong>!
     </p>
 
     <div style="background-color: #FAF9F6; border: 1px solid #E0D5C3; border-radius: 12px; padding: 20px; margin: 20px 0;">

@@ -130,7 +130,7 @@ function normalizeImageUrl(rawUrl, defaultFallback = null) {
         // Handle relative upload paths (e.g. /uploads/... or uploads/...)
         if (url.startsWith('/uploads/') || url.startsWith('uploads/')) {
             const cleanPath = url.startsWith('/') ? url : `/${url}`;
-            const base = (process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace(/\/$/, '');
+            const base = (process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace(/\/$/, '');
             url = `${base}${cleanPath}`;
         }
 

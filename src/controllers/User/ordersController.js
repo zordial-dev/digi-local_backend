@@ -664,7 +664,7 @@ async function createOrder(req, res) {
         amount: numTotal,
         customer_id: resolvedUserId || `CUST_${cleanPhone || Date.now()}`,
         customer_name: finalCustomerName,
-        customer_email: req.body.customer_email || req.body.email || 'customer@digilocal.in',
+        customer_email: req.body.customer_email || req.body.email || 'customer@inpinch.com',
         customer_phone: cleanPhone || '9876543210',
         return_url: req.body.return_url,
         notify_url: req.body.notify_url

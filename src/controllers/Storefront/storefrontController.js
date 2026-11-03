@@ -260,7 +260,7 @@ async function getVendorStorefront(req, res) {
             shop_id: String(vendor.vendor_id),
             id: Number(vendor.vendor_id),
 
-            store_name: vendor.store_name || vendor.shop_name || 'DigiLocal Partner Store',
+            store_name: vendor.store_name || vendor.shop_name || 'InPinch Partner Store',
             merchant_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
             vendor_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',
             owner_name: vendor.vendor_name || vendor.owner_name || 'Store Manager',

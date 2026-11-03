@@ -2,7 +2,7 @@
 const { sendEmail } = require('../services/emailService');
 
 /**
- * Dedicated Account Registration Email Templates for DigiLocal Platform.
+ * Dedicated Account Registration Email Templates for InPinch Platform.
  * Provides responsive, production-ready HTML email layouts for both 
  * Resident User registration and Vendor Merchant store creation.
  */
@@ -29,7 +29,7 @@ function buildBaseLayout(headerTitle, contentHtml) {
     
     <!-- Brand Header -->
     <div style="background-color: ${BRAND_NAVY}; padding: 32px 36px; text-align: center;">
-      <h1 style="color: ${BRAND_GOLD}; font-size: 26px; font-weight: 800; margin: 0; letter-spacing: 3px; font-family: sans-serif;">DIGILOCAL</h1>
+      <h1 style="color: ${BRAND_GOLD}; font-size: 26px; font-weight: 800; margin: 0; letter-spacing: 3px; font-family: sans-serif;">INPINCH</h1>
       <p style="color: #8AA0B8; font-size: 12px; margin: 6px 0 0; letter-spacing: 2px; text-transform: uppercase;">Hyperlocal Society Marketplace</p>
     </div>
     
@@ -41,14 +41,14 @@ function buildBaseLayout(headerTitle, contentHtml) {
       <hr style="border: none; border-top: 1px solid #F0E8DD; margin: 32px 0;" />
       
       <div style="text-align: center; font-size: 12px; color: #8AA0B8; line-height: 1.6;">
-        <p style="margin: 0 0 4px;">This email confirms your official registration on the DigiLocal platform.</p>
-        <p style="margin: 0;">Questions or assistance? Contact our support team at <a href="mailto:support@digilocal.in" style="color: ${BRAND_GOLD}; font-weight: 600; text-decoration: none;">support@digilocal.in</a></p>
+        <p style="margin: 0 0 4px;">This email confirms your official registration on the InPinch platform.</p>
+        <p style="margin: 0;">Questions or assistance? Contact our support team at <a href="mailto:support@inpinch.com" style="color: ${BRAND_GOLD}; font-weight: 600; text-decoration: none;">support@inpinch.com</a></p>
       </div>
     </div>
     
     <!-- Footer Bar -->
     <div style="background-color: #F4EFE6; padding: 16px; text-align: center; font-size: 11px; color: #7A8B9E;">
-      &copy; 2026 DigiLocal Technologies India Pvt Ltd. All rights reserved.
+      &copy; 2026 InPinch Technologies India Pvt Ltd. All rights reserved.
     </div>
 
   </div>
@@ -77,7 +77,7 @@ function generateUserRegistrationEmail({ name, email, phone, society_name, flat 
       Hello <strong>${residentName}</strong>,
     </p>
     <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 24px;">
-      Welcome to <strong>DigiLocal</strong>! Your resident account has been registered successfully. You can now shop directly from verified local stores within <strong>${society}</strong> with fast doorstep delivery.
+      Welcome to <strong>InPinch</strong>! Your resident account has been registered successfully. You can now shop directly from verified local stores within <strong>${society}</strong> with fast doorstep delivery.
     </p>
 
     <!-- Registration Details Card -->
@@ -105,7 +105,7 @@ function generateUserRegistrationEmail({ name, email, phone, society_name, flat 
     </div>
 
     <!-- Feature Highlights -->
-    <h4 style="margin: 0 0 12px; font-size: 14px; color: ${BRAND_NAVY};">What you can do with your DigiLocal Account:</h4>
+    <h4 style="margin: 0 0 12px; font-size: 14px; color: ${BRAND_NAVY};">What you can do with your InPinch Account:</h4>
     <ul style="margin: 0 0 28px; padding-left: 20px; font-size: 14px; color: #475569; line-height: 1.8;">
       <li>Order groceries, essentials, and everyday items from verified local society vendors.</li>
       <li>Enjoy express doorstep delivery within minutes.</li>
@@ -121,7 +121,7 @@ function generateUserRegistrationEmail({ name, email, phone, society_name, flat 
   `;
 
   return {
-    subject: `🎉 Welcome to DigiLocal! Registration Confirmed for ${society}`,
+    subject: `🎉 Welcome to InPinch! Registration Confirmed for ${society}`,
     html: buildBaseLayout('🎉 Your Account Registration is Complete', bodyHtml)
   };
 }
@@ -148,7 +148,7 @@ function generateVendorRegistrationEmail({ store_name, owner_name, email, phone,
       Dear <strong>${owner}</strong>,
     </p>
     <p style="font-size: 15px; line-height: 1.6; color: #334155; margin: 0 0 24px;">
-      Congratulations! Your merchant store <strong>"${store}"</strong> has been successfully registered on the <strong>DigiLocal Platform</strong> for <strong>${society}</strong>.
+      Congratulations! Your merchant store <strong>"${store}"</strong> has been successfully registered on the <strong>InPinch Platform</strong> for <strong>${society}</strong>.
     </p>
 
     <!-- Merchant Registration Box -->
@@ -197,7 +197,7 @@ function generateVendorRegistrationEmail({ store_name, owner_name, email, phone,
   `;
 
   return {
-    subject: `🏪 Store Registration Confirmed: ${store} is now on DigiLocal`,
+    subject: `🏪 Store Registration Confirmed: ${store} is now on InPinch`,
     html: buildBaseLayout('🏪 Vendor Merchant Registration Confirmed', bodyHtml)
   };
 }

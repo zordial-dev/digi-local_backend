@@ -66,13 +66,13 @@ class SubscriptionService {
       plan_id: 1,
       plan_code: 'MONTHLY_TEST_2',
       name: 'Monthly Merchant Plan (Testing)',
-      description: '1 Month DigiLocal Storefront Visibility & Resident Ordering (Testing Plan)',
+      description: '1 Month InPinch Storefront Visibility & Resident Ordering (Testing Plan)',
       price: 2.00,
       duration_days: 30,
       billing_cycle: 'MONTHLY',
       billing_interval: 'MONTHLY',
       features: [
-        'Storefront visible on DigiLocal user portal',
+        'Storefront visible on InPinch user portal',
         'Customers can view and buy products from your store',
         'Vendor panel dashboard & catalog management',
         'Real-time resident order notifications',
@@ -497,7 +497,7 @@ class SubscriptionService {
       );
 
       try {
-        if (vendor.email && !vendor.email.includes('@vendor.digilocal')) {
+        if (vendor.email && !vendor.email.includes('@vendor.inpinch') && !vendor.email.includes('@vendor.digilocal')) {
           sendRenewalEmail(vendor.email, vendor.vendor_name, vendor.store_name, endDateStr, verifiedAmount, verifiedPaymentId);
         }
       } catch (mailErr) {
@@ -767,16 +767,16 @@ class SubscriptionService {
       order_id: cfOrderId,
       order_amount: payableAmount,
       order_currency: 'INR',
-      order_note: `DigiLocal Subscription Upgrade to ${to_plan.name} (Credit: ₹${calculation.eligible_unused_credit})`,
+      order_note: `InPinch Subscription Upgrade to ${to_plan.name} (Credit: ₹${calculation.eligible_unused_credit})`,
       customer_details: {
         customer_id: String(vId),
         customer_name: vendor.vendor_name || vendor.store_name || 'Merchant Owner',
-        customer_email: vendor.email || 'vendor@digilocal.in',
+        customer_email: vendor.email || 'vendor@inpinch.com',
         customer_phone: vendor.phone_number || '9876543210'
       },
       order_meta: {
-        return_url: returnUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
-        notify_url: notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+        return_url: returnUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
+        notify_url: notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
         payment_methods: 'cc,dc,upi,nb,app,paylater'
       },
       order_tags: {
@@ -1023,7 +1023,7 @@ class SubscriptionService {
         show_expiry_popup: true,
         popup_type: 'NO_SUBSCRIPTION',
         popup_title: 'Subscription Required',
-        popup_message: 'Your store is currently not visible on the DigiLocal user portal. Subscribe to start receiving orders from local residents.',
+        popup_message: 'Your store is currently not visible on the InPinch user portal. Subscribe to start receiving orders from local residents.',
         action_text: 'Subscribe Now'
       };
     }
@@ -1043,19 +1043,19 @@ class SubscriptionService {
       showExpiryPopup = true;
       popupType = 'EXPIRED';
       popupTitle = 'Subscription Expired';
-      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" has expired on ${subscription.end_date}. Your store is currently hidden from resident users. Please renew now to restore storefront visibility.`;
+      popupMessage = `Your InPinch subscription for "${vendor.store_name}" has expired on ${subscription.end_date}. Your store is currently hidden from resident users. Please renew now to restore storefront visibility.`;
       actionText = 'Renew Now';
     } else if (daysLeft === 0) {
       showExpiryPopup = true;
       popupType = 'EXPIRING_TODAY';
       popupTitle = 'Subscription Expires Today!';
-      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" expires TODAY. Renew immediately to ensure zero disruption to your store visibility.`;
+      popupMessage = `Your InPinch subscription for "${vendor.store_name}" expires TODAY. Renew immediately to ensure zero disruption to your store visibility.`;
       actionText = 'Renew Today';
     } else if (daysLeft <= 3) {
       showExpiryPopup = true;
       popupType = 'EXPIRING_CRITICAL';
       popupTitle = `Subscription Expiring in ${daysLeft} Day${daysLeft === 1 ? '' : 's'}`;
-      popupMessage = `Your DigiLocal subscription for "${vendor.store_name}" will expire on ${subscription.end_date}. Renew now to keep receiving resident orders.`;
+      popupMessage = `Your InPinch subscription for "${vendor.store_name}" will expire on ${subscription.end_date}. Renew now to keep receiving resident orders.`;
       actionText = 'Renew Now';
     }
 

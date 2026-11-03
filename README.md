@@ -1,6 +1,6 @@
-# DigiLocal Backend
+# InPinch Backend
 
-Backend API service for the DigiLocal Vendor Ordering and Subscription Platform.
+Backend API service for the InPinch Vendor Ordering and Subscription Platform.
 
 ## Features
 - **User & Resident APIs**: Authentication, OTP verification, profiles, address management, and ordering.

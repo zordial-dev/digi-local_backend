@@ -1,7 +1,7 @@
 {
-  "name": "digilocal-backend",
+  "name": "inpinch-backend",
   "version": "1.0.0",
-  "description": "Backend API for DigiLocal Vendor Ordering and Subscription Platform",
+  "description": "Backend API for InPinch Vendor Ordering and Subscription Platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

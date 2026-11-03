@@ -63,7 +63,7 @@ function generateSimulationSession(payload, reason = 'Test Environment Active') 
     order_amount: amount,
     order_currency: payload.order_currency || 'INR',
     payment_status: 'ACTIVE',
-    payment_url: `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://').replace(/\/+$/, '')}/payments/cashfree/checkout?session_id=${generatedOrderId}&mock=true`,
+    payment_url: `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://').replace(/\/+$/, '')}/payments/cashfree/checkout?session_id=${generatedOrderId}&mock=true`,
     message: `Cashfree session created in Test mode (${reason})`
   };
 }
@@ -193,15 +193,15 @@ async function createPaymentSession(payload = {}, options = {}) {
       customer_details: {
         customer_id: String(cust.customer_id || cust.id || `CUST_${Date.now()}`),
         customer_name: String(cust.customer_name || cust.name || 'Resident Customer'),
-        customer_email: String(cust.customer_email || cust.email || 'customer@digilocal.in'),
+        customer_email: String(cust.customer_email || cust.email || 'customer@inpinch.com'),
         customer_phone: String(cust.customer_phone || cust.phone || '9876543210')
       },
       order_meta: {
-        return_url: payload.order_meta?.return_url || payload.return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
-        notify_url: payload.order_meta?.notify_url || payload.notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+        return_url: payload.order_meta?.return_url || payload.return_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
+        notify_url: payload.order_meta?.notify_url || payload.notify_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
         payment_methods: payload.order_meta?.payment_methods || 'cc,dc,upi,nb,app,paylater'
       },
-      order_note: payload.order_note || payload.note || 'DigiLocal Order Payment'
+      order_note: payload.order_note || payload.note || 'InPinch Order Payment'
     };
 
     if (payload.order_tags) {
@@ -248,7 +248,7 @@ async function createPaymentSession(payload = {}, options = {}) {
 
     console.log(`✅ [CASHFREE SERVICE SUCCESS] Live Session ID generated: ${data.payment_session_id}`);
 
-    const apiOrigin = (process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://').replace(/\/+$/, '');
+    const apiOrigin = (process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://').replace(/\/+$/, '');
     const checkoutUrl = `${apiOrigin}/payments/cashfree/checkout?session_id=${encodeURIComponent(data.payment_session_id)}&env=${currentEnv === 'SANDBOX' ? 'sandbox' : 'production'}`;
 
     return {
@@ -297,12 +297,12 @@ async function createUserToVendorPaymentSession(params = {}, options = {}) {
     customer_details: {
       customer_id: String(customer_id || `CUST_${Date.now()}`),
       customer_name: String(customer_name || 'Resident Customer'),
-      customer_email: String(customer_email || 'resident@digilocal.in'),
+      customer_email: String(customer_email || 'resident@inpinch.com'),
       customer_phone: String(customer_phone || '9876543210')
     },
     order_meta: {
-      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
-      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/payments/cashfree/return?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`
     },
     order_tags: {
       vendor_id: String(vendor_id || ''),
@@ -350,12 +350,12 @@ async function createVendorDirectPaymentSession(params = {}, options = {}) {
     customer_details: {
       customer_id: String(customer_id || `CUST_${Date.now()}`),
       customer_name: String(customer_name || 'Resident Customer'),
-      customer_email: String(customer_email || 'resident@digilocal.in'),
+      customer_email: String(customer_email || 'resident@inpinch.com'),
       customer_phone: String(customer_phone || '9876543210')
     },
     order_meta: {
-      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/payments/cashfree/direct-return?order_id={order_id}`,
-      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/payments/cashfree/direct-return?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`
     },
     order_tags: {
       vendor_id: String(vendor_id || ''),
@@ -392,16 +392,16 @@ async function createVendorRegistrationPayment(vendorDetails = {}, options = {})
     order_id,
     order_amount: amount,
     order_currency: 'INR',
-    order_note: `DigiLocal Vendor Registration Fee for ${vendorDetails.store_name || vendorDetails.vendor_name || 'New Merchant'}`,
+    order_note: `InPinch Vendor Registration Fee for ${vendorDetails.store_name || vendorDetails.vendor_name || 'New Merchant'}`,
     customer_details: {
       customer_id: String(vendorDetails.vendor_id || `VND_${Date.now()}`),
       customer_name: String(vendorDetails.vendor_name || vendorDetails.owner_name || 'Merchant Owner'),
-      customer_email: String(vendorDetails.email || 'vendor@digilocal.in'),
+      customer_email: String(vendorDetails.email || 'vendor@inpinch.com'),
       customer_phone: String(vendorDetails.phone_number || vendorDetails.phone || '9876543210')
     },
     order_meta: {
-      return_url: vendorDetails.return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/vendors/cashfree/callback?order_id={order_id}`,
-      notify_url: vendorDetails.notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/vendors/cashfree/webhook`
+      return_url: vendorDetails.return_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/vendors/cashfree/callback?order_id={order_id}`,
+      notify_url: vendorDetails.notify_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/vendors/cashfree/webhook`
     },
     order_tags: {
       vendor_id: String(vendorDetails.vendor_id || ''),
@@ -444,16 +444,16 @@ async function createSubscriptionPaymentSession(params = {}, options = {}) {
     order_id,
     order_amount: Number(amount || 5999.00),
     order_currency: 'INR',
-    order_note: `DigiLocal Annual Merchant Subscription for ${store_name || vendor_name || 'Vendor #' + vendor_id}`,
+    order_note: `InPinch Merchant Subscription for ${store_name || vendor_name || 'Vendor #' + vendor_id}`,
     customer_details: {
       customer_id: String(vendor_id || `VND_${Date.now()}`),
       customer_name: String(vendor_name || store_name || 'Merchant Owner'),
-      customer_email: String(email || 'vendor@digilocal.in'),
+      customer_email: String(email || 'vendor@inpinch.com'),
       customer_phone: String(phone_number || '9876543210')
     },
     order_meta: {
-      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
-      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
+      return_url: return_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`,
+      notify_url: notify_url || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`,
       payment_methods: 'cc,dc,upi,nb,app,paylater'
     },
     order_tags: {

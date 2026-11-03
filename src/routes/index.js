@@ -606,7 +606,7 @@ router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>DigiLocal Simulation Checkout</title>
+  <title>InPinch Simulation Checkout</title>
   <style>
     body { font-family: sans-serif; background: #0A1428; color: #fff; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; padding: 20px; text-align: center; }
     .card { background: #16243E; padding: 28px; border-radius: 16px; border: 1px solid #C5A880; max-width: 360px; }
@@ -631,7 +631,7 @@ router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>DigiLocal Secure Payment</title>
+  <title>InPinch Secure Payment</title>
   <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -683,7 +683,7 @@ router.get(['/payments/cashfree/return', '/payments/cashfree/direct-return', '/v
 <html>
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Payment Successful - DigiLocal</title>
+  <title>Payment Successful - InPinch</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #FAF9F6; color: #211A19; display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; padding: 20px; }
     .card { background: #FFFFFF; padding: 36px 28px; border-radius: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); max-width: 380px; width: 100%; box-sizing: border-box; }
@@ -698,13 +698,13 @@ router.get(['/payments/cashfree/return', '/payments/cashfree/direct-return', '/v
   <div class="card">
     <div class="icon">✅</div>
     <h2>Payment Successful!</h2>
-    <p>Your subscription payment has been processed. Redirecting back to your DigiLocal app...</p>
-    <a class="btn" id="returnBtn" href="${redirectUrl || 'digilocalvendor://subscription'}">Return to DigiLocal App</a>
+    <p>Your subscription payment has been processed. Redirecting back to your InPinch app...</p>
+    <a class="btn" id="returnBtn" href="${redirectUrl || 'inpinchvendor://subscription'}">Return to InPinch App</a>
     <div class="order-ref">Order: ${orderId}</div>
   </div>
   <script>
     (function() {
-      var target = "${redirectUrl || 'digilocalvendor://subscription'}";
+      var target = "${redirectUrl || 'inpinchvendor://subscription'}";
       setTimeout(function() {
         try {
           if (window.opener) {

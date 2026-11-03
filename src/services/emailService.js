@@ -43,7 +43,7 @@ async function sendEmail({ to, subject, html }) {
     const user = (process.env.AWS_SMTP_USERNAME || process.env.SMTP_USER || '').trim();
     const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
     let host = (process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com').trim();
-    const rawFrom = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${user}>`;
+    const rawFrom = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"InPinch Platform" <${user}>`;
     const from = rawFrom.trim();
 
     let lastError = null;
@@ -91,7 +91,7 @@ async function sendLoginAlertEmail({ to, name, role = 'user', store_name = null,
         }) + ' IST';
 
         const portalDesc = role === 'vendor' ? 'Vendor Portal' : 'User Portal';
-        const subject = `🔐 Security Alert: Login to your DigiLocal ${portalDesc}`;
+        const subject = `🔐 Security Alert: Login to your InPinch ${portalDesc}`;
         const html = loginAlertTemplate({
             name,
             role,
@@ -126,7 +126,7 @@ async function sendEnquiryAlertEmail({ to, merchant_name, store_name, enquiry = 
 
         const enqId = enquiry.enquiry_id || enquiry.id || 'N/A';
         const serviceType = enquiry.service_type || 'General Service';
-        const subject = `🔔 New Service Request #${enqId}: ${serviceType} [${store_name || merchant_name || 'DigiLocal'}]`;
+        const subject = `🔔 New Service Request #${enqId}: ${serviceType} [${store_name || merchant_name || 'InPinch'}]`;
         const istTime = formatISTReadable(enquiry.created_at || new Date());
 
         const html = serviceEnquiryTemplate({

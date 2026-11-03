@@ -204,11 +204,11 @@ async function login(req, res) {
     const configuredSecret = process.env.ADMIN_SECRET || 'admin123';
 
     // Super Admin static check
-    if (inputEmail === 'admin@digilocal.com') {
+    if (inputEmail === 'admin@inpinch.com' || inputEmail === 'admin@digilocal.com') {
       if (inputPass === configuredSecret) {
         const adminUser = {
           id: 1,
-          email: 'admin@digilocal.com',
+          email: inputEmail,
           name: 'Super Admin',
           role: 'admin',
           roles: ['admin', 'superadmin'],
@@ -269,7 +269,7 @@ async function refreshToken(req, res) {
   const { refreshToken, refresh_token } = req.body || {};
   const tokenVal = refreshToken || refresh_token;
   if (!tokenVal) return sendStandardError(res, 400, 'Refresh token required.', 'MISSING_TOKEN');
-  const adminUser = { id: 1, email: 'admin@digilocal.com', role: 'admin' };
+  const adminUser = { id: 1, email: 'admin@inpinch.com', role: 'admin' };
   const tokens = generateTokens(adminUser, 'admin');
   return respond(res, 200, { access_token: tokens.accessToken, accessToken: tokens.accessToken }, 'Token refreshed.');
 }
@@ -280,7 +280,7 @@ async function getMe(req, res) {
   }
   return respond(res, 200, {
     id: req.user.id || 1,
-    email: req.user.email || 'admin@digilocal.com',
+    email: req.user.email || 'admin@inpinch.com',
     name: req.user.name || 'Administrator',
     role: req.user.role || 'admin',
     powers: req.user.powers || ['ALL'],
@@ -490,7 +490,7 @@ async function holdVendor(req, res) {
     }
 
     const v = existing.rows[0];
-    const emailSubject = String(subject || 'DigiLocal Application Hold Notice - Action Required').trim();
+    const emailSubject = String(subject || 'InPinch Application Hold Notice - Action Required').trim();
     const emailBodyContent = String(email_content || reason || message || 'Your merchant application is currently on hold. Please log in to your vendor portal settings, make the requested updates, and click Resubmit Request.').trim();
 
     await query(
@@ -502,7 +502,7 @@ async function holdVendor(req, res) {
       const { sendEmail } = require('../../services/emailService');
       const html = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; line-height: 1.6;">
-          <h2 style="color: #e65100;">Action Required: Your DigiLocal Merchant Application is On Hold</h2>
+          <h2 style="color: #e65100;">Action Required: Your InPinch Merchant Application is On Hold</h2>
           <p>Dear <strong>${v.vendor_name || v.owner_name || 'Vendor'}</strong>,</p>
           <p>Your store application for <strong>"${v.store_name}"</strong> has been placed on <strong>Hold</strong> by the Admin team for the following reason:</p>
           <div style="background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; margin: 15px 0; font-size: 15px; border-radius: 4px;">
@@ -510,11 +510,11 @@ async function holdVendor(req, res) {
           </div>
           <p><strong>Next Steps:</strong></p>
           <ol>
-            <li>Log in to your DigiLocal Vendor Portal.</li>
+            <li>Log in to your InPinch Vendor Portal.</li>
             <li>Go to <strong>Settings</strong> and update the required shop/owner details as requested.</li>
             <li>Click the <strong>"Resubmit Request"</strong> button to send your updated details to the Admin Hold section.</li>
           </ol>
-          <p>Best regards,<br/><strong>DigiLocal Admin Team</strong></p>
+          <p>Best regards,<br/><strong>InPinch Admin Team</strong></p>
         </div>
       `;
 
@@ -2448,7 +2448,7 @@ async function getPlatformConfig(req, res) {
     const currentPrice = parseFloat(activePlan.price || 5999.00);
 
     return respond(res, 200, {
-      platform_name: cfg.platform_name || 'DigiLocal',
+      platform_name: cfg.platform_name || 'InPinch',
       platform_logo: cfg.platform_logo || 'https://imgh.in/host/ucila6',
       currency: cfg.currency || 'INR',
       gst_percentage: parseFloat(cfg.gst_percentage || 18.00),
@@ -2461,7 +2461,7 @@ async function getPlatformConfig(req, res) {
     }, 'Platform config retrieved successfully.');
   } catch (err) {
     return respond(res, 200, {
-      platform_name: 'DigiLocal',
+      platform_name: 'InPinch',
       annual_subscription_price: 5999.00,
       subscription_price: 5999.00,
       subscription_fee: 5999.00
@@ -2497,7 +2497,7 @@ async function updateSettingsSection(req, res) {
     if (reqUrl.includes('subscription-plans') || reqUrl.includes('subscription') || body.subscription_price || body.annual_subscription_price || body.price) {
       const price = parseFloat(body.price || body.annual_subscription_price || body.subscription_price || body.subscription_fee || 5999.00);
       const name = body.name || body.plan_name || 'Annual Merchant Plan';
-      const description = body.description || '1 Year DigiLocal Storefront Visibility & Resident Ordering';
+      const description = body.description || '1 Year InPinch Storefront Visibility & Resident Ordering';
       const features = body.features ? (typeof body.features === 'string' ? body.features : JSON.stringify(body.features)) : null;
 
       if (!isNaN(price) && price > 0) {
@@ -2542,7 +2542,7 @@ async function checkEmailStatus(req, res) {
     const pass = (process.env.AWS_SMTP_PASSWORD || process.env.SMTP_PASS || '').trim();
     const host = (process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com').trim();
     const port = parseInt(process.env.SMTP_PORT || '587', 10);
-    const from = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"DigiLocal Platform" <${user}>`;
+    const from = process.env.AWS_SES_FROM || process.env.SMTP_FROM || `"InPinch Platform" <${user}>`;
     const region = process.env.AWS_REGION || 'ap-south-1';
 
     if (!user || !pass) {
@@ -2592,13 +2592,13 @@ async function sendTestEmail(req, res) {
       return sendStandardError(res, 400, 'Recipient email is required. Provide "to" or "email" in JSON body.', 'VALIDATION_ERROR');
     }
 
-    const emailSubject = subject || 'DigiLocal Platform - Test Email Notification';
+    const emailSubject = subject || 'InPinch Platform - Test Email Notification';
     let emailHtml = html;
 
     if (!emailHtml) {
       if (template === 'otp') {
         const { otpTemplate } = require('../../templates/emailTemplates');
-        emailHtml = otpTemplate({ name: 'DigiLocal Tester', otp: '482910' });
+        emailHtml = otpTemplate({ name: 'InPinch Tester', otp: '482910' });
       } else if (template === 'welcome') {
         const { welcomeTemplate } = require('../../templates/emailTemplates');
         emailHtml = welcomeTemplate({ vendor_name: 'Merchant Partner', store_name: 'Test Super Store' });
@@ -2615,11 +2615,11 @@ async function sendTestEmail(req, res) {
           store_name: 'Daily Fresh Grocers'
         });
       } else {
-        const textMsg = message || text || 'This is a test notification confirming that the DigiLocal AWS SES SMTP mail service is operating correctly.';
+        const textMsg = message || text || 'This is a test notification confirming that the InPinch AWS SES SMTP mail service is operating correctly.';
         emailHtml = `
           <div style="font-family: Arial, sans-serif; padding: 24px; color: #1a202c; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;">
             <div style="background-color: #0A1428; padding: 18px 24px; border-radius: 6px 6px 0 0; text-align: center;">
-              <h2 style="color: #C5A880; margin: 0; font-size: 20px; letter-spacing: 2px;">DIGILOCAL</h2>
+              <h2 style="color: #C5A880; margin: 0; font-size: 20px; letter-spacing: 2px;">INPINCH</h2>
               <p style="color: #a0aec0; margin: 4px 0 0; font-size: 12px;">Hyperlocal Society Marketplace</p>
             </div>
             <div style="padding: 24px 12px;">
@@ -2630,7 +2630,7 @@ async function sendTestEmail(req, res) {
                 <div><strong>Dispatched At:</strong> ${new Date().toISOString()}</div>
                 <div><strong>SMTP Host:</strong> ${process.env.SMTP_HOST || 'email-smtp.ap-south-1.amazonaws.com'}</div>
               </div>
-              <p style="font-size: 12px; color: #718096; margin-top: 24px;">If you received this email, the DigiLocal transactional email pipeline is fully functional.</p>
+              <p style="font-size: 12px; color: #718096; margin-top: 24px;">If you received this email, the InPinch transactional email pipeline is fully functional.</p>
             </div>
           </div>
         `;

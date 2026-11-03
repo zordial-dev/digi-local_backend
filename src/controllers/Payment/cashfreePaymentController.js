@@ -35,7 +35,7 @@ async function createOrderPaymentSession(req, res) {
     let targetCustomerName = customer_name;
     let targetCustomerPhone = customer_phone;
     let targetCustomerEmail = customer_email;
-    let storeName = 'DigiLocal Merchant';
+    let storeName = 'InPinch Merchant';
 
     // 1. If order_id is provided, look up the existing order in database
     if (order_id) {
@@ -118,7 +118,7 @@ async function createOrderPaymentSession(req, res) {
       amount: targetAmount,
       customer_id: customer_id || `CUST_${targetCustomerPhone || Date.now()}`,
       customer_name: targetCustomerName || 'Resident Customer',
-      customer_email: targetCustomerEmail || 'resident@digilocal.in',
+      customer_email: targetCustomerEmail || 'resident@inpinch.com',
       customer_phone: targetCustomerPhone || '9876543210',
       return_url,
       notify_url
@@ -405,7 +405,7 @@ async function payVendorDirect(req, res) {
       amount: numAmount,
       customer_id: customer_id || `CUST_${customer_phone || Date.now()}`,
       customer_name: customer_name || 'Resident Customer',
-      customer_email: customer_email || 'resident@digilocal.in',
+      customer_email: customer_email || 'resident@inpinch.com',
       customer_phone: customer_phone || '9876543210',
       notes: notes || `Direct payment to ${vendor.store_name}`,
       return_url,

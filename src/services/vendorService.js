@@ -171,7 +171,7 @@ class VendorService {
     vendor.shop_id = String(vendor.vendor_id);
     vendor.id = String(vendor.vendor_id);
     vendor.public_id = vendor.public_id || ('vnd@' + String(vendor.vendor_id).padStart(4, '0'));
-    vendor.store_name = vendor.store_name || vendor.shop_name || "DigiLocal Partner Store";
+    vendor.store_name = vendor.store_name || vendor.shop_name || "InPinch Partner Store";
     vendor.vendor_name = vendor.vendor_name || vendor.owner_name || '';
     vendor.owner_name = vendor.vendor_name || vendor.owner_name || '';
     vendor.email = vendor.email || '';

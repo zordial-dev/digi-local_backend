@@ -148,7 +148,7 @@ async function registerVendor(req, res) {
     const qr_code = String(body.qr_code || body.qr_code_url || body.upi_qr_code || body.qrCodeUrl || '').trim();
 
     const hashedPassword = await hashPassword(password);
-    const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for DigiLocal residents.`;
+    const defaultDesc = `Welcome to ${store_name}! ${category} daily essentials sourced for InPinch residents.`;
 
     let society_id = null;
     let resolvedSocName = '';
@@ -235,7 +235,7 @@ async function registerVendor(req, res) {
       const vendorRes = await query(
         `INSERT INTO vendors (society_id, area, vendor_name, public_id, gst_number, gstin, pan_number, phone_number, email, password, password_hash, store_name, category, shop_number, shop_no, address, location, city, state, pincode, logo, shop_image, description, account_number, bank_account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, status, created_at) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?) RETURNING *`,
-        [society_id, resolvedSocName || area || vendorLocation || '', vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.digilocal`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation || resolvedSocName || area || '', vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, kolkataISTNow]
+        [society_id, resolvedSocName || area || vendorLocation || '', vendor_name, vendorPublicId, gstin, gstin, pan_number, phone_number, email || `${Date.now()}@vendor.inpinch`, hashedPassword, hashedPassword, store_name, category, shop_number, shop_number, address || shop_number || area || vendorLocation || '', vendorLocation || resolvedSocName || area || '', vendorCity, vendorState, vendorPincode, shop_image || '', shop_image || '', defaultDesc, account_number, account_number, ifsc_code, bank_name, account_holder_name, upi_id, qr_code, whatsapp_number, accepted_payment_methods, vendor_type, can_add_items, kolkataISTNow]
       );
       const newVendorRow = vendorRes.rows[0] || {};
       vendor_id = Number(newVendorRow.vendor_id || vendorRes.insertId);
@@ -272,7 +272,7 @@ async function registerVendor(req, res) {
     await query(
       `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@digilocal.internal`, phone_number, hashedPassword, society_id, resolvedSocName || area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
+      [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@inpinch.internal`, phone_number, hashedPassword, society_id, resolvedSocName || area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
     ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
 
     // Fetch final vendor record to ensure accurate public_id
@@ -300,8 +300,8 @@ async function registerVendor(req, res) {
 
     // 2. Generate Cashfree payment order session for subscription purchase
     const cashfreeService = require('../../services/cashfreeService');
-    const returnUrl = body.return_url || body.returnUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`;
-    const notifyUrl = body.notify_url || body.notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://digi-local-backend.onrender.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`;
+    const returnUrl = body.return_url || body.returnUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/vendor/subscription/verify?order_id={order_id}`;
+    const notifyUrl = body.notify_url || body.notifyUrl || `${(process.env.PUBLIC_API_URL || 'https://services.inpinch.com').replace('http://', 'https://')}/api/payments/cashfree/webhook`;
 
     const cashfreeSession = await cashfreeService.createSubscriptionPaymentSession({
       vendor_id,
@@ -1240,7 +1240,7 @@ async function getBankDetailsByIfsc(req, res) {
       signal: controller.signal,
       headers: {
         'Accept': 'application/json',
-        'User-Agent': 'DigiLocal-Backend/1.0'
+        'User-Agent': 'InPinch-Backend/1.0'
       }
     });
     clearTimeout(timeoutId);

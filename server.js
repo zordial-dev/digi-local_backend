@@ -124,7 +124,7 @@ app.get('/api-docs', (req, res) => {
     <html lang="en">
     <head>
       <meta charset="UTF-8">
-      <title>DigiLocal API Documentation - Swagger UI</title>
+      <title>InPinch API Documentation - Swagger UI</title>
       <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
       <style>
         body { margin: 0; padding: 0; background: #FAF9F6; }
@@ -213,7 +213,7 @@ async function bootServer() {
         const { initSocket } = require('./src/socket');
 
         const server = app.listen(PORT, '0.0.0.0', () => {
-            console.log(`🚀 DigiLocal Server running on http://localhost:${PORT} | Docs: http://localhost:${PORT}/api-docs`);
+            console.log(`🚀 InPinch Server running on http://localhost:${PORT} | Docs: http://localhost:${PORT}/api-docs`);
         }).on('error', (err) => {
             if (err.code === 'EADDRINUSE') {
                 logger.error(`Port ${PORT} is already in use by another Node process. Run 'npx kill-port ${PORT}' or 'taskkill /F /IM node.exe' to free port ${PORT}.`);

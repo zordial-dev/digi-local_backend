@@ -44,7 +44,7 @@ function vendorWelcomeEmail(vendor, plainPassword) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Welcome to DigiLocal — ${store_name}</title>
+  <title>Welcome to InPinch — ${store_name}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -66,7 +66,7 @@ function vendorWelcomeEmail(vendor, plainPassword) {
               <tr>
                 <td>
                   <div style="display:inline-block; background:rgba(197,168,128,0.15); border:1px solid rgba(197,168,128,0.3); border-radius:10px; padding:8px 18px;">
-                    <span style="font-size:22px; font-weight:800; color:#C5A880; letter-spacing:1px;">Digi<span style="color:#ffffff;">Local</span></span>
+                    <span style="font-size:22px; font-weight:800; color:#C5A880; letter-spacing:1px;">In<span style="color:#ffffff;">Pinch</span></span>
                   </div>
                 </td>
                 <td align="right">
@@ -86,7 +86,7 @@ function vendorWelcomeEmail(vendor, plainPassword) {
               Welcome Aboard, ${vendor_name}!
             </h1>
             <p style="font-size:15px; color:rgba(255,255,255,0.65); line-height:1.6; max-width:420px; margin:0 auto;">
-              Your vendor account for <strong style="color:#C5A880;">${store_name}</strong> has been created successfully on the DigiLocal Platform.
+              Your vendor account for <strong style="color:#C5A880;">${store_name}</strong> has been created successfully on the InPinch Platform.
             </p>
             <!-- Success Badge -->
             <div style="margin-top:24px; display:inline-block; background:rgba(72,199,142,0.15); border:1px solid rgba(72,199,142,0.4); border-radius:50px; padding:8px 22px;">
@@ -107,7 +107,7 @@ function vendorWelcomeEmail(vendor, plainPassword) {
           <!-- Greeting -->
           <p style="font-size:15px; color:#374151; line-height:1.8;">
             Hi <strong>${vendor_name}</strong>,<br/>
-            Congratulations on joining the <strong>DigiLocal</strong> family! Your store is now live and ready to serve residents in your society. Below are your account credentials and store details — please keep them safe.
+            Congratulations on joining the <strong>InPinch</strong> family! Your store is now live and ready to serve residents in your society. Below are your account credentials and store details — please keep them safe.
           </p>
 
           <!-- ── Account Credentials Card ── -->
@@ -190,11 +190,11 @@ function vendorWelcomeEmail(vendor, plainPassword) {
         <tr>
           <td style="padding:28px 32px; text-align:center;">
             <p style="font-size:13px; color:rgba(255,255,255,0.5); line-height:1.8; margin-bottom:12px;">
-              This email was sent to <strong style="color:rgba(255,255,255,0.7);">${email}</strong> because you registered as a vendor on DigiLocal.<br/>
+              This email was sent to <strong style="color:rgba(255,255,255,0.7);">${email}</strong> because you registered as a vendor on InPinch.<br/>
               If this wasn't you, please contact support immediately.
             </p>
             <p style="font-size:11px; color:rgba(255,255,255,0.3);">
-              © ${year} DigiLocal Platform. All rights reserved.<br/>
+              © ${year} InPinch Platform. All rights reserved.<br/>
               Need help? Reply to this email or contact our support team.
             </p>
           </td>
