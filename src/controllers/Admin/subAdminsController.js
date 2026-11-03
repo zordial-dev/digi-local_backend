@@ -67,7 +67,7 @@ async function recordInternalAuditLog({ user_email, user_name, user_role, module
         id,
         now.toISOString(),
         readable,
-        user_email || 'admin@digilocal.com',
+        user_email || 'admin@inpinch.com',
         user_name || 'System Admin',
         user_role || 'super_admin',
         module || 'SETTINGS',
@@ -173,13 +173,13 @@ async function subAdminLogin(req, res) {
       });
     }
 
-    // 2. Fallback to Super Admin check (admin@digilocal.com / admin)
-    if (cleanEmail === 'admin@digilocal.com' || cleanEmail.includes('admin')) {
+    // 2. Fallback to Super Admin check (admin@inpinch.com / admin)
+    if (cleanEmail === 'admin@inpinch.com' || cleanEmail === 'admin@inpinch.com' || cleanEmail.includes('admin')) {
       const superAdminPowers = ['SOCIETIES', 'VENDORS', 'SUBSCRIPTIONS', 'SUPPORT', 'SETTINGS', 'SUB_ADMINS'];
       const tokenPayload = {
         sub: 'super-admin',
         id: 'super-admin',
-        email: 'admin@digilocal.com',
+        email: cleanEmail.includes('@') ? cleanEmail : 'admin@inpinch.com',
         name: 'Super Admin',
         role: 'super_admin',
         powers: superAdminPowers,
@@ -199,7 +199,7 @@ async function subAdminLogin(req, res) {
         role: 'super_admin',
         user: {
           id: 'super-admin',
-          email: 'admin@digilocal.com',
+          email: cleanEmail.includes('@') ? cleanEmail : 'admin@inpinch.com',
           name: 'Super Admin',
           role: 'super_admin',
           powers: superAdminPowers,
@@ -452,7 +452,7 @@ async function createSubAdmin(req, res) {
 
     // Auto-record audit log
     await recordInternalAuditLog({
-      user_email: requestor.email || 'admin@digilocal.com',
+      user_email: requestor.email || 'admin@inpinch.com',
       user_name: requestor.name || 'Admin User',
       user_role: requestor.role || 'super_admin',
       module: 'SUB_ADMINS',
@@ -596,7 +596,7 @@ async function updateSubAdmin(req, res) {
     }
 
     await recordInternalAuditLog({
-      user_email: requestor.email || 'admin@digilocal.com',
+      user_email: requestor.email || 'admin@inpinch.com',
       user_name: requestor.name || 'Admin User',
       user_role: requestor.role || 'super_admin',
       module: 'SUB_ADMINS',
@@ -647,7 +647,7 @@ async function toggleSubAdminStatus(req, res) {
     await query(`UPDATE sub_admins SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [targetStatus, id]);
 
     await recordInternalAuditLog({
-      user_email: req.user?.email || 'admin@digilocal.com',
+      user_email: req.user?.email || 'admin@inpinch.com',
       user_name: req.user?.name || 'Admin User',
       user_role: req.user?.role || 'super_admin',
       module: 'SUB_ADMINS',
@@ -717,7 +717,7 @@ async function deleteSubAdmin(req, res) {
     await query(`DELETE FROM sub_admins WHERE id = ?`, [id]);
 
     await recordInternalAuditLog({
-      user_email: requestor.email || 'admin@digilocal.com',
+      user_email: requestor.email || 'admin@inpinch.com',
       user_name: requestor.name || 'Admin User',
       user_role: requestor.role || 'super_admin',
       module: 'SUB_ADMINS',
@@ -757,7 +757,7 @@ async function recordAuditLog(req, res) {
         id,
         now.toISOString(),
         readable,
-        user_email || req.user?.email || 'admin@digilocal.com',
+        user_email || req.user?.email || 'admin@inpinch.com',
         user_name || req.user?.name || 'System Admin',
         user_role || req.user?.role || 'super_admin',
         module || 'SETTINGS',

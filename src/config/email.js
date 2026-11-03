@@ -23,7 +23,7 @@ const sendMailAsync = async ({ to, subject, html, taskName = 'email' }) => {
 
   // Fallback: Gmail transporter if EMAIL_USER is explicitly configured
   if (process.env.EMAIL_USER && process.env.EMAIL_USER !== 'your_gmail@gmail.com') {
-    const from = process.env.EMAIL_FROM || `DigiLocal Platform <${process.env.EMAIL_USER}>`;
+    const from = process.env.EMAIL_FROM || `InPinch Platform <${process.env.EMAIL_USER}>`;
     return await transporter.sendMail({ from, to, subject, html });
   }
 
@@ -43,13 +43,13 @@ const queueEmailDispatch = (to, subject, html, taskName) => {
 const sendSubscriptionExpiryEmail = async (vendor, daysLeft) => {
   let subject = '';
   if (daysLeft < 0) {
-    subject = `⚠️ DigiLocal Subscription Expired – ${vendor.store_name}`;
+    subject = `⚠️ InPinch Subscription Expired – ${vendor.store_name}`;
   } else if (daysLeft === 0) {
-    subject = `🚨 DigiLocal Subscription Expires TODAY – ${vendor.store_name}`;
+    subject = `🚨 InPinch Subscription Expires TODAY – ${vendor.store_name}`;
   } else if (daysLeft === 1) {
-    subject = `🔔 DigiLocal Subscription Expiring Tomorrow (1 Day) – ${vendor.store_name}`;
+    subject = `🔔 InPinch Subscription Expiring Tomorrow (1 Day) – ${vendor.store_name}`;
   } else {
-    subject = `🔔 DigiLocal Subscription Expiring in ${daysLeft} Days – ${vendor.store_name}`;
+    subject = `🔔 InPinch Subscription Expiring in ${daysLeft} Days – ${vendor.store_name}`;
   }
 
   const html = templates.subscriptionExpiryTemplate({
@@ -66,7 +66,7 @@ const sendSubscriptionExpiryEmail = async (vendor, daysLeft) => {
  * 2. OTP Security Email
  */
 const sendOTPEmail = (toEmail, otp, name) => {
-  const subject = `🔐 ${otp} is your DigiLocal Verification Code`;
+  const subject = `🔐 ${otp} is your InPinch Verification Code`;
   const html = templates.otpTemplate({ name, otp });
   queueEmailDispatch(toEmail, subject, html, `otp_${toEmail}`);
 };
@@ -75,7 +75,7 @@ const sendOTPEmail = (toEmail, otp, name) => {
  * 3. Welcome Email
  */
 const sendWelcomeEmail = (toEmail, vendorName, storeName) => {
-  const subject = `🎉 Welcome to DigiLocal Marketplace, ${storeName}!`;
+  const subject = `🎉 Welcome to InPinch Marketplace, ${storeName}!`;
   const html = templates.welcomeTemplate({ vendor_name: vendorName, store_name: storeName });
   queueEmailDispatch(toEmail, subject, html, `welcome_${storeName}`);
 };
@@ -102,7 +102,7 @@ const sendOrderInvoiceEmail = (toEmail, customerName, orderId, totalAmount, item
  * 6. Password Reset Success Email
  */
 const sendPasswordResetSuccessEmail = (toEmail, name) => {
-  const subject = `🔒 Your DigiLocal Password Was Changed`;
+  const subject = `🔒 Your InPinch Password Was Changed`;
   const html = templates.passwordResetSuccessTemplate({ name });
   queueEmailDispatch(toEmail, subject, html, `password_reset_${toEmail}`);
 };
@@ -111,7 +111,7 @@ const sendPasswordResetSuccessEmail = (toEmail, name) => {
  * 7. Verification Email
  */
 const sendVerificationEmail = (toEmail, name, verificationUrl) => {
-  const subject = `✉️ Verify Your DigiLocal Account`;
+  const subject = `✉️ Verify Your InPinch Account`;
   const html = templates.verificationTemplate({ name, verificationUrl });
   queueEmailDispatch(toEmail, subject, html, `verification_${toEmail}`);
 };

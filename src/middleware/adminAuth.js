@@ -55,7 +55,7 @@ async function authenticateAdminToken(req, res, next) {
         req.user = {
             id: decoded.sub || decoded.id,
             name: decoded.name || 'Admin',
-            email: decoded.email || 'admin@digilocal.com',
+            email: decoded.email || 'admin@inpinch.com',
             role: role,
             powers: powers,
             allowed_delegation_powers: Array.isArray(decoded.allowed_delegation_powers) ? decoded.allowed_delegation_powers : powers,

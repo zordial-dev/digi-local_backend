@@ -9,10 +9,10 @@ function normalizeSlug(rawSlug) {
 // Fallback content in case DB table is empty or loading
 const FALLBACK_CONTACTS = {
   phone: '+91 800-562-5999',
-  email: 'support@digilocal.in',
+  email: 'support@inpinch.com',
   toll_free: '1800-123-4567',
   whatsapp: '+91 80056 25999',
-  address: 'DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309',
+  address: 'InPinch Tech Hub, Tower B, Sector 62, Noida, UP - 201309',
   working_hours: 'Monday to Saturday: 9:00 AM - 8:00 PM IST'
 };
 
@@ -20,26 +20,26 @@ const FALLBACK_PAGES = {
   'help-support': {
     slug: 'help-support',
     title: 'Help & Support Center',
-    meta_description: 'Official DigiLocal Help & Support, FAQ, Order Assistance, and Customer Service Contacts.',
-    content: `# DigiLocal Help & Support Center
+    meta_description: 'Official InPinch Help & Support, FAQ, Order Assistance, and Customer Service Contacts.',
+    content: `# InPinch Help & Support Center
 
-Welcome to the DigiLocal Help & Support Center. We are committed to providing seamless assistance to resident customers, society secretaries, and local vendor merchants.
+Welcome to the InPinch Help & Support Center. We are committed to providing seamless assistance to resident customers, society secretaries, and local vendor merchants.
 
 ---
 
 ## 📞 Quick Contact Information
 - **Support Hotline**: +91 800-562-5999
-- **Official Email**: support@digilocal.in
+- **Official Email**: support@inpinch.com
 - **Toll-Free Support**: 1800-123-4567
 - **WhatsApp Support**: +91 80056 25999
 - **Working Hours**: Monday - Saturday | 9:00 AM - 8:00 PM IST
-- **Head Office**: DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309
+- **Head Office**: InPinch Tech Hub, Tower B, Sector 62, Noida, UP - 201309
 
 ---
 
 ## 📋 Frequently Asked Questions (FAQ)
 
-### 1. How do I place an order on DigiLocal?
+### 1. How do I place an order on InPinch?
 You can browse verified vendor stores inside your registered residential society, select items into your cart, and checkout using Razorpay UPI, Cards, NetBanking, or Cash on Delivery.
 
 ### 2. What should I do if my order is delayed?
@@ -52,16 +52,16 @@ Refunds for prepaid orders are processed immediately upon order cancellation and
 Local merchants can apply by filling out the Merchant Registration form in the Vendor App or Admin Portal. Once verified by the Society Admin or Super Admin, your store will go live.
 
 ### 5. Need Urgent Help?
-Email us directly at **support@digilocal.in** with your Order ID or Ticket Number for priority assistance.`
+Email us directly at **support@inpinch.com** with your Order ID or Ticket Number for priority assistance.`
   },
 
   'about-us': {
     slug: 'about-us',
-    title: 'About DigiLocal',
-    meta_description: 'Learn about DigiLocal, India premier hyperlocal enclave e-commerce and residential merchant ecosystem.',
-    content: `# About DigiLocal
+    title: 'About InPinch',
+    meta_description: 'Learn about InPinch, India premier hyperlocal enclave e-commerce and residential merchant ecosystem.',
+    content: `# About InPinch
 
-DigiLocal is India's leading **Hyperlocal Enclave E-Commerce Platform**, empowering residential enclave societies, gated communities, and local neighborhood merchants.
+InPinch is India's leading **Hyperlocal Enclave E-Commerce Platform**, empowering residential enclave societies, gated communities, and local neighborhood merchants.
 
 ---
 
@@ -70,7 +70,7 @@ Our mission is to bridge the gap between residential society families and truste
 
 ---
 
-## 🌟 Why DigiLocal?
+## 🌟 Why InPinch?
 - **Verified Society Stores**: All vendor merchants are vetted and approved for your gated enclave.
 - **Zero Delivery Delays**: Local neighborhood delivery within minutes directly to your flat.
 - **Direct Merchant Connect**: Chat or call store owners directly for custom requests.
@@ -79,20 +79,20 @@ Our mission is to bridge the gap between residential society families and truste
 ---
 
 ## 🏢 Contact & Corporate Info
-- **Corporate Email**: support@digilocal.in
+- **Corporate Email**: support@inpinch.com
 - **Customer Helpline**: +91 800-562-5999
-- **Corporate Address**: DigiLocal Tech Hub, Sector 62, Noida, UP - 201309`
+- **Corporate Address**: InPinch Tech Hub, Sector 62, Noida, UP - 201309`
   },
 
   'privacy-policy': {
     slug: 'privacy-policy',
     title: 'Privacy Policy',
-    meta_description: 'DigiLocal Privacy Policy detailing data protection, encryption, user consent, and security standards.',
-    content: `# DigiLocal Privacy Policy
+    meta_description: 'InPinch Privacy Policy detailing data protection, encryption, user consent, and security standards.',
+    content: `# InPinch Privacy Policy
 
 **Effective Date**: August 14, 2026 | **Version**: 3.2.0
 
-DigiLocal ("we", "our", or "us") respects your privacy and is dedicated to protecting your personal data. This Privacy Policy governs your use of the DigiLocal mobile applications, website, and admin platforms.
+InPinch ("we", "our", or "us") respects your privacy and is dedicated to protecting your personal data. This Privacy Policy governs your use of the InPinch mobile applications, website, and admin platforms.
 
 ---
 
@@ -116,30 +116,30 @@ We enforce **256-bit SSL/TLS encryption** across all API traffic. Payment card a
 ---
 
 ## 4. User Rights & Account Deletion
-You reserve the right to request permanent deletion of your DigiLocal account and personal data at any time via App Settings or by emailing **support@digilocal.in**.
+You reserve the right to request permanent deletion of your InPinch account and personal data at any time via App Settings or by emailing **support@inpinch.com**.
 
 ---
 
 ## 5. Contact Privacy Officer
 For any privacy inquiries or data access requests, please contact our Data Protection Officer at:
-- **Email**: support@digilocal.in
+- **Email**: support@inpinch.com
 - **Phone**: +91 800-562-5999`
   },
 
   'terms-conditions': {
     slug: 'terms-conditions',
     title: 'Terms & Conditions',
-    meta_description: 'DigiLocal Terms & Conditions of Service for residents, customers, and vendor merchants.',
-    content: `# DigiLocal Terms & Conditions
+    meta_description: 'InPinch Terms & Conditions of Service for residents, customers, and vendor merchants.',
+    content: `# InPinch Terms & Conditions
 
 **Effective Date**: August 14, 2026 | **Version**: 3.2.0
 
-Please read these Terms & Conditions carefully before using the DigiLocal platform, mobile apps, or vendor services.
+Please read these Terms & Conditions carefully before using the InPinch platform, mobile apps, or vendor services.
 
 ---
 
 ## 1. Acceptance of Terms
-By creating an account on DigiLocal as a Resident User, Society Admin, or Vendor Merchant, you agree to comply with and be bound by these Terms & Conditions.
+By creating an account on InPinch as a Resident User, Society Admin, or Vendor Merchant, you agree to comply with and be bound by these Terms & Conditions.
 
 ---
 
@@ -163,7 +163,7 @@ By creating an account on DigiLocal as a Resident User, Society Admin, or Vendor
 
 ## 5. Contact Information
 For any legal inquiries regarding these terms:
-- **Email**: support@digilocal.in
+- **Email**: support@inpinch.com
 - **Phone**: +91 800-562-5999`
   }
 };

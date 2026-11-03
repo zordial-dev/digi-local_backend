@@ -84,7 +84,7 @@ async function initDb(maxRetries = 5, initialDelayMs = 2000) {
         port: parseInt(process.env.PGPORT || '5432', 10),
         user: process.env.PGUSER || 'postgres',
         password: process.env.PGPASSWORD || 'postgres',
-        database: process.env.PGDATABASE || 'digilocal',
+        database: process.env.PGDATABASE || 'inpinch',
         ssl: sslOption,
         max: 20,
         idleTimeoutMillis: 30000,
@@ -408,7 +408,7 @@ async function setupTablesPg() {
     `ALTER TABLE ticket_attachments ADD COLUMN IF NOT EXISTS uploaded_by VARCHAR(128)`,
     `ALTER TABLE ticket_attachments ADD COLUMN IF NOT EXISTS uploaded_at_ist TIMESTAMP WITH TIME ZONE DEFAULT NOW()`,
 
-    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_name VARCHAR(255) DEFAULT 'DigiLocal'`,
+    `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_name VARCHAR(255) DEFAULT 'InPinch'`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6'`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS admin_password_hash VARCHAR(255)`,
     `ALTER TABLE platform_config ADD COLUMN IF NOT EXISTS gst_percentage DECIMAL(5,2) DEFAULT 18.00`,
@@ -658,7 +658,7 @@ async function setupTablesPg() {
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS platform_config (
       id INT PRIMARY KEY DEFAULT 1,
-      platform_name VARCHAR(255) DEFAULT 'DigiLocal',
+      platform_name VARCHAR(255) DEFAULT 'InPinch',
       platform_logo TEXT DEFAULT 'https://imgh.in/host/ucila6',
       admin_password_hash VARCHAR(255),
       gst_percentage DECIMAL(5,2) DEFAULT 18.00,
@@ -696,7 +696,7 @@ async function setupTablesPg() {
       price DECIMAL(10,2) NOT NULL DEFAULT 5999.00,
       duration_days INT NOT NULL DEFAULT 365,
       billing_cycle VARCHAR(20) DEFAULT 'YEARLY',
-      features JSONB DEFAULT '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
+      features JSONB DEFAULT '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -739,7 +739,7 @@ async function setupTablesPg() {
   // Seed default 1-year ₹5999 plan if not already present
   await pgPool.query(`
     INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, features, is_active)
-    VALUES ('ANNUAL_5999', 'Annual Merchant Plan', '1 Year DigiLocal Storefront Visibility & Resident Ordering', 5999.00, 365, 'YEARLY', '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]', TRUE)
+    VALUES ('ANNUAL_5999', 'Annual Merchant Plan', '1 Year InPinch Storefront Visibility & Resident Ordering', 5999.00, 365, 'YEARLY', '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]', TRUE)
     ON CONFLICT (plan_code) DO UPDATE SET price = 5999.00, name = 'Annual Merchant Plan', duration_days = 365;
   `).catch(() => { });
 
@@ -819,7 +819,7 @@ async function seedInitialData() {
     }
     const nameCheck = await query(`SELECT config_value FROM platform_config WHERE config_key = 'platform_name'`);
     if (!nameCheck.rows || nameCheck.rows.length === 0) {
-      await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_name', 'DigiLocal')`).catch(() => {});
+      await query(`INSERT INTO platform_config (config_key, config_value) VALUES ('platform_name', 'InPinch')`).catch(() => {});
     }
   } catch (_) { }
 
@@ -840,17 +840,17 @@ async function seedInitialData() {
     CREATE TABLE IF NOT EXISTS support_contacts (
       id INT PRIMARY KEY DEFAULT 1,
       phone VARCHAR(50) NOT NULL DEFAULT '+91 800-562-5999',
-      email VARCHAR(255) NOT NULL DEFAULT 'support@digilocal.in',
+      email VARCHAR(255) NOT NULL DEFAULT 'support@inpinch.com',
       toll_free VARCHAR(50) DEFAULT '1800-123-4567',
       whatsapp VARCHAR(50) DEFAULT '+91 80056 25999',
-      address TEXT DEFAULT 'DigiLocal Tech Hub, Tower B, Sector 62, Noida, UP - 201309',
+      address TEXT DEFAULT 'InPinch Tech Hub, Tower B, Sector 62, Noida, UP - 201309',
       working_hours VARCHAR(100) DEFAULT 'Monday to Saturday: 9:00 AM - 8:00 PM IST',
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `).catch(() => { });
 
   // Idempotently seed single active ₹2/month testing plan
-  await pgPool.query(`INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, billing_interval, features, is_active, sort_order) SELECT 'MONTHLY_TEST_2', 'Monthly Merchant Plan (Testing)', '1 Month DigiLocal Storefront Visibility & Resident Ordering (Testing Plan)', 2.00, 30, 'MONTHLY', 'MONTHLY', '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb, TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM plans WHERE plan_code = 'MONTHLY_TEST_2'); UPDATE plans SET is_active = TRUE WHERE plan_code = 'MONTHLY_TEST_2' AND is_active IS NOT TRUE; UPDATE plans SET is_active = FALSE WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE;`).catch(() => {});
+  await pgPool.query(`INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, billing_interval, features, is_active, sort_order) SELECT 'MONTHLY_TEST_2', 'Monthly Merchant Plan (Testing)', '1 Month InPinch Storefront Visibility & Resident Ordering (Testing Plan)', 2.00, 30, 'MONTHLY', 'MONTHLY', '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb, TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM plans WHERE plan_code = 'MONTHLY_TEST_2'); UPDATE plans SET is_active = TRUE WHERE plan_code = 'MONTHLY_TEST_2' AND is_active IS NOT TRUE; UPDATE plans SET is_active = FALSE WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE;`).catch(() => {});
 
 
 }

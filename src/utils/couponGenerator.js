@@ -2,14 +2,14 @@ const crypto = require('crypto');
 const { query } = require('../models/db');
 
 /**
- * Generates an 8-character alphanumeric coupon code (Zomato-style: e.g. 'DIGI1000', 'SAVE2026', 'FEST5999').
+ * Generates an 8-character alphanumeric coupon code (e.g. 'PINCH100', 'SAVE2026').
  * Uppercase letters and numbers, excluding easily confused characters (O, 0, I, 1).
  * 
  * @param {string} prefix - Optional 2-4 character prefix (default: 'DIGI')
  * @returns {string} - 8-character coupon code
  */
-function generateCouponCode(prefix = 'DIGI') {
-  const cleanPrefix = String(prefix || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+function generateCouponCode(prefix = 'PINCH') {
+  const cleanPrefix = String(prefix || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
   const remainingLength = 8 - cleanPrefix.length;
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   
@@ -28,7 +28,7 @@ function generateCouponCode(prefix = 'DIGI') {
  * @param {string} prefix - Optional prefix (e.g. 'SAVE', 'DIGI')
  * @returns {Promise<string>}
  */
-async function generateUniqueCouponCode(prefix = 'DIGI') {
+async function generateUniqueCouponCode(prefix = 'PINCH') {
   let attempts = 0;
   while (attempts < 10) {
     const code = generateCouponCode(prefix);

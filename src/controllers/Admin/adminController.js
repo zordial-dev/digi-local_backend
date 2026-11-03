@@ -17,7 +17,7 @@ function loginAdmin(req, res) {
     const inputSecret = admin_secret || secret || password;
 
     if (inputSecret === configuredSecret) {
-        const adminUser = { id: 1, email: email || 'admin@digilocal.com', role: 'admin' };
+        const adminUser = { id: 1, email: email || 'admin@inpinch.com', role: 'admin' };
         const tokens = generateTokens(adminUser);
         return res.status(200).json({
             message: 'Admin authentication successful',
@@ -203,7 +203,7 @@ async function getConfig(req, res) {
         }
 
         const result = await query(`SELECT config_key, config_value FROM platform_config`);
-        const config = { platform_logo: 'https://imgh.in/host/ucila6', platform_name: 'DigiLocal' };
+        const config = { platform_logo: 'https://imgh.in/host/ucila6', platform_name: 'InPinch' };
         (result.rows || []).forEach(row => { config[row.config_key] = row.config_value; });
 
         memoryCache.set(cacheKey, config, 120000);
@@ -269,9 +269,9 @@ async function updateVendorStatus(req, res) {
             const subject = uppercaseStatus === 'SUSPENDED' ? 'Vendor Account Suspended' : 'Vendor Account Reactivated';
             const html = `
                 <h3>Hello ${vendor.vendor_name || 'Vendor'},</h3>
-                <p>Your store <strong>${vendor.store_name || 'DigiLocal Store'}</strong> has been <strong>${uppercaseStatus}</strong>.</p>
+                <p>Your store <strong>${vendor.store_name || 'InPinch Store'}</strong> has been <strong>${uppercaseStatus}</strong>.</p>
                 <p><strong>Admin Message:</strong><br/>${custom_message}</p>
-                <p>Please contact DigiLocal Admin support for more information.</p>
+                <p>Please contact InPinch Admin support for more information.</p>
             `;
             sendEmail({ to: vendor.email, subject, html }).catch(err => console.error('Failed to send suspension email:', err));
         }

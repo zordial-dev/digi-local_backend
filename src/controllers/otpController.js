@@ -342,7 +342,7 @@ const sendEmailOtpController = async (req, res) => {
     // Send email via AWS SES / Nodemailer
     const emailResult = await sendEmail({
       to: cleanEmail,
-      subject: `🔐 ${code} is your DigiLocal Verification Code`,
+      subject: `🔐 ${code} is your InPinch Verification Code`,
       html: emailHtml
     });
 

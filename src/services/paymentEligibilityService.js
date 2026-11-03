@@ -3,7 +3,7 @@ const { query } = require('../models/db');
 /**
  * Payment Eligibility & Banking Security Service
  * Centralizes vendor banking validation, masking, and payment eligibility calculation
- * across DigiLocal website, mobile applications, and backend APIs.
+ * across InPinch website, mobile applications, and backend APIs.
  */
 
 // Strict Indian IFSC Format: 4 letters, followed by 0, followed by 6 alphanumeric characters
@@ -316,7 +316,7 @@ async function checkOrderPaymentEligibility({ vendor_id, order_id, items = [] } 
   } else {
     const isMixed = vendorList.length > 1;
     const reasonMsg = isMixed
-      ? `This order contains items from multiple vendors. Vendor(s) #${ineligibleVendors.join(', #')} have not configured valid bank details. Under DigiLocal multi-vendor settlement architecture, online payment cannot be accepted for mixed orders unless all participating vendors have valid bank details. Please proceed with Cash on Delivery (COD).`
+      ? `This order contains items from multiple vendors. Vendor(s) #${ineligibleVendors.join(', #')} have not configured valid bank details. Under InPinch multi-vendor settlement architecture, online payment cannot be accepted for mixed orders unless all participating vendors have valid bank details. Please proceed with Cash on Delivery (COD).`
       : `Online payment is not available for this vendor because verified bank account details have not been configured. Please proceed with Cash on Delivery (COD).`;
 
     return {
