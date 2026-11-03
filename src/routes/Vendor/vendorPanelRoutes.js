@@ -244,8 +244,8 @@ router.delete(['/:vendorId', '/:vendorId/store', '/:vendorId/account', '/account
 // Subscription & Coupons Endpoints (Vendor Owner Only)
 router.get('/:vendorId/subscription-status', authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
 router.get('/:vendorId/coupons', authenticateToken, requireVendorOwner, subscriptionController.getCoupons.bind(subscriptionController));
-router.post('/:vendorId/subscribe', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
-router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
+router.post('/:vendorId/subscribe', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/:vendorId/renew', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/:vendorId/subscription-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/:vendorId/create-payment-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/:vendorId/verify-subscription', authenticateToken, requireVendorOwner, subscriptionController.verifyPayment.bind(subscriptionController));
