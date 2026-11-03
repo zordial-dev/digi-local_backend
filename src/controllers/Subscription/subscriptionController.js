@@ -2,13 +2,14 @@ const subscriptionService = require('../../services/subscriptionService');
 
 /**
  * Subscription & Coupon Controller
- * Handles ₹5,999/yr plans, 8-character coupons, status/expiry popups, and reminder runs.
+ * Handles configurable plans, status & lifecycle, Cashfree payment sessions,
+ * generic upgrade quotes & checkout, and payment verification.
  */
 class SubscriptionController {
 
   /**
    * GET /api/subscriptions/plans (also /api/plans)
-   * Returns active subscription plans (1-year ₹5,999/year).
+   * Returns active subscription plans (single active ₹2/month plan).
    */
   async getPlans(req, res) {
     try {
@@ -26,8 +27,7 @@ class SubscriptionController {
   }
 
   /**
-   * GET /api/subscriptions/coupons (also /api/coupons, /api/vendorPanel/:vendorId/coupons)
-   * Returns only unused and active coupons for a vendor where CURRENT_DATE is between start_date and end_date.
+   * GET /api/subscriptions/coupons
    */
   async getCoupons(req, res) {
     try {
@@ -54,8 +54,7 @@ class SubscriptionController {
   }
 
   /**
-   * POST /api/subscriptions/apply-coupon (also /api/coupons/apply)
-   * Validates coupon code and calculates discounted subscription price.
+   * POST /api/subscriptions/apply-coupon
    */
   async applyCoupon(req, res) {
     try {
@@ -87,42 +86,7 @@ class SubscriptionController {
   }
 
   /**
-   * POST /api/subscriptions/subscribe (also /api/vendorPanel/:vendorId/renew, /api/vendorPanel/:vendorId/subscribe)
-   * Purchases or renews 1-year ₹5,999 subscription using online payment.
-   */
-  async subscribe(req, res) {
-    try {
-      const vendorId = req.body.vendor_id || req.body.vendorId || req.params.vendorId || req.user?.vendor_id || req.user?.id;
-      const planId = req.body.plan_id || req.body.planId;
-      const couponCode = req.body.coupon_code || req.body.couponCode || req.body.code;
-      const paymentMethod = req.body.payment_method || req.body.paymentMethod || 'ONLINE';
-      const transactionId = req.body.transaction_id || req.body.transactionId || req.body.payment_id;
-
-      if (!vendorId) {
-        return res.status(400).json({ success: false, error: 'vendor_id is required' });
-      }
-
-      const result = await subscriptionService.subscribe({
-        vendorId,
-        planId,
-        couponCode,
-        paymentMethod,
-        transactionId
-      });
-
-      return res.status(200).json(result);
-    } catch (err) {
-      console.error('Error processing subscription:', err);
-      return res.status(400).json({
-        success: false,
-        error: err.message || 'Subscription processing failed'
-      });
-    }
-  }
-
-  /**
    * POST /api/subscriptions/create-payment-session
-   * Generates a real Cashfree PG payment session for vendor subscription.
    */
   async createPaymentSession(req, res) {
     try {
@@ -161,7 +125,7 @@ class SubscriptionController {
 
   /**
    * POST /api/subscriptions/verify-payment
-   * Verifies Cashfree payment for vendor subscription and activates 1-year merchant status.
+   * Verifies Cashfree payment for either subscription purchase or plan upgrade.
    */
   async verifyPayment(req, res) {
     try {
@@ -175,6 +139,25 @@ class SubscriptionController {
         return res.status(400).json({ success: false, error: 'order_id is required for payment verification' });
       }
 
+      // Check whether this is an upgrade payment (SUB_UPG_ prefix)
+      if (orderId.startsWith('SUB_UPG_')) {
+        const upgResult = await subscriptionService.verifyAndActivateUpgrade({
+          orderId,
+          transactionId,
+          options: {
+            env: req.body.env,
+            app_id: req.body.app_id,
+            secret_key: req.body.secret_key
+          }
+        });
+
+        if (!upgResult.success || !upgResult.verified) {
+          return res.status(400).json(upgResult);
+        }
+        return res.status(200).json(upgResult);
+      }
+
+      // Standard subscription payment
       const result = await subscriptionService.verifyAndActivatePayment({
         orderId,
         vendorId,
@@ -203,8 +186,83 @@ class SubscriptionController {
   }
 
   /**
-   * GET /api/vendorPanel/:vendorId/subscription-status (also /api/subscriptions/status/:vendorId, /api/subscriptions/status)
-   * Returns current subscription status, days left, and expiry popup data for Web/App frontends.
+   * GET /api/subscriptions/upgrade-quote
+   * Generic quote calculation: accepts ?to_plan_id=...
+   */
+  async getUpgradeQuote(req, res) {
+    try {
+      const vendorId = req.query.vendor_id || req.query.vendorId || req.user?.vendor_id || req.user?.id;
+      const toPlanId = req.query.to_plan_id || req.query.toPlanId || req.body?.to_plan_id;
+
+      if (!vendorId) {
+        return res.status(400).json({ success: false, error: 'vendor_id is required' });
+      }
+      if (!toPlanId) {
+        return res.status(400).json({ success: false, error: 'to_plan_id is required' });
+      }
+
+      const quote = await subscriptionService.calculateUpgradeQuote({
+        vendorId,
+        toPlanId
+      });
+
+      return res.status(200).json({
+        success: true,
+        data: quote,
+        ...quote
+      });
+    } catch (err) {
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Failed to calculate upgrade quote'
+      });
+    }
+  }
+
+  /**
+   * POST /api/subscriptions/upgrade
+   * Initiates generic plan upgrade.
+   */
+  async upgrade(req, res) {
+    try {
+      const vendorId = req.body.vendor_id || req.body.vendorId || req.user?.vendor_id || req.user?.id;
+      const toPlanId = req.body.to_plan_id || req.body.toPlanId;
+      const idempotencyKey = req.body.idempotency_key || req.body.idempotencyKey || req.headers['x-idempotency-key'];
+      const returnUrl = req.body.return_url || req.body.returnUrl;
+      const notifyUrl = req.body.notify_url || req.body.notifyUrl;
+
+      if (!vendorId) {
+        return res.status(400).json({ success: false, error: 'vendor_id is required' });
+      }
+      if (!toPlanId) {
+        return res.status(400).json({ success: false, error: 'to_plan_id is required' });
+      }
+
+      const result = await subscriptionService.requestUpgrade({
+        vendorId,
+        toPlanId,
+        idempotencyKey,
+        returnUrl,
+        notifyUrl,
+        options: {
+          env: req.body.env,
+          app_id: req.body.app_id,
+          secret_key: req.body.secret_key
+        }
+      });
+
+      return res.status(200).json(result);
+    } catch (err) {
+      console.error('Error requesting subscription upgrade:', err);
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Failed to process subscription upgrade'
+      });
+    }
+  }
+
+  /**
+   * GET /api/subscriptions/current (and /api/subscriptions/status/:vendorId)
    */
   async getVendorSubscriptionStatus(req, res) {
     try {
@@ -227,7 +285,6 @@ class SubscriptionController {
 
   /**
    * POST /api/subscriptions/coupons/generate (Admin / Partner Support)
-   * Generates an 8-digit coupon (e.g. DIGI5999, SAVE2026).
    */
   async generateCoupon(req, res) {
     try {
@@ -259,8 +316,7 @@ class SubscriptionController {
   }
 
   /**
-   * POST /api/subscriptions/trigger-reminders (Internal / Cron / Admin Testing)
-   * Runs the 7-day, 3-day, 1-day, 0-day, and expired reminder email dispatcher immediately.
+   * POST /api/subscriptions/trigger-reminders
    */
   async triggerReminders(req, res) {
     try {

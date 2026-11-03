@@ -347,7 +347,9 @@ CREATE TABLE IF NOT EXISTS plans (
     description TEXT,
     price DECIMAL(10,2) NOT NULL DEFAULT 5999.00,
     duration_days INT NOT NULL DEFAULT 365,
-    billing_cycle VARCHAR(20) DEFAULT 'YEARLY',
+    billing_cycle VARCHAR(20) DEFAULT 'MONTHLY',
+    billing_interval VARCHAR(20) DEFAULT 'MONTHLY',
+    sort_order INT DEFAULT 0,
     features JSONB DEFAULT '["Storefront visible on DigiLocal user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]',
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -380,10 +382,33 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     coupon_code VARCHAR(8),
     payment_method VARCHAR(50) DEFAULT 'ONLINE',
     transaction_id VARCHAR(100),
+    cashfree_order_id VARCHAR(100),
+    cashfree_payment_id VARCHAR(100),
+    billing_interval VARCHAR(20) DEFAULT 'MONTHLY',
+    auto_renewal BOOLEAN DEFAULT FALSE,
+    cancelled_at TIMESTAMP,
     status VARCHAR(20) DEFAULT 'ACTIVE',
     reminders_sent JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS subscription_upgrades (
+    upgrade_id BIGSERIAL PRIMARY KEY,
+    vendor_id BIGINT REFERENCES vendors(vendor_id) ON DELETE SET NULL,
+    subscription_id BIGINT REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
+    from_plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL,
+    to_plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL,
+    old_plan_price DECIMAL(10,2) NOT NULL,
+    new_plan_price DECIMAL(10,2) NOT NULL,
+    unused_credit_amount DECIMAL(10,2) NOT NULL,
+    payable_amount DECIMAL(10,2) NOT NULL,
+    cashfree_order_id VARCHAR(100) UNIQUE,
+    cashfree_payment_id VARCHAR(100),
+    status VARCHAR(50) DEFAULT 'PENDING',
+    idempotency_key VARCHAR(100) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    activated_at TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS cms_pages (

@@ -24,7 +24,15 @@ router.post('/apply-coupon', authenticateToken, requireVendorOwner, subscription
 
 // POST /api/subscriptions/subscribe - Purchase/renew 1-year ₹5,999 subscription (Online payment only)
 router.post('/subscribe', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
-router.post('/renew', authenticateToken, requireVendorOwner, subscriptionController.subscribe.bind(subscriptionController));
+router.post('/renew', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/create-payment-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/create-session', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/pay', authenticateToken, requireVendorOwner, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/verify-payment', subscriptionController.verifyPayment.bind(subscriptionController));
+router.post('/verify', subscriptionController.verifyPayment.bind(subscriptionController));
+router.get('/upgrade-quote', authenticateToken, requireVendorOwner, subscriptionController.getUpgradeQuote.bind(subscriptionController));
+router.post('/upgrade', authenticateToken, requireVendorOwner, subscriptionController.upgrade.bind(subscriptionController));
+router.get('/current', authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
 
 // GET /api/subscriptions/status/:vendorId - Check vendor subscription status, days left & popup flag
 router.get('/status', authenticateToken, requireVendorOwner, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));

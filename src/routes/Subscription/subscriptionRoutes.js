@@ -1,32 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const subscriptionController = require('../../controllers/Subscription/subscriptionController');
+const { authenticateToken, requireVendor } = require('../../middleware/auth');
 
-// 1. Plans Endpoint (1-Year ₹5,999/yr)
+// 1. Plans Endpoint (Active configurable plans)
 router.get('/plans', subscriptionController.getPlans.bind(subscriptionController));
 
 // 2. Coupons Endpoints
-router.get('/coupons', subscriptionController.getCoupons.bind(subscriptionController));
-router.get('/coupons/:vendorId', subscriptionController.getCoupons.bind(subscriptionController));
-router.post('/apply-coupon', subscriptionController.applyCoupon.bind(subscriptionController));
+router.get('/coupons', authenticateToken, subscriptionController.getCoupons.bind(subscriptionController));
+router.get('/coupons/:vendorId', authenticateToken, subscriptionController.getCoupons.bind(subscriptionController));
+router.post('/apply-coupon', authenticateToken, subscriptionController.applyCoupon.bind(subscriptionController));
 router.post('/coupons/generate', subscriptionController.generateCoupon.bind(subscriptionController));
 
-// 3. Subscription Purchase & Renewal (Online Payment Only)
-router.post('/subscribe', subscriptionController.subscribe.bind(subscriptionController));
-router.post('/renew', subscriptionController.subscribe.bind(subscriptionController));
-
-// Real Cashfree Payment Session & Verification Endpoints
-router.post('/create-payment-session', subscriptionController.createPaymentSession.bind(subscriptionController));
-router.post('/create-session', subscriptionController.createPaymentSession.bind(subscriptionController));
-router.post('/pay', subscriptionController.createPaymentSession.bind(subscriptionController));
+// 3. Subscription Purchase & Session Endpoints
+router.post('/subscribe', authenticateToken, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/renew', authenticateToken, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/create-payment-session', authenticateToken, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/create-session', authenticateToken, subscriptionController.createPaymentSession.bind(subscriptionController));
+router.post('/pay', authenticateToken, subscriptionController.createPaymentSession.bind(subscriptionController));
 router.post('/verify-payment', subscriptionController.verifyPayment.bind(subscriptionController));
 router.post('/verify', subscriptionController.verifyPayment.bind(subscriptionController));
 
-// 4. Vendor Subscription Status & Expiry Popup Data
-router.get('/status', subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
-router.get('/status/:vendorId', subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+// 4. Generic Upgrade Flow
+router.get('/upgrade-quote', authenticateToken, subscriptionController.getUpgradeQuote.bind(subscriptionController));
+router.post('/upgrade', authenticateToken, subscriptionController.upgrade.bind(subscriptionController));
 
-// 5. Expiry Email Reminders Trigger (7d, 3d, 1d, 0d, expired)
+// 5. Vendor Subscription Lifecycle & Status
+router.get('/current', authenticateToken, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+router.get('/status', authenticateToken, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+router.get('/status/:vendorId', authenticateToken, subscriptionController.getVendorSubscriptionStatus.bind(subscriptionController));
+
+// 6. Expiry Email Reminders Trigger
 router.post('/trigger-reminders', subscriptionController.triggerReminders.bind(subscriptionController));
 
 module.exports = router;

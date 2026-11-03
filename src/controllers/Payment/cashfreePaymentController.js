@@ -667,7 +667,17 @@ async function cashfreeWebhook(req, res) {
     console.log(`🔔 [CASHFREE WEBHOOK] Event: ${eventType} | Order: ${orderId} | Status: ${paymentStatus}`);
 
     if (paymentStatus === 'SUCCESS' || eventType.includes('SUCCESS') || eventType === 'ORDER_PAID') {
-      if (orderId && (orderId.startsWith('SUB_') || orderData.order_tags?.order_type === 'VENDOR_SUBSCRIPTION')) {
+      if (orderId && (orderId.startsWith('SUB_UPG_') || orderData.order_tags?.order_type === 'VENDOR_SUBSCRIPTION_UPGRADE')) {
+        console.log(`💳 [CASHFREE WEBHOOK] Vendor Subscription Upgrade Payment Detected for #${orderId}`);
+        try {
+          await subscriptionService.verifyAndActivateUpgrade({
+            orderId,
+            transactionId: cfPaymentId
+          });
+        } catch (upgErr) {
+          console.error('❌ [CASHFREE WEBHOOK] Error activating vendor subscription upgrade:', upgErr.message);
+        }
+      } else if (orderId && (orderId.startsWith('SUB_') || orderData.order_tags?.order_type === 'VENDOR_SUBSCRIPTION' || orderData.order_tags?.order_type === 'VENDOR_REGISTRATION_SUBSCRIPTION')) {
         console.log(`💳 [CASHFREE WEBHOOK] Vendor Subscription Payment Detected for #${orderId}`);
         try {
           await subscriptionService.verifyAndActivatePayment({
