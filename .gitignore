@@ -51,7 +51,7 @@ Thumbs.db
 *.swo
 
 # Test files & temporary test scripts
-tests/
+test/
 scratch/
 *.test.js
 debug_*.js
