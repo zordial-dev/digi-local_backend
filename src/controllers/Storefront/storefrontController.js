@@ -81,6 +81,8 @@ async function getSocietyVendorsStorefront(req, res) {
                 subscription_active: isSubActive,
                 is_order_eligible: isSubActive,
                 can_accept_orders: isSubActive,
+                is_enquiry_eligible: isSubActive,
+                can_accept_enquiries: isSubActive,
                 logo: finalImg,
                 shop_image: finalImg,
                 logo_url: finalImg
@@ -290,7 +292,9 @@ async function getVendorStorefront(req, res) {
             is_subscription_active: hasActiveSub,
             subscription_active: hasActiveSub,
             is_order_eligible: hasActiveSub,
-            can_accept_orders: hasActiveSub
+            can_accept_orders: hasActiveSub,
+            is_enquiry_eligible: hasActiveSub,
+            can_accept_enquiries: hasActiveSub
         };
 
         return res.status(200).json({
@@ -459,6 +463,8 @@ async function searchVendorsLocationAware(req, res) {
                 subscription_active: isSubActive,
                 is_order_eligible: isSubActive,
                 can_accept_orders: isSubActive,
+                is_enquiry_eligible: isSubActive,
+                can_accept_enquiries: isSubActive,
                 logo: finalImg,
                 shop_image: finalImg,
                 logo_url: finalImg,

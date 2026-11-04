@@ -8,7 +8,7 @@ const { formatISTISO, formatISTReadable } = require('../../utils/time');
 async function createEnquiry(req, res) {
     try {
         const body = req.body || {};
-        const vendor_id = body.vendor_id || body.vendorId;
+        const vendor_id = req.params.vendorId || req.params.id || body.vendor_id || body.vendorId || body.merchant_id || body.merchantId;
         const user_name = String(body.name || body.user_name || body.userName || body.username || '').trim();
         const user_phone = String(body.phone || body.user_phone || body.userPhone || body.mobile || '').trim();
         const user_id = body.user_id || body.userId || null;
@@ -45,7 +45,29 @@ async function createEnquiry(req, res) {
         const vendor = vendorCheck.rows[0];
         const targetVendorId = Number(vendor.vendor_id);
 
-        
+        // Enforce active vendor subscription: residents cannot submit service enquiries to an unsubscribed, pending, or expired service merchant
+        const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+        const subCheck = await query(
+            `SELECT subscription_id, status, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date 
+             FROM subscriptions 
+             WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= ?
+             ORDER BY end_date DESC, subscription_id DESC LIMIT 1`,
+            [targetVendorId, todayStr]
+        );
+
+        if (!subCheck.rows || subCheck.rows.length === 0) {
+            return res.status(403).json({
+                success: false,
+                code: 'MERCHANT_SUBSCRIPTION_INACTIVE',
+                error: 'Cannot submit service enquiry: This service provider is currently not eligible to receive enquiries because their subscription is inactive or pending. Please choose an active service provider.',
+                message: 'Cannot submit service enquiry: This service provider is currently not eligible to receive enquiries because their subscription is inactive or pending. Please choose an active service provider.',
+                enquiry_eligible: false,
+                is_enquiry_eligible: false,
+                order_eligible: false,
+                subscription_active: false
+            });
+        }
+
         // Check for duplicate rapid submission (within 15 seconds)
         const dupCheck = await query(
             `SELECT * FROM enquiries 

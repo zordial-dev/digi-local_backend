@@ -223,11 +223,12 @@ class SubscriptionService {
       throw new Error('Valid vendor_id is required');
     }
 
-    const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`, [vId]);
+    const vendorRes = await query(`SELECT vendor_id, vendor_name, store_name, email, phone_number, vendor_type, status FROM vendors WHERE vendor_id = ?`, [vId]);
     if (!vendorRes.rows || vendorRes.rows.length === 0) {
       throw new Error(`Vendor #${vId} not found.`);
     }
     const vendor = vendorRes.rows[0];
+    const isService = String(vendor.vendor_type || '').toLowerCase() === 'service';
 
     // Fetch plan details dynamically
     const plan = await this.getPlan(planId);
@@ -978,13 +979,14 @@ class SubscriptionService {
     }
 
     const vendorRes = await query(
-      `SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`,
+      `SELECT vendor_id, vendor_name, store_name, email, phone_number, status, vendor_type FROM vendors WHERE vendor_id = ?`,
       [vId]
     );
     if (!vendorRes.rows || vendorRes.rows.length === 0) {
       throw new Error(`Vendor ${vId} not found.`);
     }
     const vendor = vendorRes.rows[0];
+    const isService = String(vendor.vendor_type || '').toLowerCase() === 'service';
 
     const subRes = await query(
       `SELECT s.subscription_id, s.plan_id, s.plan_name, 
@@ -1014,6 +1016,8 @@ class SubscriptionService {
         has_active_subscription: false,
         is_order_eligible: false,
         can_receive_orders: false,
+        is_enquiry_eligible: false,
+        can_receive_enquiries: false,
         status: 'NONE',
         start_date: null,
         end_date: null,
@@ -1025,8 +1029,8 @@ class SubscriptionService {
         shop_visible_on_portal: true,
         show_expiry_popup: true,
         popup_type: 'NO_SUBSCRIPTION',
-        popup_title: 'Subscription Required to Accept Orders',
-        popup_message: 'Subscribe to InPinch merchant plan for ₹1/month to start receiving orders from local customers.',
+        popup_title: `Subscription Required to ${isService ? 'Accept Enquiries' : 'Accept Orders'}`,
+        popup_message: `Subscribe to InPinch merchant plan for ₹1/month to start receiving ${isService ? 'service enquiries' : 'orders'} from local customers.`,
         action_text: 'Subscribe for ₹1/mo'
       };
     }
@@ -1053,8 +1057,8 @@ class SubscriptionService {
     } else if (subStatus === 'PENDING' || !isSubActive) {
       showExpiryPopup = true;
       popupType = 'NO_SUBSCRIPTION';
-      popupTitle = 'Subscription Required to Accept Orders';
-      popupMessage = 'Complete your InPinch subscription for ₹1/month to start receiving customer orders.';
+      popupTitle = `Subscription Required to ${isService ? 'Accept Enquiries' : 'Accept Orders'}`;
+      popupMessage = `Complete your InPinch subscription for ₹1/month to start receiving ${isService ? 'customer enquiries' : 'customer orders'}.`;
       actionText = 'Subscribe for ₹1/mo';
     } else if (daysLeft === 0) {
       showExpiryPopup = true;
@@ -1077,6 +1081,8 @@ class SubscriptionService {
       has_active_subscription: isSubActive,
       is_order_eligible: canReceiveOrders,
       can_receive_orders: canReceiveOrders,
+      is_enquiry_eligible: canReceiveOrders,
+      can_receive_enquiries: canReceiveOrders,
       subscription_id: Number(subscription.subscription_id),
       plan_id: subscription.plan_id ? Number(subscription.plan_id) : null,
       plan_name: subscription.plan_name || 'Monthly Merchant Plan',
