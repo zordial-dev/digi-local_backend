@@ -312,21 +312,22 @@ async function createOrder(req, res) {
       return res.status(400).json({ error: 'Missing required order fields or items array' });
     }
 
-    // Enforce active vendor subscription: users cannot buy from an expired store
+    // Enforce active vendor subscription: users cannot place orders with a merchant whose subscription is inactive, expired, pending, or unpaid
+    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
     const subCheck = await query(
       `SELECT subscription_id, status, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date 
        FROM subscriptions 
-       WHERE vendor_id = ? 
-       ORDER BY subscription_id DESC LIMIT 1`,
-      [vendor_id]
+       WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= ?
+       ORDER BY end_date DESC, subscription_id DESC LIMIT 1`,
+      [vendor_id, todayStr]
     );
-    const sub = subCheck.rows && subCheck.rows[0];
-    const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
-    if (sub && (String(sub.status).toUpperCase() === 'EXPIRED' || sub.end_date < todayStr)) {
-      return res.status(400).json({
+    if (!subCheck.rows || subCheck.rows.length === 0) {
+      return res.status(403).json({
         success: false,
-        error: 'Cannot place order: This store is currently unavailable due to an expired subscription. Please order from another active merchant.',
-        subscription_expired: true
+        error: 'Cannot place order: This merchant is currently not eligible to accept orders because their subscription is inactive or pending. Please order from an active merchant.',
+        code: 'MERCHANT_SUBSCRIPTION_INACTIVE',
+        order_eligible: false,
+        subscription_active: false
       });
     }
 

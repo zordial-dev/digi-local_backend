@@ -70,8 +70,8 @@
                   "plan": {
                     "plan_id": 221,
                     "plan_code": "MONTHLY_TEST_2",
-                    "name": "Test Monthly Plan (₹2)",
-                    "price": 2,
+                    "name": "Monthly Merchant Plan",
+                    "price": 1,
                     "duration_days": 30,
                     "billing_interval": "MONTHLY"
                   },
@@ -80,7 +80,7 @@
                     "order_id": "SUB_REG_1_1793688123456",
                     "cf_order_id": "cf_ord_...",
                     "payment_url": "https://sandbox.cashfree.com/pg/orders/...",
-                    "order_amount": 2,
+                    "order_amount": 1,
                     "order_currency": "INR"
                   },
                   "success": true,
@@ -590,8 +590,8 @@
                     {
                       "plan_id": 221,
                       "plan_code": "MONTHLY_TEST_2",
-                      "name": "Test Monthly Plan (₹2)",
-                      "price": 2,
+                      "name": "Monthly Merchant Plan",
+                      "price": 1,
                       "duration_days": 30,
                       "billing_interval": "MONTHLY",
                       "sort_order": 0,
@@ -636,9 +636,9 @@
                   "subscription": {
                     "status": "ACTIVE",
                     "plan_id": 221,
-                    "plan_name": "Test Monthly Plan (₹2)",
+                    "plan_name": "Monthly Merchant Plan",
                     "billing_interval": "MONTHLY",
-                    "amount_paid": 2,
+                    "amount_paid": 1,
                     "start_date": "2026-11-03T12:00:00+05:30",
                     "end_date": "2026-12-03T12:00:00+05:30"
                   },
@@ -677,9 +677,9 @@
                   "subscription_id": 84,
                   "status": "ACTIVE",
                   "plan_id": 221,
-                  "plan_name": "Test Monthly Plan (₹2)",
+                  "plan_name": "Monthly Merchant Plan",
                   "billing_interval": "MONTHLY",
-                  "amount_paid": 2,
+                  "amount_paid": 1,
                   "payment_reference": "SUB_REG_1_1793688123456",
                   "start_date": "2026-11-03T12:00:00+05:30",
                   "end_date": "2026-12-03T12:00:00+05:30",

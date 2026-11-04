@@ -20,6 +20,20 @@ class OrderService {
         throw new Error('Vendor is currently not active');
       }
 
+      // 1b. Verify Vendor has an ACTIVE subscription
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+      const subRes = await txQuery(
+        `SELECT subscription_id FROM subscriptions 
+         WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= ?
+         LIMIT 1`,
+        [vendor_id, todayStr]
+      );
+      if (!subRes.rows || subRes.rows.length === 0) {
+        const err = new Error('Merchant is not eligible to receive orders: Subscription is inactive, expired, or pending');
+        err.code = 'MERCHANT_SUBSCRIPTION_INACTIVE';
+        throw err;
+      }
+
       // 2. Fetch all requested items from DB to perform authoritative price calculation & stock checks
       const itemIds = items.map(i => i.item_id);
       const placeholders = itemIds.map(() => '?').join(',');

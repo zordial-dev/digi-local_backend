@@ -30,7 +30,7 @@ async function createOrderPaymentSession(req, res) {
     } = req.body;
 
     let targetOrderId = order_id;
-    let targetAmount = Number(amount || 0);
+    let targetAmount = Number(amount || req.body.order_amount || req.body.orderAmount || 0);
     let targetVendorId = vendor_id || req.body.merchant_id || req.body.merchantId || req.body.vendorId;
     let targetCustomerName = customer_name;
     let targetCustomerPhone = customer_phone;
@@ -67,6 +67,25 @@ async function createOrderPaymentSession(req, res) {
         success: false,
         error: 'Invalid order amount. Amount must be greater than 0.'
       });
+    }
+
+    // 2a. Subscription Guard: Validate that vendor has an active subscription to receive customer orders
+    if (targetVendorId) {
+      const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
+      const subCheck = await query(
+        `SELECT subscription_id FROM subscriptions 
+         WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' AND end_date >= ?
+         LIMIT 1`,
+        [targetVendorId, todayStr]
+      );
+      if (!subCheck.rows || subCheck.rows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          error: 'Cannot initiate payment: This merchant is currently not eligible to receive orders because their subscription is inactive or pending.',
+          code: 'MERCHANT_SUBSCRIPTION_INACTIVE',
+          subscription_active: false
+        });
+      }
     }
 
     // 2. Fetch vendor info and verify bank account details
