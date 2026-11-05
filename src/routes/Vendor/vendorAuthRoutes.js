@@ -192,6 +192,8 @@ router.put(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo
 router.patch(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/photo'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
 router.delete(['/:vendorId/items/:itemId', '/:vendorId/products/:itemId'], authenticateToken, requireVendorOwner, vendorPanelController.deleteItem);
 router.patch(['/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, requireVendorOwner, vendorPanelController.toggleAvailability);
+router.patch(['/:vendorId/items/:itemId/stock', '/:vendorId/products/:itemId/stock'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
+router.put(['/:vendorId/items/:itemId/stock', '/:vendorId/products/:itemId/stock'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
 router.put(['/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, requireVendorOwner, vendorPanelController.toggleAvailability);
 
 // Vendor Orders Specification Routes (/api/vendors/:vendorId/orders - Vendor Owner Only)

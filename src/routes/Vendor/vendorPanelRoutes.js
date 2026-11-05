@@ -184,6 +184,8 @@ router.patch(['/:vendorId/items/:itemId/photo', '/:vendorId/products/:itemId/pho
 
 // Toggle Item Availability Endpoints (Vendor Owner Only)
 router.patch(['/items/:itemId/availability', '/products/:itemId/availability', '/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, requireVendorOwner, vendorPanelController.toggleAvailability);
+router.patch(['/:vendorId/items/:itemId/stock', '/:vendorId/products/:itemId/stock', '/items/:itemId/stock', '/products/:itemId/stock'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
+router.put(['/:vendorId/items/:itemId/stock', '/:vendorId/products/:itemId/stock', '/items/:itemId/stock', '/products/:itemId/stock'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, vendorPanelController.updateItemStock);
 router.put(['/items/:itemId/availability', '/products/:itemId/availability', '/:vendorId/items/:itemId/availability', '/:vendorId/products/:itemId/availability'], authenticateToken, requireVendorOwner, vendorPanelController.toggleAvailability);
 
 // DELETE /api/vendorPanel/:vendorId/items/:itemId & /products/:itemId
