@@ -1,4 +1,5 @@
 const { query } = require('../../models/db');
+const authConfig = require('../../config/auth');
 const { hashPassword, comparePassword, generateTokens } = require('../../utils/auth');
 const { recordVendorFieldChanges } = require('../../services/vendorDiffService');
 const { sendOTP: sendCentralOTP, verifyOTP: verifyCentralOTP, formatSmsErrorResponse } = require('../../services/messageCentralService');
@@ -77,40 +78,103 @@ async function registerVendor(req, res) {
       bank_name: body.bank_name || body.bankName || body.bank || ''
     });
 
-    if (bankValidation.hasBankDetails && !bankValidation.isValid) {
-      return res.status(400).json({
-        success: false,
-        error: bankValidation.errors[0],
-        errors: bankValidation.errors,
-        code: 'INVALID_BANK_DETAILS',
-        error_code: 'INVALID_BANK_DETAILS'
-      });
-    }
-
     const account_number = bankValidation.normalized.account_number;
     const ifsc_code = bankValidation.normalized.ifsc_code;
 
-    // Mandatory Validations
-    if (!vendor_name) return res.status(400).json({ error: 'Vendor / owner_name is required for registration.' });
-    if (!store_name) return res.status(400).json({ error: 'Store / shop_name is required for registration.' });
-    if (!email) return res.status(400).json({ error: 'Email address is required for registration.' });
-    if (!phone_number) return res.status(400).json({ error: 'Phone number is required for registration.' });
-    if (!password) return res.status(400).json({ error: 'Password is a mandatory field for vendor registration.' });
-    if (!area) return res.status(400).json({ error: 'Area / location is a mandatory field for vendor registration.' });
-    if (!city) return res.status(400).json({ error: 'City is a mandatory field for vendor registration.' });
-    if (!state) return res.status(400).json({ error: 'State is a mandatory field for vendor registration.' });
-    if (!pincode) return res.status(400).json({ error: 'Pincode is a mandatory field for vendor registration.' });
-    if (!whatsapp_number) return res.status(400).json({ error: 'WhatsApp number is a mandatory field for vendor registration.' });
-    if (!shop_number) return res.status(400).json({ error: 'Shop number / address is a mandatory field for vendor registration.' });
-    if (!shop_image) return res.status(400).json({ error: 'Shop photo / image is a mandatory field for vendor registration.' });
+    // Comprehensive Field-Level Validations
+    const fieldErrors = {};
 
-    // Bank account details are optional during registration.
-    // If IFSC code is provided, validate its 11-character format.
-    if (ifsc_code) {
+    if (!vendor_name) {
+      fieldErrors.vendor_name = 'Vendor / owner_name is required for registration.';
+    }
+
+    if (!store_name) {
+      fieldErrors.store_name = 'Store / shop_name is required for registration.';
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email) {
+      fieldErrors.email = 'Email address is required for registration.';
+    } else if (!emailRegex.test(email)) {
+      fieldErrors.email = 'Please provide a valid email address.';
+    }
+
+    const cleanPhoneDigits = phone_number.replace(/\D/g, '');
+    if (!phone_number) {
+      fieldErrors.phone_number = 'Phone number is required for registration.';
+    } else if (cleanPhoneDigits.length < 10) {
+      fieldErrors.phone_number = 'Phone number must be at least 10 digits.';
+    }
+
+    const minPassLength = authConfig?.password?.minPasswordLength || 6;
+    if (!password) {
+      fieldErrors.password = 'Password is a mandatory field for vendor registration.';
+    } else if (password.length < minPassLength) {
+      fieldErrors.password = `Password must be at least ${minPassLength} characters long.`;
+    }
+
+    if (!area) {
+      fieldErrors.area = 'Area / location is a mandatory field for vendor registration.';
+    }
+
+    if (!city) {
+      fieldErrors.city = 'City is a mandatory field for vendor registration.';
+    }
+
+    if (!state) {
+      fieldErrors.state = 'State is a mandatory field for vendor registration.';
+    }
+
+    const cleanPincode = pincode.replace(/\s/g, '');
+    if (!pincode) {
+      fieldErrors.pincode = 'Pincode is a mandatory field for vendor registration.';
+    } else if (!/^\d{6}$/.test(cleanPincode)) {
+      fieldErrors.pincode = 'Pincode must be a valid 6-digit number.';
+    }
+
+    const cleanWaDigits = whatsapp_number.replace(/\D/g, '');
+    if (!whatsapp_number) {
+      fieldErrors.whatsapp_number = 'WhatsApp number is a mandatory field for vendor registration.';
+    } else if (cleanWaDigits.length < 10) {
+      fieldErrors.whatsapp_number = 'WhatsApp number must be at least 10 digits.';
+    }
+
+    if (!shop_image) {
+      fieldErrors.shop_image = 'Shop photo / image is a mandatory field for vendor registration.';
+    }
+
+    // Shop number is OPTIONAL.
+    // If provided, validate format (must be a string up to 100 characters)
+    if (shop_number && shop_number.length > 100) {
+      fieldErrors.shop_number = 'Shop number must be under 100 characters.';
+    }
+
+    // Optional Bank Details Validation
+    if (bankValidation.hasBankDetails && !bankValidation.isValid) {
+      fieldErrors.bank_details = bankValidation.errors[0];
+      if (ifsc_code && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifsc_code)) {
+        fieldErrors.ifsc_code = 'Invalid IFSC code format. An IFSC code must be exactly 11 characters (e.g., SBIN0000001).';
+      }
+      if (account_number && !/^\d{9,18}$/.test(account_number)) {
+        fieldErrors.account_number = 'Bank account number must be between 9 and 18 digits.';
+      }
+    } else if (ifsc_code) {
       const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
       if (!ifscRegex.test(ifsc_code)) {
-        return res.status(400).json({ error: 'Invalid IFSC code format. An IFSC code must be exactly 11 characters (e.g., SBIN0000001).' });
+        fieldErrors.ifsc_code = 'Invalid IFSC code format. An IFSC code must be exactly 11 characters (e.g., SBIN0000001).' ;
       }
+    }
+
+    // Return field-level errors if any validations failed
+    if (Object.keys(fieldErrors).length > 0) {
+      const firstError = Object.values(fieldErrors)[0];
+      return res.status(400).json({
+        success: false,
+        error: firstError,
+        message: firstError,
+        errors: fieldErrors,
+        details: Object.entries(fieldErrors).map(([field, message]) => ({ field, message }))
+      });
     }
 
     // Store GSTIN & PAN exactly as provided (both are completely optional; vendor can register without either)
