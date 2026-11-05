@@ -586,7 +586,13 @@ router.get([
 
 router.patch([
   '/api/vendorPanel/:vendorId/items/:itemId/stock',
+  '/api/vendorPanel/:vendorId/products/:itemId/stock',
   '/api/vendors/:vendorId/items/:itemId/stock',
+  '/api/vendors/:vendorId/products/:itemId/stock',
+  '/api/merchantPanel/:vendorId/items/:itemId/stock',
+  '/api/merchantPanel/:vendorId/products/:itemId/stock',
+  '/api/merchants/:vendorId/items/:itemId/stock',
+  '/api/merchants/:vendorId/products/:itemId/stock',
   '/api/items/:itemId/stock',
   '/api/products/:itemId/stock',
   '/items/:itemId/stock',
@@ -595,7 +601,13 @@ router.patch([
 
 router.put([
   '/api/vendorPanel/:vendorId/items/:itemId/stock',
+  '/api/vendorPanel/:vendorId/products/:itemId/stock',
   '/api/vendors/:vendorId/items/:itemId/stock',
+  '/api/vendors/:vendorId/products/:itemId/stock',
+  '/api/merchantPanel/:vendorId/items/:itemId/stock',
+  '/api/merchantPanel/:vendorId/products/:itemId/stock',
+  '/api/merchants/:vendorId/items/:itemId/stock',
+  '/api/merchants/:vendorId/products/:itemId/stock',
   '/api/items/:itemId/stock',
   '/api/products/:itemId/stock',
   '/items/:itemId/stock',
