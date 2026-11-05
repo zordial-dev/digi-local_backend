@@ -1,3 +1,43 @@
+
+/**
+ * Helper: Build URL-encoded WhatsApp order message for vendor checkout redirect
+ */
+function buildWhatsAppOrderMessage({
+  orderId,
+  storeName,
+  customerName,
+  customerPhone,
+  deliveryAddress,
+  items,
+  totalAmount,
+  paymentMethod,
+  remarks
+}) {
+  const lines = [
+    '🛍️ *New Order from InPinch*',
+    `Order ID: #${orderId}`,
+    storeName ? `Store: ${storeName}` : null,
+    `Customer: ${customerName || 'Customer'}${customerPhone ? ` (${customerPhone})` : ''}`,
+    deliveryAddress ? `Delivery Address: ${deliveryAddress}` : null,
+    '',
+    '*Items:*',
+    ...(Array.isArray(items) ? items : []).map(it => {
+      const qty = it.quantity || 1;
+      const price = Number(it.price || it.unit_price || 0);
+      const itemTotal = price * qty;
+      return `• ${it.item_name || 'Item'} x ${qty} - ₹${itemTotal}`;
+    }),
+    '',
+    `*Total Amount:* ₹${totalAmount}`,
+    `*Payment Mode:* ${paymentMethod || 'COD / Pay on WhatsApp'}`,
+    (remarks && String(remarks).trim()) ? `*Instructions:* ${String(remarks).trim()}` : null,
+    '',
+    'Please confirm my order. Thank you!'
+  ].filter(x => x !== null);
+
+  return lines.join('\n');
+}
+
 const { query } = require('../../models/db');
 const { formatISTISO, formatISTReadable, formatISTTimeOnly } = require('../../utils/time');
 const cashfreeService = require('../../services/cashfreeService');
@@ -330,6 +370,35 @@ async function createOrder(req, res) {
         subscription_active: false
       });
     }
+
+    // Enforce vendor WhatsApp / phone contact for WhatsApp order placement:
+    // If no valid WhatsApp or phone contact is configured, reject immediately with clear error without creating an order.
+    const vCheck = await query(
+      `SELECT vendor_id, store_name, vendor_name, phone_number, whatsapp_number, status FROM vendors WHERE vendor_id = ?`,
+      [vendor_id]
+    );
+    if (!vCheck.rows || vCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Vendor #${vendor_id} was not found.`,
+        message: `Vendor #${vendor_id} was not found.`
+      });
+    }
+    const vendorRecord = vCheck.rows[0];
+    const rawWa = vendorRecord.whatsapp_number || vendorRecord.phone_number || '';
+    const cleanWaDigits = String(rawWa).replace(/[^0-9]/g, '');
+
+    if (!cleanWaDigits || cleanWaDigits.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot place order: Vendor "${vendorRecord.store_name || 'this merchant'}" does not have a valid WhatsApp or phone contact configured to place orders.`,
+        message: `Cannot place order: Vendor "${vendorRecord.store_name || 'this merchant'}" does not have a valid WhatsApp or phone contact configured to place orders.`,
+        code: 'VENDOR_WHATSAPP_UNAVAILABLE',
+        whatsapp_available: false
+      });
+    }
+
+    const waPhone = cleanWaDigits.length === 10 ? `91${cleanWaDigits}` : (cleanWaDigits.length === 11 && cleanWaDigits.startsWith('0') ? `91${cleanWaDigits.slice(1)}` : cleanWaDigits);
 
     const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
     const createdAt = formatISTISO();
@@ -774,6 +843,30 @@ async function createOrder(req, res) {
       if (!cashfreeSession.success) {
         responsePayload.payment_error = cashfreeSession.error || 'Failed to initialize Cashfree payment session';
       }
+    }
+
+        const orderMessage = buildWhatsAppOrderMessage({
+      orderId,
+      storeName,
+      customerName: finalCustomerName,
+      customerPhone: rawPhone,
+      deliveryAddress: finalDeliveryAddress || userDbAddress || '',
+      items: populatedItems,
+      totalAmount: numTotal,
+      paymentMethod: paymentMethod,
+      remarks: rawRemarks
+    });
+    const encodedOrderMessage = encodeURIComponent(orderMessage);
+    const whatsappUrl = `https://wa.me/${waPhone}?text=${encodedOrderMessage}`;
+
+    responsePayload.whatsapp_url = whatsappUrl;
+    responsePayload.whatsapp_link = whatsappUrl;
+    responsePayload.redirect_url = whatsappUrl;
+    responsePayload.whatsapp_number = waPhone;
+    responsePayload.order_message = orderMessage;
+
+    if (req.query.redirect === 'true' || req.body?.redirect === true || (req.headers.accept && req.headers.accept.includes('text/html') && !req.headers.accept.includes('application/json'))) {
+      return res.redirect(302, whatsappUrl);
     }
 
     return res.status(201).json(responsePayload);
@@ -1703,7 +1796,88 @@ async function getPaymentEligibility(req, res) {
   }
 }
 
+
+/**
+ * GET /api/orders/:id/whatsapp or /api/orders/:orderId/whatsapp
+ * Redirects the customer directly to the vendor's WhatsApp contact with order details.
+ */
+async function redirectToWhatsAppOrder(req, res) {
+  try {
+    const orderId = req.params.id || req.params.orderId;
+    if (!orderId) {
+      return res.status(400).json({ success: false, error: 'Order ID is required' });
+    }
+
+    const orderRes = await query(
+      `SELECT o.*, v.store_name, v.vendor_name, v.whatsapp_number, v.phone_number as vendor_phone
+       FROM orders o
+       LEFT JOIN vendors v ON o.vendor_id = v.vendor_id
+       WHERE o.order_id = ? OR CAST(o.order_id AS TEXT) = ?`,
+      [orderId, String(orderId)]
+    );
+
+    if (!orderRes.rows || orderRes.rows.length === 0) {
+      return res.status(404).json({ success: false, error: `Order #${orderId} not found` });
+    }
+
+    const order = orderRes.rows[0];
+    const rawWa = order.whatsapp_number || order.vendor_phone || '';
+    const cleanWaDigits = String(rawWa).replace(/[^0-9]/g, '');
+
+    if (!cleanWaDigits || cleanWaDigits.length < 10) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot redirect: Store "${order.store_name || 'Vendor'}" does not have a valid WhatsApp contact number configured.`,
+        message: `Cannot redirect: Store "${order.store_name || 'Vendor'}" does not have a valid WhatsApp contact number configured.`,
+        code: 'VENDOR_WHATSAPP_UNAVAILABLE',
+        whatsapp_available: false
+      });
+    }
+
+    const waPhone = cleanWaDigits.length === 10 ? `91${cleanWaDigits}` : (cleanWaDigits.length === 11 && cleanWaDigits.startsWith('0') ? `91${cleanWaDigits.slice(1)}` : cleanWaDigits);
+
+    const itemsRes = await query(
+      `SELECT item_name, quantity, COALESCE(price, unit_price, 0) as price FROM order_details WHERE order_id = ?`,
+      [order.order_id]
+    ).catch(() => ({ rows: [] }));
+
+    const orderMessage = buildWhatsAppOrderMessage({
+      orderId: order.order_id,
+      storeName: order.store_name,
+      customerName: order.customer_name,
+      customerPhone: order.customer_phone,
+      deliveryAddress: order.delivery_address,
+      items: itemsRes.rows || [],
+      totalAmount: Number(order.total_amount || 0),
+      paymentMethod: order.payment_method || 'COD',
+      remarks: order.remarks
+    });
+
+    const encodedMessage = encodeURIComponent(orderMessage);
+    const whatsappUrl = `https://wa.me/${waPhone}?text=${encodedMessage}`;
+
+    if (req.query.format === 'json' || req.query.json === 'true' || (req.headers.accept && req.headers.accept.includes('application/json') && !req.headers.accept.includes('text/html'))) {
+      return res.status(200).json({
+        success: true,
+        order_id: order.order_id,
+        whatsapp_url: whatsappUrl,
+        whatsapp_link: whatsappUrl,
+        redirect_url: whatsappUrl,
+        whatsapp_number: waPhone,
+        order_message: orderMessage
+      });
+    }
+
+    return res.redirect(302, whatsappUrl);
+  } catch (err) {
+    console.error('Error redirecting order to WhatsApp:', err);
+    return res.status(500).json({ success: false, error: 'Failed to process WhatsApp redirect: ' + err.message });
+  }
+}
+
 module.exports = {
+  redirectToWhatsAppOrder,
+  buildWhatsAppOrderMessage,
   getUserOrders,
   getVendorOrders,
   getOrdersByQuery,

@@ -139,8 +139,19 @@ async function getVendorStorefront(req, res) {
         }
 
         const vendor = vendorResult.rows[0];
-        delete vendor.password;
-        delete vendor.password_hash;
+
+        // Strip private and sensitive merchant fields from public storefront responses
+        const sensitiveMerchantFields = [
+            'password', 'password_hash',
+            'push_token', 'fcm_token', 'device_token',
+            'total_revenue', 'strikes',
+            'hold_reason', 'hold_email_subject',
+            'has_resubmitted', 'resubmitted_at'
+        ];
+        for (const sField of sensitiveMerchantFields) {
+            delete vendor[sField];
+        }
+
         const vendorEligibility = getVendorPaymentEligibility(vendor);
         vendor.account_number = maskAccountNumber(vendor.account_number);
         vendor.bank_account_number = maskAccountNumber(vendor.bank_account_number || vendor.account_number);
