@@ -19,6 +19,7 @@ const ratingRoutes = require('./Rating/ratingRoutes');
 const cmsController = require('../controllers/Cms/cmsController');
 const adminPanelController = require('../controllers/Admin/adminPanelController');
 const ordersController = require('../controllers/User/ordersController');
+const cartController = require('../controllers/User/cartController');
 const usersController = require('../controllers/User/usersController');
 const otpController = require('../controllers/otpController');
 const enquiryController = require('../controllers/Vendor/enquiryController');
@@ -56,7 +57,7 @@ router.patch('/api/merchants/:vendorId/enquiries/:enquiryId', authenticateToken,
 // ── Service Vendor Services Direct & Global Routes ───────────
 router.get(['/api/services', '/services'], serviceController.getAllServices);
 router.post(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services', '/api/merchants/:vendorId/services', '/api/merchant/:vendorId/services'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.addService);
-router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services', '/api/merchants/:vendorId/services', '/api/merchant/:vendorId/services'], serviceController.getVendorServices);
+router.get(['/api/vendors/:vendorId/services', '/api/vendor/:vendorId/services', '/api/merchants/:vendorId/services', '/api/merchant/:vendorId/services', '/api/stores/:vendorId/services', '/api/store/:vendorId/services'], serviceController.getVendorServices);
 router.get(['/api/vendors/:vendorId/services/:serviceId', '/api/services/:serviceId'], serviceController.getServiceById);
 router.put(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
 router.patch(['/api/vendors/:vendorId/services/:serviceId', '/api/vendor/:vendorId/services/:serviceId', '/api/services/:serviceId'], upload.any(), handleMulterError, authenticateToken, requireVendorOwner, serviceController.updateService);
@@ -544,6 +545,29 @@ router.post(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api
 router.put(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
 router.patch(['/api/products/:itemId/image', '/api/products/:itemId/photo', '/api/items/:itemId/image', '/api/items/:itemId/photo'], upload.any(), handleMulterError, resolveItemVendorId, authenticateToken, requireVendorOwner, vendorPanelController.updateItemImage);
 
+
+// ── Customer Cart Management Endpoints (User Only - requires authentication) ────
+router.post([
+  '/api/cart/add',
+  '/api/cart/items',
+  '/api/cart/item',
+  '/api/cart',
+  '/api/user/cart/add',
+  '/api/users/cart/add',
+  '/api/orders/cart/add'
+], authenticateToken, requireUser, cartController.addToCart);
+
+router.get([
+  '/api/cart',
+  '/api/cart/items',
+  '/api/user/cart',
+  '/api/users/cart'
+], authenticateToken, requireUser, cartController.getCart);
+
+router.get([
+  '/api/orders/:orderId/whatsapp',
+  '/api/orders/:orderId/whatsapp-redirect'
+], ordersController.redirectToWhatsAppOrder);
 
 // ── Real-Time Inventory & Stock Management Endpoints ─────────────────────────
 router.post([

@@ -9,9 +9,16 @@ router.get('/stores/search', storefrontController.searchVendorsLocationAware);
 // GET /api/societies/:societyId/vendors - List ACTIVE vendors in a society
 router.get('/societies/:societyId/vendors', storefrontController.getSocietyVendorsStorefront);
 
-// GET /api/vendors/:vendorId - Vendor storefront details & items
-router.get('/vendors/:vendorId', (req, res, next) => {
-    if (req.params.vendorId === 'pending' || req.params.vendorId === 'search') return next();
+// GET /api/vendors/:vendorId - Vendor storefront details, services & items (Public)
+router.get([
+    '/vendors/:vendorId',
+    '/vendors/:vendorId/details',
+    '/stores/:vendorId',
+    '/stores/:vendorId/details',
+    '/merchants/:vendorId',
+    '/merchants/:vendorId/details'
+], (req, res, next) => {
+    if (['pending', 'search', 'categories', 'locations'].includes(req.params.vendorId)) return next();
     return storefrontController.getVendorStorefront(req, res, next);
 });
 

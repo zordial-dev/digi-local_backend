@@ -222,7 +222,7 @@ router.delete('/:vendorId/push-token', authenticateToken, requireVendorOwner, ve
 router.post('/:vendorId/fcm-token', authenticateToken, requireVendorOwner, vendorPanelController.registerFcmToken);
 router.delete('/:vendorId/fcm-token', authenticateToken, requireVendorOwner, vendorPanelController.deleteFcmToken);
 
-router.get('/:id', (req, res, next) => {
+router.get(['/:id', '/:id/details', '/:id/storefront', '/:id/public'], (req, res, next) => {
     if (['categories', 'search', 'locations', 'ratings', 'reviews', 'tickets', 'status'].includes(req.params.id)) return next();
     return storefrontController.getVendorStorefront(req, res, next);
 });

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ordersController = require('../../controllers/User/ordersController');
+const cartController = require('../../controllers/User/cartController');
 const { authenticateToken, requireRole, requireUser, requireUserOwner, requireVendorOwner, requireAuth } = require('../../middleware/auth');
 
 // Guard: Only vendors and administrators can alter order progress pipeline
@@ -21,6 +22,10 @@ router.get('/vendor/:vendorId', authenticateToken, requireVendorOwner, ordersCon
 router.get('/merchant/:vendorId', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
 router.get('/merchant/:merchantId', authenticateToken, requireVendorOwner, ordersController.getVendorOrders);
 
+// Cart Management Endpoints (User Only - requires authentication)
+router.post(['/cart/add', '/cart', '/cart/items', '/cart/item'], authenticateToken, requireUser, cartController.addToCart);
+router.get(['/cart', '/cart/items'], authenticateToken, requireUser, cartController.getCart);
+
 // Validate Cart Stock & Availability before checkout (Public / Cart Check)
 router.post('/check-stock', ordersController.validateCartStock);
 router.post('/validate-cart', ordersController.validateCartStock);
@@ -29,8 +34,14 @@ router.post('/validate-cart', ordersController.validateCartStock);
 router.get('/payment-eligibility', ordersController.getPaymentEligibility);
 router.post('/payment-eligibility', ordersController.getPaymentEligibility);
 
-// D3. Create New Order (User Only)
+// D3. Create New Order (User Only - redirects/provides WhatsApp URL)
 router.post('/', authenticateToken, requireUser, ordersController.createOrder);
+router.post('/checkout', authenticateToken, requireUser, ordersController.createOrder);
+
+// Dedicated WhatsApp Order Redirect Endpoints
+router.get('/:orderId/whatsapp', ordersController.redirectToWhatsAppOrder);
+router.get('/:orderId/whatsapp-redirect', ordersController.redirectToWhatsAppOrder);
+router.get('/:orderId/redirect', ordersController.redirectToWhatsAppOrder);
 
 // D4. Update Order Status Pipeline (Restricted to Vendors and Admins)
 router.put('/:id/status', authenticateToken, requireVendorOrAdmin, ordersController.updateOrderStatus);
@@ -45,7 +56,6 @@ router.patch('/:vendorId/orders/:id/status', authenticateToken, requireVendorOwn
 router.put('/merchant/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
 router.post('/merchant/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
 router.patch('/merchant/:vendorId/orders/:id/status', authenticateToken, requireVendorOwner, ordersController.updateOrderStatus);
-
 
 // Dedicated Refund Status API for Order
 router.get('/:orderId/refund-status', authenticateToken, requireAuth, ordersController.getOrderRefundStatus);
