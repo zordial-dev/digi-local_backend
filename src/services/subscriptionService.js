@@ -41,8 +41,9 @@ class SubscriptionService {
    * 1. GET AVAILABLE PLANS
    * Dynamically queries all active plans from database.
    * Billing interval and pricing are completely configurable without hardcoded logic.
+   * Checks DIWALI300 campaign eligibility to auto-display discount & original price.
    */
-  async getPlans() {
+  async getPlans(vendorId = null) {
     const res = await query(
       `SELECT plan_id, plan_code, name, description, price, duration_days, billing_cycle,
               COALESCE(billing_interval, billing_cycle) as billing_interval, features, is_active, sort_order
@@ -51,18 +52,7 @@ class SubscriptionService {
        ORDER BY sort_order ASC, price ASC, plan_id ASC`
     );
 
-    if (res.rows && res.rows.length > 0) {
-      return res.rows.map(p => ({
-        ...p,
-        plan_id: Number(p.plan_id),
-        price: Number(p.price),
-        duration_days: Number(p.duration_days),
-        billing_interval: String(p.billing_interval || p.billing_cycle || 'MONTHLY').toUpperCase()
-      }));
-    }
-
-    // Configurable fallback: Monthly Merchant Plan (₹1/month)
-    return [{
+    let rows = (res.rows && res.rows.length > 0) ? res.rows : [{
       plan_id: 1,
       plan_code: 'MONTHLY_TEST_2',
       name: 'Monthly Merchant Plan',
@@ -80,24 +70,107 @@ class SubscriptionService {
       ],
       is_active: true
     }];
+
+    // Check DIWALIFEST campaign status (Active, under 30 redemptions, not yet redeemed by this vendor)
+    let diwalifestEligible = false;
+    const diwalifestRes = await query(
+      `SELECT id, usage_limit, COALESCE(times_used, 0) as times_used, status 
+       FROM coupons 
+       WHERE UPPER(coupon_code) = 'DIWALIFEST' 
+         AND LOWER(status) = 'unused' 
+         AND COALESCE(times_used, 0) < usage_limit 
+         AND start_date <= CURRENT_DATE 
+         AND end_date >= CURRENT_DATE 
+       LIMIT 1`
+    ).catch(() => ({ rows: [] }));
+
+    if (diwalifestRes.rows && diwalifestRes.rows.length > 0) {
+      diwalifestEligible = true;
+      if (vendorId) {
+        const vId = Number(vendorId);
+        const redeemed = await query(
+          `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALIFEST' AND vendor_id = ? LIMIT 1`,
+          [vId]
+        ).catch(() => ({ rows: [] }));
+        if (redeemed.rows && redeemed.rows.length > 0) {
+          diwalifestEligible = false;
+        }
+      }
+    }
+
+    return rows.map(p => {
+      const isMonthly = Number(p.duration_days) <= 31 && String(p.billing_cycle || '').toUpperCase() !== 'YEARLY';
+      const originalMonthlyPrice = 499.00;
+      const basePlanPrice = isMonthly ? originalMonthlyPrice : Number(p.price);
+
+      const mapped = {
+        ...p,
+        plan_id: Number(p.plan_id),
+        price: basePlanPrice,
+        original_price: basePlanPrice,
+        final_price: basePlanPrice,
+        discount_amount: 0.00,
+        duration_days: Number(p.duration_days),
+        billing_interval: String(p.billing_interval || p.billing_cycle || 'MONTHLY').toUpperCase()
+      };
+
+      if (isMonthly && diwalifestEligible) {
+        mapped.campaign = {
+          promo_code: 'DIWALIFEST',
+          coupon_code: 'DIWALIFEST',
+          name: 'Diwali Festival Special Promotion',
+          description: 'Special Monthly Subscription Promotion: Get 1 Month for ₹1 (Save ₹498)',
+          discount_amount: 498.00,
+          original_price: 499.00,
+          final_price: 1.00,
+          auto_applied: true,
+          is_free: false,
+          billing_duration: 'MONTHLY'
+        };
+        mapped.original_price = 499.00;
+        mapped.discount_amount = 498.00;
+        mapped.final_price = 1.00;
+        mapped.price = 1.00;
+        mapped.auto_applied_coupon = 'DIWALIFEST';
+      } else if (isMonthly) {
+        // Normal monthly pricing when DIWALIFEST is exhausted or vendor already redeemed
+        mapped.original_price = 499.00;
+        mapped.price = 499.00;
+        mapped.final_price = 499.00;
+        mapped.discount_amount = 0.00;
+        mapped.campaign = null;
+      }
+
+      return mapped;
+    });
   }
 
   /**
    * Helper to retrieve a single active plan by plan_id or plan_code.
    */
   async getPlan(planIdOrCode) {
+    let row = null;
     if (!planIdOrCode) {
       // Default to first active plan in database
       const defaultRes = await query(`SELECT * FROM plans WHERE is_active = TRUE ORDER BY sort_order ASC, plan_id ASC LIMIT 1`);
-      return defaultRes.rows?.[0] || null;
+      row = defaultRes.rows?.[0] || null;
+    } else {
+      const isNumeric = !isNaN(Number(planIdOrCode));
+      const sql = isNumeric
+        ? `SELECT * FROM plans WHERE plan_id = ? LIMIT 1`
+        : `SELECT * FROM plans WHERE UPPER(plan_code) = UPPER(?) LIMIT 1`;
+      const res = await query(sql, [isNumeric ? Number(planIdOrCode) : String(planIdOrCode)]);
+      row = res.rows?.[0] || null;
     }
 
-    const isNumeric = !isNaN(Number(planIdOrCode));
-    const sql = isNumeric
-      ? `SELECT * FROM plans WHERE plan_id = ? LIMIT 1`
-      : `SELECT * FROM plans WHERE UPPER(plan_code) = UPPER(?) LIMIT 1`;
-    const res = await query(sql, [isNumeric ? Number(planIdOrCode) : String(planIdOrCode)]);
-    return res.rows?.[0] || null;
+    if (row) {
+      const isMonthly = Number(row.duration_days) <= 31 && String(row.billing_cycle || '').toUpperCase() !== 'YEARLY';
+      if (isMonthly) {
+        row.original_price = 499.00;
+        row.display_price = 499.00;
+      }
+    }
+    return row;
   }
 
   /**
@@ -126,7 +199,55 @@ class SubscriptionService {
     `;
 
     const res = await query(sql, [vId, today, today]);
-    return res.rows || [];
+    let list = res.rows || [];
+
+    // Check if vendor has already redeemed DIWALIFEST
+    const alreadyRedeemedDiwalifest = await query(
+      `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALIFEST' AND vendor_id = ? LIMIT 1`,
+      [vId]
+    ).catch(() => ({ rows: [] }));
+
+    if (alreadyRedeemedDiwalifest.rows && alreadyRedeemedDiwalifest.rows.length > 0) {
+      list = list.filter(c => String(c.coupon_code).toUpperCase() !== 'DIWALIFEST');
+    }
+
+    // Check if vendor has already redeemed DIWALI300
+    const alreadyRedeemedDiwali = await query(
+      `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALI300' AND vendor_id = ? LIMIT 1`,
+      [vId]
+    ).catch(() => ({ rows: [] }));
+
+    if (alreadyRedeemedDiwali.rows && alreadyRedeemedDiwali.rows.length > 0) {
+      list = list.filter(c => String(c.coupon_code).toUpperCase() !== 'DIWALI300');
+    }
+
+    return list.map(c => {
+      const codeUpper = String(c.coupon_code).toUpperCase();
+      if (codeUpper === 'DIWALIFEST') {
+        return {
+          ...c,
+          name: 'Diwali Festival Special Promotion',
+          description: 'Special Monthly Subscription Promotion: Get 1 Month for ₹1 (Save ₹498)',
+          auto_apply: true,
+          is_free: false,
+          original_price: 499.00,
+          discount_amount: 498.00,
+          final_price: 1.00,
+          eligible_plan: 'Monthly'
+        };
+      }
+      if (codeUpper === 'DIWALI300') {
+        return {
+          ...c,
+          name: 'Diwali 100% Off Promotion',
+          description: '1 month subscription completely FREE (Limited to 30 merchants)',
+          auto_apply: true,
+          is_free: true,
+          eligible_plan: 'Monthly'
+        };
+      }
+      return c;
+    });
   }
 
   /**
@@ -168,6 +289,47 @@ class SubscriptionService {
       throw new Error(`Coupon "${cleanCode}" is not valid for this vendor account.`);
     }
 
+    // Specific business validations for DIWALIFEST Campaign
+    if (cleanCode === 'DIWALIFEST') {
+      const isMonthly = Number(plan.duration_days) <= 31 && String(plan.billing_cycle || '').toUpperCase() !== 'YEARLY';
+      if (!isMonthly) {
+        throw new Error('DIWALIFEST promotional campaign is only valid on the Monthly subscription plan.');
+      }
+      if (vId) {
+        const redeemedCheck = await query(
+          `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALIFEST' AND vendor_id = ? LIMIT 1`,
+          [vId]
+        ).catch(() => ({ rows: [] }));
+        if (redeemedCheck.rows && redeemedCheck.rows.length > 0) {
+          throw new Error('You have already redeemed the DIWALIFEST promotional campaign once.');
+        }
+      }
+      const redCountRes = await query(
+        `SELECT COUNT(*) as count FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALIFEST'`
+      ).catch(() => ({ rows: [{ count: 0 }] }));
+      const totalRedeemed = Number(redCountRes.rows?.[0]?.count || 0);
+      if (timesUsed >= usageLimit || totalRedeemed >= usageLimit) {
+        throw new Error('The DIWALIFEST promotional campaign has reached its maximum redemption limit of 30 merchants.');
+      }
+    }
+
+    // Specific business validations for DIWALI300 Campaign
+    if (cleanCode === 'DIWALI300') {
+      const isMonthly = Number(plan.duration_days) <= 31 && String(plan.billing_cycle || '').toUpperCase() !== 'YEARLY';
+      if (!isMonthly) {
+        throw new Error('DIWALI300 promotional campaign is only valid on the Monthly subscription plan.');
+      }
+      if (vId) {
+        const redeemedCheck = await query(
+          `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALI300' AND vendor_id = ? LIMIT 1`,
+          [vId]
+        ).catch(() => ({ rows: [] }));
+        if (redeemedCheck.rows && redeemedCheck.rows.length > 0) {
+          throw new Error('You have already redeemed the DIWALI300 promotional campaign once.');
+        }
+      }
+    }
+
     const couponStartDate = coupon.start_date instanceof Date ? coupon.start_date.toISOString().split('T')[0] : String(coupon.start_date).split('T')[0];
     const couponEndDate = coupon.end_date instanceof Date ? coupon.end_date.toISOString().split('T')[0] : String(coupon.end_date).split('T')[0];
 
@@ -178,28 +340,45 @@ class SubscriptionService {
       throw new Error(`Coupon "${cleanCode}" expired on ${couponEndDate}.`);
     }
 
+    const isMonthlyPlan = Number(plan.duration_days) <= 31 && String(plan.billing_cycle || '').toUpperCase() !== 'YEARLY';
+    const effectiveBasePrice = isMonthlyPlan ? 499.00 : basePrice;
+
     const rawDiscount = parseFloat(coupon.discount);
     let discountAmount = 0.00;
 
-    if (coupon.type === 'percentage') {
-      discountAmount = (basePrice * rawDiscount) / 100.0;
+    if (cleanCode === 'DIWALIFEST') {
+      discountAmount = 498.00;
+    } else if (cleanCode === 'DIWALI300' || rawDiscount >= 100) {
+      discountAmount = effectiveBasePrice;
+    } else if (coupon.type === 'percentage') {
+      discountAmount = (effectiveBasePrice * rawDiscount) / 100.0;
     } else {
       discountAmount = rawDiscount;
     }
 
-    discountAmount = Math.min(discountAmount, basePrice);
+    discountAmount = Math.min(discountAmount, effectiveBasePrice);
     discountAmount = Math.round(discountAmount * 100) / 100;
-    const finalPrice = Math.max(0, Math.round((basePrice - discountAmount) * 100) / 100);
+    const finalPrice = Math.max(0, Math.round((effectiveBasePrice - discountAmount) * 100) / 100);
+    const isFree = finalPrice === 0 || cleanCode === 'DIWALI300';
+
+    let messageText = `Coupon "${cleanCode}" applied successfully! You saved ₹${discountAmount.toFixed(2)}.`;
+    if (cleanCode === 'DIWALIFEST') {
+      messageText = 'Special Monthly Subscription Promotion: Get 1 Month for ₹1 (Save ₹498).';
+    } else if (isFree) {
+      messageText = `Diwali promotional offer "${cleanCode}" applied! 1-month subscription is 100% FREE.`;
+    }
 
     return {
       valid: true,
       coupon_id: coupon.id,
       coupon_code: coupon.coupon_code,
       discount_type: coupon.type,
-      discount_value: rawDiscount,
-      original_price: basePrice,
+      discount_value: cleanCode === 'DIWALIFEST' ? 498.00 : rawDiscount,
+      original_price: effectiveBasePrice,
       discount_amount: discountAmount,
       final_price: finalPrice,
+      is_free: isFree,
+      auto_applied: cleanCode === 'DIWALIFEST' || cleanCode === 'DIWALI300',
       plan_id: plan.plan_id,
       plan_name: plan.name,
       duration_days: plan.duration_days || 30,
@@ -209,7 +388,7 @@ class SubscriptionService {
       usage_limit: usageLimit,
       times_used: timesUsed,
       remaining_uses: Math.max(0, usageLimit - timesUsed),
-      message: `Coupon "${cleanCode}" applied successfully! You saved ₹${discountAmount.toFixed(2)}.`
+      message: messageText
     };
   }
 
@@ -236,17 +415,55 @@ class SubscriptionService {
       throw new Error('Subscription plan not found or currently inactive');
     }
 
-    const basePrice = Number(plan.price);
+    const isMonthly = Number(plan.duration_days) <= 31 && String(plan.billing_cycle || '').toUpperCase() !== 'YEARLY';
+    let basePrice = isMonthly ? 499.00 : Number(plan.price);
     let discountAmount = 0.00;
     let appliedCoupon = null;
 
-    if (couponCode) {
-      const couponCheck = await this.applyCoupon({ vendorId: vId, couponCode, planId: plan.plan_id });
+    // Auto-apply DIWALIFEST if no coupon code provided, plan is monthly, and merchant is eligible
+    let effectiveCouponCode = couponCode ? String(couponCode).trim().toUpperCase() : null;
+    if (!effectiveCouponCode && isMonthly) {
+      const promoRes = await query(
+        `SELECT id, usage_limit, COALESCE(times_used, 0) as times_used, status 
+         FROM coupons 
+         WHERE UPPER(coupon_code) = 'DIWALIFEST' 
+           AND LOWER(status) = 'unused' 
+           AND COALESCE(times_used, 0) < usage_limit 
+           AND start_date <= CURRENT_DATE 
+           AND end_date >= CURRENT_DATE 
+         LIMIT 1`
+      ).catch(() => ({ rows: [] }));
+
+      if (promoRes.rows && promoRes.rows.length > 0) {
+        const redeemed = await query(
+          `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALIFEST' AND vendor_id = ? LIMIT 1`,
+          [vId]
+        ).catch(() => ({ rows: [] }));
+
+        if (!redeemed.rows || redeemed.rows.length === 0) {
+          effectiveCouponCode = 'DIWALIFEST';
+        }
+      }
+    }
+
+    if (effectiveCouponCode) {
+      const couponCheck = await this.applyCoupon({ vendorId: vId, couponCode: effectiveCouponCode, planId: plan.plan_id });
       discountAmount = couponCheck.discount_amount;
       appliedCoupon = couponCheck;
+      basePrice = couponCheck.original_price;
     }
 
     const finalPrice = Math.max(0, Math.round((basePrice - discountAmount) * 100) / 100);
+
+    // If 100% discount / free promo, bypass external PG and activate immediately
+    if (finalPrice === 0 || appliedCoupon?.is_free) {
+      return await this.activateZeroPaymentSubscription({
+        vendorId: vId,
+        plan,
+        coupon: appliedCoupon,
+        notes: `100% Free 1-Month Subscription for ${vendor.store_name} [${plan.name}] (Coupon: ${appliedCoupon?.coupon_code || 'DIWALI300'})`
+      });
+    }
 
     // Call Cashfree PG to create checkout session
     const session = await cashfreeService.createSubscriptionPaymentSession({
@@ -297,6 +514,17 @@ class SubscriptionService {
       discount_amount: discountAmount,
       final_price: finalPrice,
       coupon_applied: appliedCoupon ? appliedCoupon.coupon_code : null,
+      campaign: appliedCoupon?.coupon_code === 'DIWALIFEST' ? {
+        promo_code: 'DIWALIFEST',
+        coupon_code: 'DIWALIFEST',
+        name: 'Diwali Festival Special Promotion',
+        description: 'Special Monthly Subscription Promotion: Get 1 Month for ₹1 (Save ₹498)',
+        original_price: 499.00,
+        discount_amount: 498.00,
+        final_price: 1.00,
+        auto_applied: true,
+        is_free: false
+      } : null,
       payment_url: session.payment_url,
       environment: session.mode === 'live' ? 'PRODUCTION' : 'SANDBOX',
       vendor_id: vId,
@@ -306,6 +534,158 @@ class SubscriptionService {
       billing_interval: plan.billing_interval || plan.billing_cycle || 'MONTHLY',
       cashfree: session
     };
+  }
+
+  /**
+   * 4.1 SECURE ZERO-PAYMENT SUBSCRIPTION ACTIVATION
+   * Activated when a 100% discount promo campaign (e.g., DIWALI300) is applied.
+   * Bypasses external PG, executes atomic DB-level limits, prevents duplicate merchant redemptions,
+   * creates an ACTIVE 30-day subscription, and records an audit log.
+   */
+  async activateZeroPaymentSubscription({ vendorId, plan, coupon, notes }) {
+    const vId = Number(vendorId);
+    const cleanCode = String(coupon?.coupon_code || 'DIWALI300').toUpperCase();
+
+    const vendorRes = await query(
+      `SELECT vendor_id, vendor_name, store_name, email, phone_number, status FROM vendors WHERE vendor_id = ?`,
+      [vId]
+    );
+    if (!vendorRes.rows || vendorRes.rows.length === 0) {
+      throw new Error(`Vendor #${vId} not found.`);
+    }
+    const vendor = vendorRes.rows[0];
+
+    const basePrice = Number(plan.price);
+    const todayStr = this.getTodayIST();
+
+    // Enforce single use per merchant
+    const alreadyRedeemed = await query(
+      `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = ? AND vendor_id = ? LIMIT 1`,
+      [cleanCode, vId]
+    ).catch(() => ({ rows: [] }));
+
+    if (alreadyRedeemed.rows && alreadyRedeemed.rows.length > 0) {
+      throw new Error(`You have already redeemed the ${cleanCode} promotional campaign once.`);
+    }
+
+    const existingActiveSubRes = await query(
+      `SELECT subscription_id, TO_CHAR(end_date, 'YYYY-MM-DD') as end_date, status 
+       FROM subscriptions 
+       WHERE vendor_id = ? AND UPPER(status) = 'ACTIVE' 
+       ORDER BY subscription_id DESC LIMIT 1`,
+      [vId]
+    );
+
+    let startDateStr = todayStr;
+    const activeSub = existingActiveSubRes.rows && existingActiveSubRes.rows[0];
+    if (activeSub && activeSub.end_date && activeSub.end_date >= todayStr) {
+      startDateStr = activeSub.end_date;
+    }
+
+    const durationDays = Number(plan.duration_days || 30);
+    const startDateObj = new Date(startDateStr + 'T00:00:00+05:30');
+    const endDateObj = new Date(startDateObj);
+    endDateObj.setDate(endDateObj.getDate() + durationDays);
+    const endDateStr = endDateObj.toISOString().split('T')[0];
+
+    const billingInterval = String(plan.billing_interval || plan.billing_cycle || 'MONTHLY').toUpperCase();
+    const uniqueOrderId = `${cleanCode}_${vId}_${Date.now()}`;
+    const uniqueTxnId = `FREE_${cleanCode}_${Date.now()}`;
+
+    return await withTransaction(async (txQuery) => {
+      // 1. Atomically increment usage limit on coupons table. Fails if times_used >= usage_limit!
+      const couponUpdate = await txQuery(
+        `UPDATE coupons 
+         SET times_used = times_used + 1,
+             status = CASE WHEN times_used + 1 >= usage_limit THEN 'used' ELSE 'unused' END
+         WHERE UPPER(coupon_code) = ? AND times_used < usage_limit
+         RETURNING *`,
+        [cleanCode]
+      );
+
+      if (!couponUpdate.rows || couponUpdate.rows.length === 0) {
+        throw new Error(`The ${cleanCode} promotional campaign has reached its maximum redemption limit of 30 merchants.`);
+      }
+
+      // 2. Insert subscription record with status 'ACTIVE'
+      const subRes = await txQuery(
+        `INSERT INTO subscriptions (
+           vendor_id, plan_id, plan_name, start_date, end_date, 
+           original_price, discount_amount, final_price, coupon_code, 
+           payment_method, transaction_id, cashfree_order_id, cashfree_payment_id,
+           billing_interval, status, reminders_sent, created_at, updated_at
+         ) VALUES (?, ?, ?, ?::date, ?::date, ?, ?, 0.00, ?, 'ZERO_PAYMENT_PROMO', ?, ?, ?, ?, 'ACTIVE', '[]'::jsonb, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         RETURNING *`,
+        [
+          vId,
+          plan.plan_id,
+          plan.name,
+          startDateStr,
+          endDateStr,
+          basePrice,
+          basePrice,
+          cleanCode,
+          uniqueTxnId,
+          uniqueOrderId,
+          uniqueTxnId,
+          billingInterval
+        ]
+      );
+
+      const newSubscription = subRes.rows[0];
+
+      // 3. Insert into coupon_redemptions table (strictly unique per merchant)
+      await txQuery(
+        `INSERT INTO coupon_redemptions (coupon_code, vendor_id, subscription_id, discount_amount, redeemed_at)
+         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [cleanCode, vId, newSubscription.subscription_id, basePrice]
+      );
+
+      // 4. Insert into payments ledger
+      await txQuery(
+        `INSERT INTO payments (
+           order_id, vendor_id, amount, currency, payment_status,
+           payment_method, payment_gateway, cashfree_order_id,
+           customer_name, customer_phone, customer_email, notes, created_at
+         ) VALUES (?, ?, 0.00, 'INR', 'SUCCESS', 'PROMO_CODE', 'INTERNAL', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        [
+          uniqueOrderId,
+          vId,
+          uniqueOrderId,
+          vendor.vendor_name || vendor.store_name,
+          vendor.phone_number,
+          vendor.email,
+          notes || `100% Free 1-Month Subscription via ${cleanCode} Campaign`
+        ]
+      );
+
+      return {
+        success: true,
+        is_free: true,
+        zero_payment: true,
+        activated: true,
+        message: `Congratulations! The ${cleanCode} promotional offer has been applied. Your 1-month subscription is now active for FREE!`,
+        order_id: uniqueOrderId,
+        original_price: basePrice,
+        discount_amount: basePrice,
+        final_price: 0.00,
+        coupon_applied: cleanCode,
+        subscription: {
+          subscription_id: Number(newSubscription.subscription_id),
+          vendor_id: vId,
+          store_name: vendor.store_name,
+          plan_id: plan.plan_id,
+          plan_name: plan.name,
+          start_date: startDateStr,
+          end_date: endDateStr,
+          duration_days: durationDays,
+          billing_interval: billingInterval,
+          status: 'ACTIVE',
+          coupon_code: cleanCode,
+          is_free: true
+        }
+      };
+    });
   }
 
   /**
@@ -440,16 +820,44 @@ class SubscriptionService {
     const billingInterval = String(plan.billing_interval || plan.billing_cycle || 'MONTHLY').toUpperCase();
 
     return await withTransaction(async (txQuery) => {
-      // Consume coupon if applicable
-      if (activeCouponCode) {
+      const cleanActiveCoupon = activeCouponCode ? String(activeCouponCode).trim().toUpperCase() : null;
+
+      if (cleanActiveCoupon === 'DIWALIFEST') {
+        // Enforce single use per merchant with row lock
+        const redeemedCheck = await txQuery(
+          `SELECT id FROM coupon_redemptions WHERE UPPER(coupon_code) = 'DIWALIFEST' AND vendor_id = ? FOR UPDATE`,
+          [vId]
+        );
+        if (redeemedCheck.rows && redeemedCheck.rows.length > 0) {
+          throw new Error('You have already redeemed the DIWALIFEST promotional campaign once.');
+        }
+
+        // Atomically check and increment times_used with race condition guard
+        const couponUpdate = await txQuery(
+          `UPDATE coupons 
+           SET times_used = times_used + 1,
+               status = CASE WHEN times_used + 1 >= usage_limit THEN 'used' ELSE 'unused' END
+           WHERE UPPER(coupon_code) = 'DIWALIFEST' AND times_used < usage_limit
+           RETURNING *`
+        );
+
+        if (!couponUpdate.rows || couponUpdate.rows.length === 0) {
+          throw new Error('The DIWALIFEST promotional campaign has reached its maximum redemption limit of 30 merchants.');
+        }
+      } else if (cleanActiveCoupon) {
         await txQuery(
           `UPDATE coupons 
            SET times_used = COALESCE(times_used, 0) + 1,
                status = CASE WHEN COALESCE(times_used, 0) + 1 >= usage_limit THEN 'used' ELSE 'unused' END
            WHERE UPPER(coupon_code) = ? AND (vendor_id = ? OR vendor_id IS NULL)`,
-          [activeCouponCode.toUpperCase(), vId]
+          [cleanActiveCoupon, vId]
         ).catch(() => {});
       }
+
+      const isMonthly = Number(plan.duration_days) <= 31 && String(plan.billing_cycle || '').toUpperCase() !== 'YEARLY';
+      const originalPrice = isMonthly ? 499.00 : Number(plan.price);
+      const discountAmount = cleanActiveCoupon === 'DIWALIFEST' ? 498.00 : Math.max(0, originalPrice - verifiedAmount);
+      const finalPrice = verifiedAmount;
 
       const finalTxnIdentifier = `${verifiedPaymentId}_${orderId}`.slice(0, 100);
 
@@ -468,10 +876,10 @@ class SubscriptionService {
           plan.name,
           startDateStr,
           endDateStr,
-          Number(plan.price),
-          Math.max(0, Number(plan.price) - verifiedAmount),
-          verifiedAmount,
-          activeCouponCode || null,
+          originalPrice,
+          discountAmount,
+          finalPrice,
+          cleanActiveCoupon || null,
           finalTxnIdentifier,
           orderId,
           verifiedPaymentId,
@@ -480,6 +888,14 @@ class SubscriptionService {
       );
 
       const newSub = subRes.rows[0];
+
+      if (cleanActiveCoupon === 'DIWALIFEST') {
+        await txQuery(
+          `INSERT INTO coupon_redemptions (coupon_code, vendor_id, subscription_id, discount_amount, redeemed_at)
+           VALUES ('DIWALIFEST', ?, ?, 498.00, CURRENT_TIMESTAMP)`,
+          [vId, newSub.subscription_id]
+        );
+      }
 
       // CRITICAL SAFEGUARD: Keep merchant admin approval status separate from payment activation!
       // Do NOT mutate vendors.status here. If vendor.status is PENDING, it remains PENDING awaiting admin approval.
@@ -518,8 +934,10 @@ class SubscriptionService {
         start_date: startDateStr,
         end_date: endDateStr,
         billing_interval: billingInterval,
-        final_price: verifiedAmount,
-        coupon_applied: activeCouponCode || null,
+        original_price: originalPrice,
+        discount_amount: discountAmount,
+        final_price: finalPrice,
+        coupon_applied: cleanActiveCoupon || null,
         payment_method: 'CASHFREE',
         transaction_id: verifiedPaymentId,
         cashfree_order_id: orderId,

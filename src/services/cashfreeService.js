@@ -500,7 +500,7 @@ async function verifyPaymentStatus(orderId, paymentId = null, options = {}) {
       payment_status: 'SUCCESS',
       order_id: orderId,
       cf_payment_id: paymentId || `CF_PAY_SIM_${Date.now()}`,
-      payment_amount: 5999.00,
+      payment_amount: options.payment_amount !== undefined ? Number(options.payment_amount) : (options.amount !== undefined ? Number(options.amount) : 1.00),
       payment_currency: 'INR',
       payment_method: 'CASHFREE',
       payment_time: new Date().toISOString()
