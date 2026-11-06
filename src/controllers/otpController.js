@@ -43,7 +43,24 @@ async function findAccountByPhone(phone, targetRole = null) {
       [cleanTarget, cleanedDigits, last10, `%${last10}`, last10, last10]
     ).catch(() => ({ rows: [] }));
     if (userRes.rows && userRes.rows.length > 0) {
-      user = userRes.rows[0];
+      user = userRes.rows.find(r => !String(r.user_id).startsWith('usr_v_')) || userRes.rows[0];
+    }
+
+    // Fallback: If querying for user and not in users table, check if merchant exists with this phone
+    // (merchants are permitted to log in to customer application with their mobile number)
+    if (!user) {
+      const vendorUserRes = await query(
+        `SELECT * FROM vendors 
+         WHERE phone_number = ? 
+            OR phone_number = ? 
+            OR phone_number = ? 
+            OR phone_number LIKE ? 
+            OR (LENGTH(?) >= 10 AND RIGHT(REGEXP_REPLACE(phone_number, '\\D', '', 'g'), 10) = ?)`,
+        [cleanTarget, cleanedDigits, last10, `%${last10}`, last10, last10]
+      ).catch(() => ({ rows: [] }));
+      if (vendorUserRes.rows && vendorUserRes.rows.length > 0) {
+        vendor = vendorUserRes.rows[0];
+      }
     }
   }
 
@@ -147,21 +164,43 @@ const sendMobileOtpController = async (req, res) => {
     const { user, vendor, exists: accountExists } = await findAccountByPhone(cleanTarget, role || null);
 
     if (isRegistrationIntent) {
-      if (accountExists) {
-        const label = vendor ? 'vendor store account' : 'account';
+      let isAlreadyRegistered = false;
+      let label = 'account';
+
+      if (role === 'vendor') {
+        if (vendor) {
+          isAlreadyRegistered = true;
+          label = 'vendor store account';
+        }
+      } else if (role === 'user') {
+        // Dedicated resident customer account already exists (disallow duplicate user registration)
+        if (user && !String(user.user_id).startsWith('usr_v_')) {
+          isAlreadyRegistered = true;
+          label = 'user account';
+        }
+      } else {
+        if (vendor && user && !String(user.user_id).startsWith('usr_v_')) {
+          isAlreadyRegistered = true;
+          label = 'account';
+        }
+      }
+
+      if (isAlreadyRegistered) {
+        const errorMsg = `A ${label} with this mobile number already exists. Please log in instead.`;
         console.log(`⚠️ [REGISTRATION OTP BLOCKED] Phone "${cleanTarget}" already has a registered ${label}. Disallowing registration OTP.`);
         return res.status(400).json({
           success: false,
           exists: true,
           is_registered: true,
-          code: vendor ? 'VENDOR_ALREADY_EXISTS' : 'ALREADY_REGISTERED',
-          error: `A ${label} with this mobile number already exists. Please log in instead.`,
-          message: `A ${label} with this mobile number already exists. Please log in instead.`
+          code: role === 'vendor' ? 'VENDOR_ALREADY_EXISTS' : 'ALREADY_REGISTERED',
+          error: errorMsg,
+          message: errorMsg
         });
       }
     } else {
       // Login or Default: ONLY registered phone numbers can receive OTP!
-      if (!accountExists) {
+      const canLogin = role === 'vendor' ? !!vendor : (role === 'user' ? !!(user || vendor) : accountExists);
+      if (!canLogin) {
         const portalLabel = role === 'vendor' ? 'vendor store ' : role === 'user' ? 'user ' : '';
         console.log(`⚠️ [MOBILE OTP BLOCKED] Unregistered ${portalLabel}account "${cleanTarget}". Disallowing OTP send.`);
         return res.status(404).json({
@@ -304,17 +343,38 @@ const sendEmailOtpController = async (req, res) => {
     const { user, vendor, exists: accountExists } = await findAccountByEmail(cleanEmail, role || null);
 
     if (isRegistrationIntent) {
-      if (accountExists) {
+      let isAlreadyRegistered = false;
+      let label = 'account';
+
+      if (role === 'vendor') {
+        if (vendor) {
+          isAlreadyRegistered = true;
+          label = 'vendor store account';
+        }
+      } else if (role === 'user') {
+        if (user && !String(user.user_id).startsWith('usr_v_')) {
+          isAlreadyRegistered = true;
+          label = 'user account';
+        }
+      } else {
+        if (vendor && user && !String(user.user_id).startsWith('usr_v_')) {
+          isAlreadyRegistered = true;
+          label = 'account';
+        }
+      }
+
+      if (isAlreadyRegistered) {
         return res.status(400).json({
           success: false,
           exists: true,
-          error: 'An account with this email address already exists. Please log in instead.',
-          message: 'An account with this email address already exists. Please log in instead.'
+          error: `An account with this email address already exists. Please log in instead.`,
+          message: `An account with this email address already exists. Please log in instead.`
         });
       }
     } else {
       // Login or Default: ONLY registered emails can receive OTP!
-      if (!accountExists) {
+      const canLogin = role === 'vendor' ? !!vendor : (role === 'user' ? !!(user || vendor) : accountExists);
+      if (!canLogin) {
         const portalLabel = role === 'vendor' ? 'vendor store ' : role === 'user' ? 'user ' : '';
         console.log(`⚠️ [EMAIL OTP BLOCKED] Unregistered ${portalLabel}account "${cleanEmail}". Disallowing OTP send.`);
         return res.status(404).json({

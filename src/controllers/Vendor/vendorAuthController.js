@@ -328,13 +328,21 @@ async function registerVendor(req, res) {
     // Subscriptions are optional during registration and not created upfront
 
 
-    // Auto-create corresponding Resident User account in users table with standardized Option B public_id
-    const userPublicId = await generateUniquePublicId('user', query);
-    await query(
-      `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@inpinch.internal`, phone_number, hashedPassword, society_id, resolvedSocName || area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
-    ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
+    // Auto-create corresponding Resident User account in users table only if no customer account already exists with this phone
+    const vLast10 = cleanPhoneDigits.slice(-10);
+    const existingUserCheck = await query(
+      `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ? LIMIT 1`,
+      [phone_number, cleanPhoneDigits, vLast10, `%${vLast10}`]
+    ).catch(() => ({ rows: [] }));
+
+    if (!existingUserCheck.rows || existingUserCheck.rows.length === 0) {
+      const userPublicId = await generateUniquePublicId('user', query);
+      await query(
+        `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [`usr_v_${vendor_id}`, userPublicId, vendor_name, email || `vendor_${vendor_id}@inpinch.internal`, phone_number, hashedPassword, society_id, resolvedSocName || area || vendorLocation || 'General Area', shop_number || 'Merchant Store']
+      ).catch(err => console.log('Auto user creation on vendor registration:', err.message));
+    }
 
     // Fetch final vendor record to ensure accurate public_id
     const finalVendorRes = await query(`SELECT public_id FROM vendors WHERE vendor_id = ?`, [vendor_id]).catch(() => ({ rows: [] }));
@@ -959,12 +967,12 @@ async function updateVendorPassword(req, res) {
       [hashedPassword, hashedPassword, vendor.vendor_id, String(vendor.vendor_id)]
     );
 
-    // Also update linked users table record if any
+    // Also update linked merchant placeholder in users table if present
     await query(
       `UPDATE users 
        SET password_hash = ? 
-       WHERE user_id = ? OR phone = ? OR email = ?`,
-      [hashedPassword, `usr_v_${vendor.vendor_id}`, vendor.phone_number, vendor.email]
+       WHERE user_id = ?`,
+      [hashedPassword, `usr_v_${vendor.vendor_id}`]
     ).catch(() => {});
 
     return res.status(200).json({
@@ -1019,8 +1027,8 @@ async function resetPassword(req, res) {
     );
 
     await query(
-      `UPDATE users SET password_hash = ? WHERE user_id = ? OR phone = ? OR email = ?`,
-      [hashedPassword, `usr_v_${vendor.vendor_id}`, vendor.phone_number, vendor.email]
+      `UPDATE users SET password_hash = ? WHERE user_id = ?`,
+      [hashedPassword, `usr_v_${vendor.vendor_id}`]
     ).catch(() => {});
 
     return res.status(200).json({

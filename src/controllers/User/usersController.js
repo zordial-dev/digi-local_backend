@@ -50,10 +50,12 @@ async function sendOtp(req, res) {
       [cleanTarget, cleanPhoneDigits, last10, `%${last10}`]
     ).catch(() => ({ rows: [] }));
 
-    const userExists = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
+    // Dedicated resident user account (not an auto-created vendor placeholder)
+    const hasDedicatedUser = userRes.rows && userRes.rows.some(r => !String(r.user_id).startsWith('usr_v_'));
+    const canLoginAsUser = (userRes.rows && userRes.rows.length > 0) || (vendorRes.rows && vendorRes.rows.length > 0);
 
     if (isRegistrationIntent) {
-      if (userExists) {
+      if (hasDedicatedUser) {
         return res.status(400).json({
           success: false,
           exists: true,
@@ -62,7 +64,7 @@ async function sendOtp(req, res) {
       }
     } else if (mode === 'login') {
       // Explicit Login intent: Must verify account exists in DB before sending login OTP
-      if (!userExists) {
+      if (!canLoginAsUser) {
         console.log(`⚠️ [SEND OTP BLOCKED] Account "${cleanTarget}" not found in database. Disallowing login OTP.`);
         return res.status(404).json({
           success: false,
@@ -142,7 +144,7 @@ async function checkAccountExists(req, res) {
     let vendorPromise = Promise.resolve({ rows: [] });
 
     const shouldCheckUser = !targetRole || targetRole.includes('user') || targetRole.includes('resident') || targetRole.includes('customer') || (!targetRole.includes('vendor') && !targetRole.includes('merchant') && !targetRole.includes('seller') && !targetRole.includes('store'));
-    const shouldCheckVendor = !targetRole || targetRole.includes('vendor') || targetRole.includes('merchant') || targetRole.includes('seller') || targetRole.includes('store') || targetRole.includes('partner') || (!targetRole.includes('user') && !targetRole.includes('resident'));
+    const shouldCheckVendor = !targetRole || targetRole.includes('vendor') || targetRole.includes('merchant') || targetRole.includes('seller') || targetRole.includes('store') || targetRole.includes('partner') || targetRole.includes('user') || targetRole.includes('resident') || targetRole.includes('customer');
 
     if (shouldCheckUser) {
       if (isEmail) {
@@ -185,7 +187,8 @@ async function checkAccountExists(req, res) {
     // Execute queries concurrently in parallel for sub-millisecond response times
     const [userRes, vendorRes] = await Promise.all([userPromise, vendorPromise]);
     if (userRes.rows && userRes.rows.length > 0) {
-      user = userRes.rows[0];
+      // Prioritize primary resident user account over vendor placeholder if both exist
+      user = userRes.rows.find(r => !String(r.user_id).startsWith('usr_v_')) || userRes.rows[0];
     }
     if (vendorRes.rows && vendorRes.rows.length > 0) {
       vendor = vendorRes.rows[0];
@@ -193,12 +196,27 @@ async function checkAccountExists(req, res) {
 
     const userExists = !!user;
     const vendorExists = !!vendor;
-    const exists = userExists || vendorExists;
+    let exists = userExists || vendorExists;
+    if (targetRole && (targetRole.includes('vendor') || targetRole.includes('merchant'))) {
+      exists = vendorExists;
+    } else if (targetRole && (targetRole.includes('user') || targetRole.includes('resident') || targetRole.includes('customer'))) {
+      exists = userExists || vendorExists;
+    }
 
     let accountType = 'none';
-    if (userExists && vendorExists) accountType = (targetRole && (targetRole.includes('vendor') || targetRole.includes('merchant'))) ? 'vendor' : 'both';
-    else if (vendorExists) accountType = 'vendor';
-    else if (userExists) accountType = 'user';
+    if (userExists && vendorExists) {
+      if (targetRole && (targetRole.includes('vendor') || targetRole.includes('merchant'))) {
+        accountType = 'vendor';
+      } else if (targetRole && (targetRole.includes('user') || targetRole.includes('resident') || targetRole.includes('customer'))) {
+        accountType = 'user';
+      } else {
+        accountType = 'both';
+      }
+    } else if (vendorExists) {
+      accountType = 'vendor';
+    } else if (userExists) {
+      accountType = 'user';
+    }
 
     const nextAction = exists ? 'LOGIN' : 'REGISTER';
     const cooldownInfo = getCooldownStatus(rawTarget);
@@ -346,7 +364,8 @@ async function loginUser(req, res) {
       [userPhone, cleanPhoneDigits, last10, `%${last10}`, `+91${last10}`, `%${last10}`]
     );
 
-    let user = userRes.rows[0];
+    // Prioritize dedicated resident user account over auto-created vendor placeholder
+    let user = (userRes.rows && userRes.rows.find(r => !String(r.user_id).startsWith('usr_v_'))) || userRes.rows?.[0];
 
     // Fallback: Check vendors table if mobile number not yet in users table (allows vendor to act as Resident User)
     if (!user) {
@@ -405,7 +424,22 @@ async function loginUser(req, res) {
     }
 
     if (password && !loginOtp) {
-      const matchRes = await comparePassword(password, user.password_hash || user.password);
+      let matchRes = await comparePassword(password, user.password_hash || user.password);
+      if (!matchRes || !matchRes.matches) {
+        // Fallback: Check if password matches merchant password in vendors table
+        const vCheck = await query(
+          `SELECT password, password_hash FROM vendors 
+           WHERE phone_number = ? OR phone_number = ? OR phone_number = ? OR (LENGTH(?) >= 10 AND phone_number LIKE ?) LIMIT 1`,
+          [userPhone, cleanPhoneDigits, last10, `%${last10}`]
+        ).catch(() => ({ rows: [] }));
+        if (vCheck.rows && vCheck.rows.length > 0) {
+          const vPwd = vCheck.rows[0].password_hash || vCheck.rows[0].password;
+          const vMatch = await comparePassword(password, vPwd);
+          if (vMatch && vMatch.matches) {
+            matchRes = { matches: true };
+          }
+        }
+      }
       if (!matchRes || !matchRes.matches) {
         return res.status(401).json({ error: 'Incorrect password. Please check your password and try again.' });
       }
@@ -505,12 +539,16 @@ async function registerUser(req, res) {
       `SELECT user_id FROM users WHERE phone = ? OR phone = ? OR phone = ? OR phone LIKE ?`,
       [userPhone, cleanPhoneDigits, last10, `%${last10}`]
     );
-    if (existing.rows && existing.rows.length > 0) {
+
+    // If an existing dedicated resident customer account is already registered, disallow duplicate
+    const dedicatedExisting = existing.rows && existing.rows.find(r => !String(r.user_id).startsWith('usr_v_'));
+    if (dedicatedExisting) {
       return res.status(400).json({ error: 'An account with this mobile number already exists' });
     }
 
+    const placeholderExisting = existing.rows && existing.rows.find(r => String(r.user_id).startsWith('usr_v_'));
+    const userId = placeholderExisting ? placeholderExisting.user_id : `usr_${Date.now().toString().slice(-6)}`;
     const publicId = await generateUniquePublicId('user', query);
-    const userId = `usr_${Date.now().toString().slice(-6)}`;
     const pwdHash = password ? await hashPassword(password) : await hashPassword('UserDefaultPass123!');
     const socId = (society_id !== undefined && society_id !== null && !isNaN(parseInt(society_id, 10))) ? parseInt(society_id, 10) : null;
     const userArea = String(area || location || req.body.society_name || '').trim();
@@ -521,24 +559,41 @@ async function registerUser(req, res) {
     const userAddress = String(address || '').trim();
     const userEmail = String(email || '').trim();
 
-    await query(
-      `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, state, pincode, address, status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-      [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userState, userPincode, userAddress]
-    ).catch(async () => {
-      // Fallback if state/city/pincode/address columns missing in older Postgres schema
-      return query(
-        `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, city, pincode, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-        [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat, userCity, userPincode]
-      ).catch(() => {
+    if (placeholderExisting) {
+      // Upgrade existing auto-created vendor placeholder to full resident customer profile
+      await query(
+        `UPDATE users 
+         SET name = ?, email = COALESCE(NULLIF(?, ''), email), phone = ?, password_hash = ?, society_id = ?, society_name = ?, area = ?, flat = ?, city = ?, state = ?, pincode = ?, address = ?, status = 'ACTIVE'
+         WHERE user_id = ?`,
+        [userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userState, userPincode, userAddress, userId]
+      ).catch(async () => {
         return query(
-          `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
-          [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
+          `UPDATE users 
+           SET name = ?, email = COALESCE(NULLIF(?, ''), email), phone = ?, password_hash = ?, society_id = ?, society_name = ?, flat = ?, city = ?, pincode = ?, status = 'ACTIVE'
+           WHERE user_id = ?`,
+          [userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat, userCity, userPincode, userId]
         );
       });
-    });
+    } else {
+      await query(
+        `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, area, flat, city, state, pincode, address, status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+        [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userArea, userFlat, userCity, userState, userPincode, userAddress]
+      ).catch(async () => {
+        // Fallback if state/city/pincode/address columns missing in older Postgres schema
+        return query(
+          `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, city, pincode, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+          [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat, userCity, userPincode]
+        ).catch(() => {
+          return query(
+            `INSERT INTO users (user_id, public_id, name, email, phone, password_hash, society_id, society_name, flat, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE')`,
+            [userId, publicId, userName, userEmail, userPhone, pwdHash, socId, userArea, userFlat]
+          );
+        });
+      });
+    }
 
     let societyName = userArea;
     if (socId) {
