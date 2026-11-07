@@ -13,7 +13,8 @@ class SubscriptionController {
    */
   async getPlans(req, res) {
     try {
-      const plans = await subscriptionService.getPlans();
+      const vendorId = req.query.vendor_id || req.query.vendorId || req.user?.vendor_id || req.user?.id;
+      const plans = await subscriptionService.getPlans(vendorId);
       return res.status(200).json({
         success: true,
         message: 'Active subscription plans fetched successfully.',

@@ -719,7 +719,22 @@ async function setupTablesPg() {
     );
   `).catch(() => { });
 
+  await pgPool.query(`ALTER TABLE coupons ALTER COLUMN coupon_code TYPE VARCHAR(50);`).catch(() => { });
+  await pgPool.query(`ALTER TABLE subscriptions ALTER COLUMN coupon_code TYPE VARCHAR(50);`).catch(() => { });
   await pgPool.query(`ALTER TABLE coupons ADD COLUMN IF NOT EXISTS times_used INT DEFAULT 0;`).catch(() => { });
+
+  // Ensure atomic coupon_redemptions table for tracking unique merchant redemptions
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS coupon_redemptions (
+      id BIGSERIAL PRIMARY KEY,
+      coupon_code VARCHAR(50) NOT NULL,
+      vendor_id BIGINT NOT NULL REFERENCES vendors(vendor_id) ON DELETE CASCADE,
+      subscription_id BIGINT REFERENCES subscriptions(subscription_id) ON DELETE SET NULL,
+      discount_amount DECIMAL(10,2) NOT NULL,
+      redeemed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT uq_coupon_vendor UNIQUE (coupon_code, vendor_id)
+    );
+  `).catch(() => { });
 
   // Ensure subscriptions table columns
   const subscriptionColumns = [
@@ -851,6 +866,20 @@ async function seedInitialData() {
 
   // Idempotently seed single active ₹1/month merchant plan
   await pgPool.query(`INSERT INTO plans (plan_code, name, description, price, duration_days, billing_cycle, billing_interval, features, is_active, sort_order) SELECT 'MONTHLY_TEST_2', 'Monthly Merchant Plan', '1 Month InPinch Storefront Visibility & Resident Ordering', 1.00, 30, 'MONTHLY', 'MONTHLY', '["Storefront visible on InPinch user portal", "Customers can view and buy products", "Vendor panel dashboard access", "Real-time order notifications", "Priority merchant support"]'::jsonb, TRUE, 1 WHERE NOT EXISTS (SELECT 1 FROM plans WHERE plan_code = 'MONTHLY_TEST_2'); UPDATE plans SET price = 1.00, name = 'Monthly Merchant Plan', description = '1 Month InPinch Storefront Visibility & Resident Ordering', is_active = TRUE WHERE plan_code = 'MONTHLY_TEST_2'; UPDATE plans SET is_active = FALSE WHERE plan_code = 'ANNUAL_5999' AND is_active = TRUE;`).catch(() => {});
+
+  // Idempotently seed DIWALI300 Promotional Campaign (100% Free 1-Month Subscription, max 30 merchants, once per merchant)
+  await pgPool.query(`
+    INSERT INTO coupons (coupon_code, vendor_id, discount, type, start_date, end_date, usage_limit, times_used, status)
+    SELECT 'DIWALI300', NULL, 100.00, 'percentage', CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 30, 0, 'unused'
+    WHERE NOT EXISTS (SELECT 1 FROM coupons WHERE UPPER(coupon_code) = 'DIWALI300');
+  `).catch(() => {});
+
+  // Idempotently seed DIWALIFEST Promotional Campaign (Flat ₹498 discount, ₹1 final payable, max 30 merchants, once per merchant)
+  await pgPool.query(`
+    INSERT INTO coupons (coupon_code, vendor_id, discount, type, start_date, end_date, usage_limit, times_used, status)
+    SELECT 'DIWALIFEST', NULL, 498.00, 'flat', CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 30, 0, 'unused'
+    WHERE NOT EXISTS (SELECT 1 FROM coupons WHERE UPPER(coupon_code) = 'DIWALIFEST');
+  `).catch((err) => { console.error('[Seed Error DIWALIFEST]:', err.message); });
 
 
 }
