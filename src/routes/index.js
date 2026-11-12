@@ -5,6 +5,7 @@ const healthRoutes = require('./Health/healthRoutes');
 const societyRoutes = require('./Storefront/societyRoutes');
 const vendorAuthRoutes = require('./Vendor/vendorAuthRoutes');
 const storefrontRoutes = require('./Storefront/storefrontRoutes');
+const publicDiscoveryRoutes = require('./Storefront/publicDiscoveryRoutes');
 const userRoutes = require('./User/userRoutes');
 const orderRoutes = require('./User/orderRoutes');
 const vendorPanelRoutes = require('./Vendor/vendorPanelRoutes');
@@ -624,7 +625,13 @@ router.get(['/vendors/:vendorId', '/stores/:vendorId'], (req, res, next) => {
   router.handle(req, res, next);
 });
 
+router.use('/api/public', publicDiscoveryRoutes);    // Public Location & Justdial-Style Discovery APIs
 router.use('/api', storefrontRoutes);                // Storefront APIs (vendors/societies)
+router.get('/api/discover', (req, res, next) => { req.url = '/discover'; publicDiscoveryRoutes(req, res, next); });
+router.get(['/api/cities', '/api/cities/search', '/api/cities/:cityId', '/api/cities/:cityId/categories'], (req, res, next) => {
+  req.url = req.url.replace(/^\/api/, '');
+  publicDiscoveryRoutes(req, res, next);
+});
 
 // ── Cashfree Hosted Checkout Web Bridge (Zero-Crash Native & Web Checkout) ────
 router.get(['/payments/cashfree/checkout', '/api/payments/cashfree/checkout'], (req, res) => {

@@ -736,6 +736,53 @@ async function setupTablesPg() {
     );
   `).catch(() => { });
 
+  // Ensure cities table (Complete India City Selection across all 28 States & 8 UTs)
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS cities (
+      city_id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      slug VARCHAR(120) UNIQUE NOT NULL,
+      state VARCHAR(100) NOT NULL,
+      state_code VARCHAR(10) NOT NULL,
+      country VARCHAR(50) DEFAULT 'India',
+      image_url TEXT,
+      is_active BOOLEAN DEFAULT TRUE,
+      sort_order INT DEFAULT 10,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT uq_city_state UNIQUE (name, state)
+    );
+    CREATE INDEX IF NOT EXISTS idx_cities_slug ON cities(slug);
+    CREATE INDEX IF NOT EXISTS idx_cities_search ON cities(LOWER(name), LOWER(state));
+    CREATE INDEX IF NOT EXISTS idx_cities_active_sort ON cities(is_active, sort_order ASC, name ASC);
+  `).catch(() => { });
+
+  // Ensure categories table (Hierarchical Justdial-Style Categories & Subcategories)
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS categories (
+      category_id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      slug VARCHAR(100) UNIQUE NOT NULL,
+      type VARCHAR(20) DEFAULT 'all' CHECK (type IN ('product', 'service', 'all')),
+      parent_id INT REFERENCES categories(category_id) ON DELETE CASCADE,
+      icon_url TEXT,
+      image_url TEXT,
+      display_order INT DEFAULT 0,
+      is_active BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);
+    CREATE INDEX IF NOT EXISTS idx_categories_parent_id ON categories(parent_id);
+    CREATE INDEX IF NOT EXISTS idx_categories_type ON categories(type);
+  `).catch(() => { });
+
+  // Performance Indexes for Location and Discovery queries
+  await pgPool.query(`
+    CREATE INDEX IF NOT EXISTS idx_vendors_city_lower ON vendors(LOWER(city));
+    CREATE INDEX IF NOT EXISTS idx_vendors_status_active ON vendors(UPPER(status));
+    CREATE INDEX IF NOT EXISTS idx_items_category_lower ON items(LOWER(category));
+    CREATE INDEX IF NOT EXISTS idx_services_category_lower ON services(LOWER(category));
+  `).catch(() => { });
+
   // Ensure subscriptions table columns
   const subscriptionColumns = [
     `ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS plan_id BIGINT REFERENCES plans(plan_id) ON DELETE SET NULL`,
@@ -880,6 +927,85 @@ async function seedInitialData() {
     SELECT 'DIWALIFEST', NULL, 498.00, 'flat', CURRENT_DATE, CURRENT_DATE + INTERVAL '1 year', 30, 0, 'unused'
     WHERE NOT EXISTS (SELECT 1 FROM coupons WHERE UPPER(coupon_code) = 'DIWALIFEST');
   `).catch((err) => { console.error('[Seed Error DIWALIFEST]:', err.message); });
+
+  // Idempotently seed Complete India Cities Dataset
+  try {
+    const { INDIA_CITIES } = require('../data/indiaCities');
+    const existingCitiesRes = await pgPool.query('SELECT COUNT(*) AS total FROM cities').catch(() => ({ rows: [{ total: 0 }] }));
+    const existingCityCount = parseInt(existingCitiesRes.rows?.[0]?.total || 0, 10);
+
+    if (Array.isArray(INDIA_CITIES) && existingCityCount < INDIA_CITIES.length) {
+      // Batch insert in chunks of 50 to avoid parameter limit
+      const chunkSize = 50;
+      for (let i = 0; i < INDIA_CITIES.length; i += chunkSize) {
+        const chunk = INDIA_CITIES.slice(i, i + chunkSize);
+        const valuePlaceholders = [];
+        const params = [];
+        chunk.forEach((city, idx) => {
+          const o = idx * 5;
+          valuePlaceholders.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, 'India', $${o + 5}, TRUE)`);
+          params.push(city.name, city.slug, city.state, city.state_code, city.sort_order || 10);
+        });
+
+        await pgPool.query(`
+          INSERT INTO cities (name, slug, state, state_code, country, sort_order, is_active)
+          VALUES ${valuePlaceholders.join(', ')}
+          ON CONFLICT (slug) DO UPDATE SET 
+            name = EXCLUDED.name,
+            state = EXCLUDED.state,
+            state_code = EXCLUDED.state_code,
+            sort_order = EXCLUDED.sort_order;
+        `, params).catch((err) => { console.warn('[Seed Chunk Error Cities]:', err.message); });
+      }
+    }
+  } catch (citySeedErr) {
+    console.warn('[Seed Error Cities]:', citySeedErr.message);
+  }
+
+  // Idempotently seed Justdial-Style Categories & Subcategories
+  try {
+    const { DISCOVERY_CATEGORIES } = require('../data/discoveryCategories');
+    const existingCatsRes = await pgPool.query('SELECT COUNT(*) AS total FROM categories').catch(() => ({ rows: [{ total: 0 }] }));
+    const existingCatCount = parseInt(existingCatsRes.rows?.[0]?.total || 0, 10);
+
+    if (Array.isArray(DISCOVERY_CATEGORIES) && existingCatCount < 10) {
+      for (const cat of DISCOVERY_CATEGORIES) {
+        const catRes = await pgPool.query(`
+          INSERT INTO categories (name, slug, type, parent_id, icon_url, image_url, display_order, is_active)
+          VALUES ($1, $2, $3, NULL, $4, $5, $6, TRUE)
+          ON CONFLICT (slug) DO UPDATE SET 
+            name = EXCLUDED.name,
+            type = EXCLUDED.type,
+            icon_url = EXCLUDED.icon_url,
+            image_url = EXCLUDED.image_url,
+            display_order = EXCLUDED.display_order
+          RETURNING category_id;
+        `, [cat.name, cat.slug, cat.type || 'all', cat.icon_url, cat.image_url, cat.display_order || 0]).catch(() => ({ rows: [] }));
+
+        const parentId = catRes.rows?.[0]?.category_id;
+        if (parentId && Array.isArray(cat.subcategories) && cat.subcategories.length > 0) {
+          const subPlaceholders = [];
+          const subParams = [];
+          cat.subcategories.forEach((sub, sIdx) => {
+            const o = sIdx * 4;
+            subPlaceholders.push(`($${o + 1}, $${o + 2}, $${o + 3}, $${o + 4}, 0, TRUE)`);
+            subParams.push(sub.name, sub.slug, cat.type || 'all', parentId);
+          });
+
+          await pgPool.query(`
+            INSERT INTO categories (name, slug, type, parent_id, display_order, is_active)
+            VALUES ${subPlaceholders.join(', ')}
+            ON CONFLICT (slug) DO UPDATE SET 
+              name = EXCLUDED.name,
+              parent_id = EXCLUDED.parent_id,
+              type = EXCLUDED.type;
+          `, subParams).catch((err) => { console.warn('[Seed Subcat Error]:', err.message); });
+        }
+      }
+    }
+  } catch (catSeedErr) {
+    console.warn('[Seed Error Categories]:', catSeedErr.message);
+  }
 
 
 }
