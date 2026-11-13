@@ -1027,8 +1027,8 @@ async function removeDuplicateVendors() {
 
       const sKey = `${societyId}:${sNameNorm}`;
 
-      // Skip deduplication for core seed vendors (IDs 1-20, 79, 89, 90, 104) to strictly protect production & seed data
-      const isProtectedSeedVendor = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 79, 89, 90, 104].includes(currentVendorId);
+      // Skip deduplication for core seed vendors (IDs 1-20, 79, 89, 90, 104, 1409, 1410) to strictly protect production & seed data
+      const isProtectedSeedVendor = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 79, 89, 90, 104, 1409, 1410].includes(currentVendorId);
 
       if (seenStoreNames.has(sKey)) {
         const keptVendorId = seenStoreNames.get(sKey);
